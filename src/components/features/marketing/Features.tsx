@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Calendar, BarChart2, Trophy, Users, Check } from "lucide-react";
 
 // ─── Mockup: Reservas ─────────────────────────────────────────────────────────
@@ -449,7 +448,7 @@ export default function Features() {
             Todo lo que necesitas para gestionar tu club.
           </h2>
           <p className="text-lg leading-relaxed text-brand-muted">
-            Desde reservas y rankings hasta torneos y jugadores. Todo conectado en una única plataforma.
+            Desde reservas y rankings hasta torneos y jugadores. Todo conectado en la plataforma digital de tu club.
           </p>
         </div>
 
@@ -461,31 +460,6 @@ export default function Features() {
               <FeatureBlock def={def} />
             </div>
           ))}
-        </div>
-
-        {/* Closing CTA */}
-        <div className="relative mt-20 overflow-hidden rounded-3xl border border-white/10 bg-brand-surface p-10 text-center lg:mt-28 lg:p-16">
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-brand-primary/5 via-transparent to-brand-secondary/5" />
-          <div className="pointer-events-none absolute -top-32 left-1/2 h-64 w-[500px] -translate-x-1/2 rounded-full bg-brand-primary/8 blur-3xl" />
-
-          <div className="relative">
-            <h3 className="mb-4 text-3xl font-bold tracking-tight text-white sm:text-4xl lg:text-5xl">
-              Menos herramientas.
-              <br />
-              Más control.
-            </h3>
-            <p className="mx-auto mb-10 max-w-xl text-lg leading-relaxed text-brand-muted">
-              PadelClub reúne todo lo que necesitas para gestionar tu club en una sola plataforma diseñada específicamente para pádel.
-            </p>
-            <a
-              href="https://wa.me/573173672033?text=Hola%2C%20quiero%20conocer%20m%C3%A1s%20sobre%20PadelClub%20para%20mi%20club%20de%20p%C3%A1del."
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center rounded-xl bg-brand-primary px-8 py-4 text-base font-semibold text-brand-bg shadow-lg shadow-brand-primary/20 transition-colors hover:bg-brand-primary/90"
-            >
-              Hablar por WhatsApp
-            </a>
-          </div>
         </div>
 
       </div>

@@ -3,8 +3,8 @@ import Image from "next/image";
 
 const footerLinks = [
   { label: "Características", href: "#features" },
-  { label: "Precios", href: "#pricing" },
-  { label: "Contacto", href: "#contact" },
+  { label: "Cómo funciona", href: "#como-funciona" },
+  { label: "Contacto", href: "#contacto" },
 ];
 
 export default function Footer() {
@@ -21,7 +21,7 @@ export default function Footer() {
               className="h-8 w-auto object-contain"
             />
             <p className="text-sm text-brand-muted max-w-xs text-center md:text-left">
-              Plataforma para la gestión moderna de clubes de pádel.
+              El hogar digital de tu club de pádel.
             </p>
           </div>
 

@@ -7,9 +7,8 @@ import { Menu, X } from "lucide-react";
 
 const navLinks = [
   { label: "Características", href: "#features" },
-  { label: "Clubes", href: "#clubs" },
-  { label: "Precios", href: "#pricing" },
-  { label: "Contacto", href: "#contact" },
+  { label: "Cómo funciona", href: "#como-funciona" },
+  { label: "Contacto", href: "#contacto" },
 ];
 
 function Brand() {

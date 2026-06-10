@@ -1,0 +1,3 @@
+-- Seed data for local development only.
+-- Production data is never seeded automatically.
+-- Add local test data here as needed during development.

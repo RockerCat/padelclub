@@ -1,0 +1,167 @@
+"use client";
+
+import { useActionState, useState } from "react";
+import { updateClub, type UpdateClubState } from "./actions";
+import { Button, Card, CardHeader, CardContent, Input } from "@/components/ui";
+import type { Club } from "@/types/database";
+
+interface SettingsFormProps {
+  club: Club;
+}
+
+const initialState: UpdateClubState = {};
+
+export function SettingsForm({ club }: SettingsFormProps) {
+  const boundAction = updateClub.bind(null, club.id);
+  const [state, action, pending] = useActionState(boundAction, initialState);
+  const [primaryColor, setPrimaryColor] = useState(club.primary_color);
+  const [secondaryColor, setSecondaryColor] = useState(club.secondary_color);
+
+  return (
+    <form action={action} className="flex flex-col gap-6 max-w-2xl">
+      {/* Club info */}
+      <Card variant="default">
+        <CardHeader>
+          <h2 className="text-base font-semibold text-white">
+            Información del club
+          </h2>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-4">
+            <Input
+              name="name"
+              label="Nombre del club"
+              type="text"
+              defaultValue={club.name}
+              required
+              placeholder="Club Padel Madrid"
+            />
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-white/80">
+                Descripción
+              </label>
+              <textarea
+                name="description"
+                defaultValue={club.description ?? ""}
+                placeholder="Breve descripción del club..."
+                rows={3}
+                className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-brand-muted/60 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20 resize-none"
+              />
+            </div>
+            <Input
+              name="logo_url"
+              label="URL del logo"
+              type="url"
+              defaultValue={club.logo_url ?? ""}
+              placeholder="https://..."
+              hint="Introduce la URL de la imagen del logo. La subida directa estará disponible en Sprint 2."
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Branding */}
+      <Card variant="default">
+        <CardHeader>
+          <h2 className="text-base font-semibold text-white">Colores del club</h2>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-white/80">
+                Color principal
+              </label>
+              <div className="flex items-center gap-3">
+                <input
+                  name="primary_color"
+                  type="color"
+                  value={primaryColor}
+                  onChange={(e) => setPrimaryColor(e.target.value)}
+                  className="w-10 h-10 rounded-lg border border-white/10 bg-transparent cursor-pointer p-0.5"
+                />
+                <span className="text-sm text-brand-muted font-mono">
+                  {primaryColor}
+                </span>
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-white/80">
+                Color secundario
+              </label>
+              <div className="flex items-center gap-3">
+                <input
+                  name="secondary_color"
+                  type="color"
+                  value={secondaryColor}
+                  onChange={(e) => setSecondaryColor(e.target.value)}
+                  className="w-10 h-10 rounded-lg border border-white/10 bg-transparent cursor-pointer p-0.5"
+                />
+                <span className="text-sm text-brand-muted font-mono">
+                  {secondaryColor}
+                </span>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Social / Contact */}
+      <Card variant="default">
+        <CardHeader>
+          <h2 className="text-base font-semibold text-white">Redes sociales y contacto</h2>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-4">
+            <Input
+              name="whatsapp"
+              label="WhatsApp"
+              type="text"
+              defaultValue={club.whatsapp ?? ""}
+              placeholder="+34 600 000 000"
+              hint="Número de contacto del club"
+            />
+            <Input
+              name="instagram"
+              label="Instagram"
+              type="text"
+              defaultValue={club.instagram ?? ""}
+              placeholder="@tuclub"
+            />
+            <Input
+              name="facebook"
+              label="Facebook"
+              type="url"
+              defaultValue={club.facebook ?? ""}
+              placeholder="https://facebook.com/tuclub"
+            />
+            <Input
+              name="youtube"
+              label="YouTube"
+              type="url"
+              defaultValue={club.youtube ?? ""}
+              placeholder="https://youtube.com/@tuclub"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Feedback */}
+      {state.error && (
+        <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
+          {state.error}
+        </p>
+      )}
+      {state.success && (
+        <p className="text-sm text-green-400 bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3">
+          Cambios guardados correctamente.
+        </p>
+      )}
+
+      <div>
+        <Button type="submit" loading={pending} size="lg">
+          Guardar cambios
+        </Button>
+      </div>
+    </form>
+  );
+}
