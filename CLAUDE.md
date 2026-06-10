@@ -26,6 +26,26 @@ The goal is to replace fragmented workflows currently handled through WhatsApp, 
 
 /assets/branding/logo-icon.png
 
+## Branding
+
+Primary:
+#B7E000
+
+Secondary:
+#1698BE
+
+Background:
+#001A24
+
+Surface:
+#082735
+
+Text:
+#FFFFFF
+
+Text Secondary:
+#94A3B8
+
 # Product Strategy
 
 ## Primary Customer
