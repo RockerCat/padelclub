@@ -198,13 +198,20 @@ export interface Database {
     };
     Views: Record<string, never>;
     Functions: {
+      // public.club_role — returns the caller's role in a given club, or null
       club_role: {
         Args: { p_club_id: string };
         Returns: string | null;
       };
+      // public.is_club_member — returns true if the caller is an active member
       is_club_member: {
         Args: { p_club_id: string };
         Returns: boolean;
+      };
+      // public.create_club_with_owner — atomic club creation + owner bootstrap
+      create_club_with_owner: {
+        Args: { p_name: string; p_slug: string };
+        Returns: Array<{ id: string; slug: string }>;
       };
     };
     Enums: Record<string, never>;

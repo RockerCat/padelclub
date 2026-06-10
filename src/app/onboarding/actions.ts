@@ -17,71 +17,122 @@ export async function createClub(
   _prevState: CreateClubState,
   formData: FormData
 ): Promise<CreateClubState> {
-  const supabase = await createClient();
+  try {
+    const supabase = await createClient();
 
-  // Auth check
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
 
-  if (userError || !user) {
-    redirect("/auth/login");
-  }
+    console.log("[createClub] step=auth", { userId: user?.id, userError });
 
-  const name = (formData.get("name") as string | null)?.trim() ?? "";
-  const slug = (formData.get("slug") as string | null)?.trim() ?? "";
+    if (userError || !user) {
+      redirect("/auth/login");
+    }
 
-  // Validation
-  const fieldErrors: CreateClubState["fieldErrors"] = {};
+    const name = (formData.get("name") as string | null)?.trim() ?? "";
+    const slug = (formData.get("slug") as string | null)?.trim() ?? "";
 
-  if (!name || name.length < 2) {
-    fieldErrors.name = "El nombre debe tener al menos 2 caracteres.";
-  }
+    console.log("[createClub] step=input", { name, slug });
 
-  if (!slug) {
-    fieldErrors.slug = "El identificador es obligatorio.";
-  } else if (slug.length < 3) {
-    fieldErrors.slug = "El identificador debe tener al menos 3 caracteres.";
-  } else if (!SLUG_REGEX.test(slug)) {
-    fieldErrors.slug =
-      "Solo letras minúsculas, números y guiones. Debe empezar y terminar con letra o número.";
-  }
+    const fieldErrors: CreateClubState["fieldErrors"] = {};
 
-  if (Object.keys(fieldErrors).length > 0) {
-    return { fieldErrors };
-  }
+    if (!name || name.length < 2) {
+      fieldErrors.name = "El nombre debe tener al menos 2 caracteres.";
+    }
+    if (!slug) {
+      fieldErrors.slug = "El identificador es obligatorio.";
+    } else if (slug.length < 3) {
+      fieldErrors.slug = "El identificador debe tener al menos 3 caracteres.";
+    } else if (!SLUG_REGEX.test(slug)) {
+      fieldErrors.slug =
+        "Solo letras minúsculas, números y guiones. Debe empezar y terminar con letra o número.";
+    }
 
-  // Insert club
-  const { data: club, error: clubError } = await supabase
-    .from("clubs")
-    .insert({ name, slug })
-    .select("id, slug")
-    .single();
+    if (Object.keys(fieldErrors).length > 0) {
+      return { fieldErrors };
+    }
 
-  if (clubError) {
-    // Unique constraint violation on slug
-    if (clubError.code === "23505") {
+    // Diagnostic: verify profile row exists
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("id", user!.id)
+      .maybeSingle();
+
+    console.log("[createClub] step=profile_lookup", {
+      profileId: profile?.id ?? null,
+      profileExists: !!profile,
+      profileError: profileError
+        ? { message: profileError.message, code: profileError.code }
+        : null,
+    });
+
+    // Call atomic SECURITY DEFINER function (inserts club + owner membership)
+    const { data: rpcData, error: rpcError } = await supabase.rpc(
+      "create_club_with_owner",
+      { p_name: name, p_slug: slug }
+    );
+
+    console.log("[createClub] step=rpc", {
+      rpcData,
+      rpcError: rpcError
+        ? {
+            message: rpcError.message,
+            code: rpcError.code,
+            details: rpcError.details,
+            hint: rpcError.hint,
+          }
+        : null,
+    });
+
+    if (rpcError) {
+      if (rpcError.code === "23505") {
+        return {
+          fieldErrors: { slug: "Este identificador ya está en uso. Elige otro." },
+        };
+      }
       return {
-        fieldErrors: {
-          slug: "Este identificador ya está en uso. Elige otro.",
-        },
+        error: `[${rpcError.code}] ${rpcError.message}`,
       };
     }
-    return { error: "Error al crear el club. Por favor, intenta de nuevo." };
+
+    const club = rpcData?.[0];
+
+    console.log("[createClub] step=result", {
+      club,
+      hasId: !!club?.id,
+      hasSlug: !!club?.slug,
+      redirectTarget: club ? `/${club.slug}/admin/settings` : null,
+    });
+
+    if (!club?.slug) {
+      return {
+        error: `RPC devolvió datos inesperados: ${JSON.stringify(rpcData)}`,
+      };
+    }
+
+    const target = `/${club.slug}/admin/settings`;
+    console.log("[createClub] step=redirect →", target);
+    redirect(target);
+  } catch (err: unknown) {
+    // Next.js redirect() throws NEXT_REDIRECT internally — must re-throw it.
+    // Without this, the redirect is swallowed and the client gets "Failed to fetch".
+    if (
+      typeof err === "object" &&
+      err !== null &&
+      "digest" in err &&
+      typeof (err as { digest: unknown }).digest === "string" &&
+      (err as { digest: string }).digest.startsWith("NEXT_REDIRECT")
+    ) {
+      throw err;
+    }
+
+    // Any other uncaught exception: log and return serializable state.
+    console.error("[createClub] FATAL uncaught exception:", err);
+    return {
+      error: `Error inesperado: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
-
-  // Insert club_members row (OWNER)
-  const { error: memberError } = await supabase.from("club_members").insert({
-    club_id: club.id,
-    profile_id: user.id,
-    role: "OWNER",
-    is_active: true,
-  });
-
-  if (memberError) {
-    return { error: "Error al configurar el club. Por favor, intenta de nuevo." };
-  }
-
-  redirect(`/${club.slug}/admin/settings`);
 }

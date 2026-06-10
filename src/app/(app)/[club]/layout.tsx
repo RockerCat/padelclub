@@ -17,32 +17,46 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
     data: { user },
   } = await supabase.auth.getUser();
 
+  console.log("[user]", user?.id);
+
   if (!user) {
     redirect("/auth/login");
   }
 
-  // Query the user's membership for this club
+  console.log("[club lookup]", slug);
+
+  // Step 1: resolve slug → club row
+  const result = await supabase
+    .from("clubs")
+    .select("id, name, slug, logo_url, primary_color, secondary_color")
+    .eq("slug", slug)
+    .eq("is_active", true)
+    .single();
+
+  console.log("[club result]", result);
+  console.log("[club data]", result.data);
+  console.log("[club error]", result.error);
+
+  const club = result.data;
+
+  if (!club) {
+    notFound();
+  }
+
+  // Step 2: verify the user is an active member of this club
   const { data: membership } = await supabase
     .from("club_members")
-    .select("role, clubs!inner(id, name, slug, logo_url, primary_color, secondary_color)")
-    .eq("clubs.slug", slug)
+    .select("role")
+    .eq("club_id", club.id)
     .eq("profile_id", user.id)
     .eq("is_active", true)
     .single();
 
-  if (!membership) {
-    notFound();
-  }
+  console.log("[membership]", membership);
 
-  // clubs comes back as an object due to the !inner join + .single()
-  const club = membership.clubs as unknown as {
-    id: string;
-    name: string;
-    slug: string;
-    logo_url: string | null;
-    primary_color: string;
-    secondary_color: string;
-  };
+  if (!membership) {
+    redirect("/unauthorized");
+  }
 
   const role = membership.role as ClubRole;
 
@@ -57,9 +71,7 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
       }
     >
       <AppNav club={club} role={role} />
-      <main className="flex-1 min-w-0">
-        {children}
-      </main>
+      <main className="flex-1 min-w-0">{children}</main>
     </div>
   );
 }

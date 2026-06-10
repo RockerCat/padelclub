@@ -1,4 +1,4 @@
-import { redirect, notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import type { ClubRole } from "@/types/database";
@@ -19,19 +19,42 @@ export default async function ClubHomePage({ params }: ClubHomePageProps) {
     redirect("/auth/login");
   }
 
+  console.log("[user]", user?.id);
+  console.log("[club lookup]", slug);
+
+  // Step 1: resolve slug → club row
+  const result = await supabase
+    .from("clubs")
+    .select("id, name, slug")
+    .eq("slug", slug)
+    .eq("is_active", true)
+    .single();
+
+  console.log("[club result]", result);
+  console.log("[club data]", result.data);
+  console.log("[club error]", result.error);
+
+  const club = result.data;
+
+  if (!club) {
+    notFound();
+  }
+
+  // Step 2: verify the user is an active member of this club
   const { data: membership } = await supabase
     .from("club_members")
-    .select("role, clubs!inner(id, name, slug)")
-    .eq("clubs.slug", slug)
+    .select("role")
+    .eq("club_id", club.id)
     .eq("profile_id", user.id)
     .eq("is_active", true)
     .single();
 
+  console.log("[membership]", membership);
+
   if (!membership) {
-    notFound();
+    redirect("/unauthorized");
   }
 
-  const club = membership.clubs as unknown as { id: string; name: string; slug: string };
   const role = membership.role as ClubRole;
 
   return (

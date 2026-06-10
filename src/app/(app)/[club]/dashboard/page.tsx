@@ -1,4 +1,4 @@
-import { redirect, notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
 interface DashboardPageProps {
@@ -17,19 +17,42 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
     redirect("/auth/login");
   }
 
+  console.log("[user]", user?.id);
+  console.log("[club lookup]", slug);
+
+  // Step 1: resolve slug → club id
+  const result = await supabase
+    .from("clubs")
+    .select("id")
+    .eq("slug", slug)
+    .eq("is_active", true)
+    .single();
+
+  console.log("[club result]", result);
+  console.log("[club data]", result.data);
+  console.log("[club error]", result.error);
+
+  const club = result.data;
+
+  if (!club) {
+    notFound();
+  }
+
+  // Step 2: verify the user is an active member and is OWNER
   const { data: membership } = await supabase
     .from("club_members")
-    .select("role, clubs!inner(slug)")
-    .eq("clubs.slug", slug)
+    .select("role")
+    .eq("club_id", club.id)
     .eq("profile_id", user.id)
     .eq("is_active", true)
     .single();
 
+  console.log("[membership]", membership);
+
   if (!membership) {
-    notFound();
+    redirect("/unauthorized");
   }
 
-  // Only OWNERs can access the dashboard
   if (membership.role !== "OWNER") {
     redirect(`/${slug}`);
   }

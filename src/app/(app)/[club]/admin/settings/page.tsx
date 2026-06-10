@@ -1,6 +1,7 @@
-import { redirect, notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SettingsForm } from "./SettingsForm";
+import type { Club } from "@/types/database";
 
 interface SettingsPageProps {
   params: Promise<{ club: string }>;
@@ -18,25 +19,45 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     redirect("/auth/login");
   }
 
-  // Fetch the club + membership in one go
+  console.log("[user]", user?.id);
+  console.log("[club lookup]", slug);
+
+  // Step 1: resolve slug → full club row (needed for the settings form)
+  const result = await supabase
+    .from("clubs")
+    .select("*")
+    .eq("slug", slug)
+    .eq("is_active", true)
+    .single();
+
+  console.log("[club result]", result);
+  console.log("[club data]", result.data);
+  console.log("[club error]", result.error);
+
+  const club = result.data;
+
+  if (!club) {
+    notFound();
+  }
+
+  // Step 2: verify the user is OWNER of this club
   const { data: membership } = await supabase
     .from("club_members")
-    .select("role, clubs!inner(*)")
-    .eq("clubs.slug", slug)
+    .select("role")
+    .eq("club_id", club.id)
     .eq("profile_id", user.id)
     .eq("is_active", true)
     .single();
 
+  console.log("[membership]", membership);
+
   if (!membership) {
-    notFound();
+    redirect("/unauthorized");
   }
 
-  // Only OWNER can access settings
   if (membership.role !== "OWNER") {
     redirect(`/${slug}`);
   }
-
-  const club = membership.clubs as unknown as import("@/types/database").Club;
 
   return (
     <div className="p-6 md:p-10">
@@ -46,8 +67,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           Actualiza la información y apariencia de tu club.
         </p>
       </div>
-
-      <SettingsForm club={club} />
+      <SettingsForm club={club as Club} />
     </div>
   );
 }
