@@ -2,7 +2,8 @@
 
 import { useActionState, useState } from "react";
 import { updateClub, type UpdateClubState } from "./actions";
-import { Button, Card, CardHeader, CardContent, Input } from "@/components/ui";
+import { Button, Card, CardHeader, CardContent, Input, LogoUpload } from "@/components/ui";
+import { useClubTheme } from "@/components/layout/ClubThemeProvider";
 import type { Club } from "@/types/database";
 
 interface SettingsFormProps {
@@ -16,6 +17,19 @@ export function SettingsForm({ club }: SettingsFormProps) {
   const [state, action, pending] = useActionState(boundAction, initialState);
   const [primaryColor, setPrimaryColor] = useState(club.primary_color);
   const [secondaryColor, setSecondaryColor] = useState(club.secondary_color);
+  const { setColors } = useClubTheme();
+
+  function handlePrimaryChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const color = e.target.value;
+    setPrimaryColor(color);
+    setColors(color, secondaryColor);
+  }
+
+  function handleSecondaryChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const color = e.target.value;
+    setSecondaryColor(color);
+    setColors(primaryColor, color);
+  }
 
   return (
     <form action={action} className="flex flex-col gap-6 max-w-2xl">
@@ -48,13 +62,12 @@ export function SettingsForm({ club }: SettingsFormProps) {
                 className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-brand-muted/60 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20 resize-none"
               />
             </div>
-            <Input
-              name="logo_url"
-              label="URL del logo"
-              type="url"
-              defaultValue={club.logo_url ?? ""}
-              placeholder="https://..."
-              hint="Introduce la URL de la imagen del logo. La subida directa estará disponible en Sprint 2."
+
+            <LogoUpload
+              clubId={club.id}
+              clubName={club.name}
+              currentLogoUrl={club.logo_url}
+              primaryColor={primaryColor}
             />
           </div>
         </CardContent>
@@ -63,7 +76,12 @@ export function SettingsForm({ club }: SettingsFormProps) {
       {/* Branding */}
       <Card variant="default">
         <CardHeader>
-          <h2 className="text-base font-semibold text-white">Colores del club</h2>
+          <h2 className="text-base font-semibold text-white">
+            Colores del club
+          </h2>
+          <p className="text-xs text-brand-muted mt-1">
+            Los cambios se aplican en tiempo real a la interfaz.
+          </p>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-4">
@@ -71,12 +89,15 @@ export function SettingsForm({ club }: SettingsFormProps) {
               <label className="text-sm font-medium text-white/80">
                 Color principal
               </label>
+              <p className="text-xs text-brand-muted">
+                Sidebar, botones, badges y estados activos.
+              </p>
               <div className="flex items-center gap-3">
                 <input
                   name="primary_color"
                   type="color"
                   value={primaryColor}
-                  onChange={(e) => setPrimaryColor(e.target.value)}
+                  onChange={handlePrimaryChange}
                   className="w-10 h-10 rounded-lg border border-white/10 bg-transparent cursor-pointer p-0.5"
                 />
                 <span className="text-sm text-brand-muted font-mono">
@@ -84,16 +105,20 @@ export function SettingsForm({ club }: SettingsFormProps) {
                 </span>
               </div>
             </div>
+
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-white/80">
                 Color secundario
               </label>
+              <p className="text-xs text-brand-muted">
+                Hover states, etiquetas informativas y elementos secundarios.
+              </p>
               <div className="flex items-center gap-3">
                 <input
                   name="secondary_color"
                   type="color"
                   value={secondaryColor}
-                  onChange={(e) => setSecondaryColor(e.target.value)}
+                  onChange={handleSecondaryChange}
                   className="w-10 h-10 rounded-lg border border-white/10 bg-transparent cursor-pointer p-0.5"
                 />
                 <span className="text-sm text-brand-muted font-mono">
@@ -108,7 +133,9 @@ export function SettingsForm({ club }: SettingsFormProps) {
       {/* Social / Contact */}
       <Card variant="default">
         <CardHeader>
-          <h2 className="text-base font-semibold text-white">Redes sociales y contacto</h2>
+          <h2 className="text-base font-semibold text-white">
+            Redes sociales y contacto
+          </h2>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-4">

@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AppNav } from "@/components/layout/AppNav";
+import { ClubThemeProvider } from "@/components/layout/ClubThemeProvider";
 import { UpdateLastClub } from "@/components/layout/UpdateLastClub";
 import type { ClubRole } from "@/types/database";
 
@@ -71,18 +72,13 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
   const membershipCount = count ?? 1;
 
   return (
-    <div
-      className="min-h-screen flex"
-      style={
-        {
-          "--color-club-primary": club.primary_color,
-          "--color-club-secondary": club.secondary_color,
-        } as React.CSSProperties
-      }
+    <ClubThemeProvider
+      initialPrimary={club.primary_color}
+      initialSecondary={club.secondary_color}
     >
       <UpdateLastClub clubId={club.id} />
       <AppNav club={club} role={role} membershipCount={membershipCount} />
       <main className="flex-1 min-w-0">{children}</main>
-    </div>
+    </ClubThemeProvider>
   );
 }
