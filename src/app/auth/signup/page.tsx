@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Button, Card, CardHeader, CardContent, Input } from "@/components/ui";
 
-export default function SignupPage() {
+function SignupForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const inviteToken = searchParams.get("invite");
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -28,21 +30,22 @@ export default function SignupPage() {
 
     try {
       const supabase = createClient();
+      const redirectTo = inviteToken
+        ? `${window.location.origin}/auth/callback?next=/invite/${inviteToken}`
+        : undefined;
+
       const { error: authError } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          data: {
-            full_name: fullName,
-          },
+          data: { full_name: fullName },
+          ...(redirectTo ? { emailRedirectTo: redirectTo } : {}),
         },
       });
 
       if (authError) {
         if (authError.message.includes("User already registered")) {
-          setError(
-            "Ya existe una cuenta con este correo. ¿Quieres iniciar sesión?"
-          );
+          setError("Ya existe una cuenta con este correo. ¿Quieres iniciar sesión?");
         } else if (authError.message.includes("Invalid email")) {
           setError("El correo electrónico no es válido.");
         } else if (authError.message.includes("Password should be")) {
@@ -53,7 +56,7 @@ export default function SignupPage() {
         return;
       }
 
-      router.push("/onboarding");
+      router.push(inviteToken ? `/invite/${inviteToken}` : "/onboarding");
     } finally {
       setLoading(false);
     }
@@ -62,7 +65,6 @@ export default function SignupPage() {
   return (
     <div className="min-h-screen bg-brand-bg flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
-        {/* Logo */}
         <div className="text-center mb-8">
           <Link href="/" className="inline-block">
             <span className="text-3xl font-black tracking-tight text-white">
@@ -70,7 +72,7 @@ export default function SignupPage() {
             </span>
           </Link>
           <p className="text-brand-muted text-sm mt-2">
-            Crea tu cuenta
+            {inviteToken ? "Crea tu cuenta para unirte" : "Crea tu cuenta"}
           </p>
         </div>
 
@@ -115,12 +117,7 @@ export default function SignupPage() {
                 </p>
               )}
 
-              <Button
-                type="submit"
-                loading={loading}
-                size="lg"
-                className="w-full mt-2"
-              >
+              <Button type="submit" loading={loading} size="lg" className="w-full mt-2">
                 Crear cuenta
               </Button>
             </form>
@@ -128,7 +125,7 @@ export default function SignupPage() {
             <p className="text-center text-sm text-brand-muted mt-6">
               ¿Ya tienes cuenta?{" "}
               <Link
-                href="/auth/login"
+                href={inviteToken ? `/auth/login?next=/invite/${inviteToken}` : "/auth/login"}
                 className="text-brand-primary hover:underline font-medium"
               >
                 Inicia sesión
@@ -138,5 +135,13 @@ export default function SignupPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense>
+      <SignupForm />
+    </Suspense>
   );
 }

@@ -49,6 +49,16 @@ function getNavItems(slug: string, role: AppNavProps["role"]): NavItem[] {
         icon: LayoutDashboard,
       },
       {
+        label: "Canchas",
+        href: `/${slug}/admin/courts`,
+        icon: Home,
+      },
+      {
+        label: "Jugadores",
+        href: `/${slug}/admin/players`,
+        icon: Users,
+      },
+      {
         label: "Reservaciones",
         icon: CalendarDays,
         disabled: true,
@@ -64,9 +74,8 @@ function getNavItems(slug: string, role: AppNavProps["role"]): NavItem[] {
     base.push(
       {
         label: "Canchas",
+        href: `/${slug}/admin/courts`,
         icon: Home,
-        disabled: true,
-        soon: true,
       },
       {
         label: "Reservaciones",
@@ -76,9 +85,8 @@ function getNavItems(slug: string, role: AppNavProps["role"]): NavItem[] {
       },
       {
         label: "Jugadores",
+        href: `/${slug}/admin/players`,
         icon: Users,
-        disabled: true,
-        soon: true,
       },
       {
         label: "Configuración",

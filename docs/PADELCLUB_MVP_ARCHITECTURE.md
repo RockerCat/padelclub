@@ -330,6 +330,53 @@ This ensures rankings are never stale regardless of which interface registers th
 
 ## 11. Architecture Review & Recommendations
 
+# MVP Refinements (Post Sprint Review)
+
+## Authentication & Club Access
+
+### Public Landing
+
+- Add "Login" button in header.
+- Existing club owners, admins and players must be able to access their club from the landing page.
+
+### Post Login Navigation
+
+#### Single Club Membership
+
+If the user belongs to exactly one club:
+
+OWNER → redirect to owner experience
+ADMIN → redirect to admin experience
+PLAYER → redirect to player experience (to be defined)
+
+#### Multiple Club Memberships
+
+If the user belongs to multiple clubs:
+
+- Show club selector.
+- User chooses which club to enter.
+
+### Role Experiences
+
+The platform must support three experiences:
+
+- OWNER
+- ADMIN
+- PLAYER
+
+The current dashboard is considered an OWNER dashboard.
+A dedicated PLAYER experience will be designed before Reservations.
+
+#### Club Selection Priority
+
+If the user belongs to only one club:
+- Enter directly.
+
+If the user belongs to multiple clubs:
+- Show club selector.
+
+The system should remember the last selected club and use it as the default destination on future logins.
+
 ### R1 — Supabase SSR client ✅ resolved in Sprint 0
 `src/lib/supabase/client.ts` now uses `createBrowserClient` from `@supabase/ssr`. `src/lib/supabase/server.ts` created with `createServerClient`. `src/proxy.ts` handles session refresh on every request.
 
@@ -371,3 +418,17 @@ $$;
 
 ### R11 — Ranking formula must be decided before implementation
 **Risk:** HIGH for trust. The automatic ranking trigger cannot be written until the points formula is agreed upon with a real club owner. A ranking that assigns wrong points — or changes after players have competed — destroys credibility. This decision must happen before Sprint 5 begins. Hardcoded constants are acceptable for MVP. A `ranking_rules` table is a Phase 2 option if clubs need per-club customization.
+
+### R12 — Reservations are the Core Domain
+
+Reservations are the central entity of the platform.
+
+Before implementing Sprint 3, the reservation model must be reviewed and validated:
+
+- Who creates reservations?
+- Can players create reservations?
+- Can reservations have missing players?
+- How do open matches interact with reservations?
+- How do rankings and tournaments consume reservation data?
+
+The reservation workflow should be validated before implementation.

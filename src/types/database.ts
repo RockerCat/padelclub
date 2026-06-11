@@ -146,6 +146,50 @@ export interface Database {
           },
         ];
       };
+      courts: {
+        Row: {
+          id: string;
+          club_id: string;
+          name: string;
+          description: string | null;
+          surface: string | null;
+          is_indoor: boolean | null;
+          is_active: boolean;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          club_id: string;
+          name: string;
+          description?: string | null;
+          surface?: string | null;
+          is_indoor?: boolean | null;
+          is_active?: boolean;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          description?: string | null;
+          surface?: string | null;
+          is_indoor?: boolean | null;
+          is_active?: boolean;
+          sort_order?: number;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "courts_club_id_fkey";
+            columns: ["club_id"];
+            isOneToOne: false;
+            referencedRelation: "clubs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       invitation_links: {
         Row: {
           id: string;
@@ -213,6 +257,16 @@ export interface Database {
         Args: { p_name: string; p_slug: string };
         Returns: Array<{ id: string; slug: string }>;
       };
+      // public.get_invitation_preview — anon-accessible invite info
+      get_invitation_preview: {
+        Args: { p_token: string };
+        Returns: Json;
+      };
+      // public.claim_invitation — join a club via invite token
+      claim_invitation: {
+        Args: { p_token: string };
+        Returns: Json;
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
@@ -252,3 +306,5 @@ export type ClubMemberWithProfile = ClubMember & {
 export type ClubMemberWithClub = ClubMember & {
   clubs: Club;
 };
+
+export type Court = Tables<"courts">;
