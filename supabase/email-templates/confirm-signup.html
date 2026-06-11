@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="es" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>Confirma tu cuenta — PadelClub</title>
+</head>
+<body style="margin:0;padding:0;background-color:#001A24;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#001A24;">
+  <tr>
+    <td align="center" style="padding:48px 16px 40px;">
+
+      <!-- Logo wordmark -->
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:32px;">
+        <tr>
+          <td>
+            <a href="{{ .SiteURL }}" style="text-decoration:none;">
+              <span style="font-size:26px;font-weight:900;color:#ffffff;letter-spacing:-0.5px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">Padel</span><span style="font-size:26px;font-weight:900;color:#B7E000;letter-spacing:-0.5px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">Club</span>
+            </a>
+          </td>
+        </tr>
+      </table>
+
+      <!-- Card -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;background-color:#082735;border-radius:20px;overflow:hidden;border:1px solid #0d3548;">
+
+        <!-- Top accent bar -->
+        <tr>
+          <td style="height:3px;background:linear-gradient(to right,#B7E000,#1698BE);font-size:0;line-height:0;">&nbsp;</td>
+        </tr>
+
+        <!-- Main content -->
+        <tr>
+          <td style="padding:40px 36px 32px;">
+
+            <!-- Conditional: invite context -->
+            {{ if index .Data "invite_club_name" }}
+            <p style="margin:0 0 6px;font-size:13px;font-weight:600;color:#B7E000;text-align:center;text-transform:uppercase;letter-spacing:0.8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+              {{ index .Data "invite_club_name" }}
+            </p>
+            <h1 style="margin:0 0 12px;font-size:21px;font-weight:700;color:#ffffff;text-align:center;letter-spacing:-0.3px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+              Has sido invitado
+            </h1>
+            <p style="margin:0 0 32px;font-size:15px;color:#94A3B8;line-height:1.65;text-align:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+              Confirma tu cuenta para acceder como <strong style="color:#ffffff;">{{ index .Data "invite_role" }}</strong> a {{ index .Data "invite_club_name" }}.
+            </p>
+            {{ else }}
+            <h1 style="margin:0 0 12px;font-size:21px;font-weight:700;color:#ffffff;text-align:center;letter-spacing:-0.3px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+              Bienvenido a PadelClub
+            </h1>
+            <p style="margin:0 0 32px;font-size:15px;color:#94A3B8;line-height:1.65;text-align:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+              Haz clic en el siguiente botón para confirmar tu cuenta y comenzar a utilizar la plataforma.
+            </p>
+            {{ end }}
+
+            <!-- CTA Button -->
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 32px;">
+              <tr>
+                <td style="background-color:#B7E000;border-radius:12px;">
+                  <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:14px 36px;font-size:15px;font-weight:700;color:#001A24;text-decoration:none;letter-spacing:-0.2px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                    Confirmar cuenta
+                  </a>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Divider -->
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:20px;">
+              <tr>
+                <td style="height:1px;background-color:#0d3548;font-size:0;line-height:0;">&nbsp;</td>
+              </tr>
+            </table>
+
+            <!-- URL Fallback -->
+            <p style="margin:0 0 6px;font-size:12px;color:#4a6070;text-align:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+              Si el botón no funciona, copia este enlace en tu navegador:
+            </p>
+            <p style="margin:0;font-size:11px;color:#3d5565;text-align:center;word-break:break-all;line-height:1.5;font-family:Courier,monospace;">
+              {{ .ConfirmationURL }}
+            </p>
+
+          </td>
+        </tr>
+
+        <!-- Card footer -->
+        <tr>
+          <td style="padding:0 36px 28px;border-top:1px solid #0d3548;">
+            <p style="margin:20px 0 0;font-size:12px;color:#3d5565;text-align:center;line-height:1.6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+              Si no solicitaste esto, puedes ignorar este correo de forma segura.<br>
+              Este enlace expira en 24 horas.
+            </p>
+          </td>
+        </tr>
+
+      </table>
+
+      <!-- Page footer -->
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:28px;">
+        <tr>
+          <td>
+            <p style="margin:0;font-size:11px;color:#1e3d52;text-align:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+              © PadelClub &mdash; Plataforma para clubes deportivos
+            </p>
+          </td>
+        </tr>
+      </table>
+
+    </td>
+  </tr>
+</table>
+</body>
+</html>

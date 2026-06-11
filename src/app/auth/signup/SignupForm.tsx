@@ -52,7 +52,15 @@ export function SignupForm({ inviteToken, branding }: SignupFormProps) {
         email,
         password,
         options: {
-          data: { full_name: fullName },
+          data: {
+            full_name: fullName,
+            ...(branding
+              ? {
+                  invite_club_name: branding.clubName,
+                  invite_role: branding.roleLabel,
+                }
+              : {}),
+          },
           ...(redirectTo ? { emailRedirectTo: redirectTo } : {}),
         },
       });
