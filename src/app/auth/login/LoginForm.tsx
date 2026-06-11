@@ -12,14 +12,19 @@ export function LoginForm() {
   const searchParams = useSearchParams();
   const next = searchParams.get("next");
   const message = searchParams.get("message");
+  const urlError = searchParams.get("error");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(
-    message === "error"
-      ? "Hubo un error al iniciar sesión. Por favor, intenta de nuevo."
-      : null
-  );
+  const [error, setError] = useState<string | null>(() => {
+    if (urlError === "access_denied" || urlError === "otp_expired") {
+      return "El enlace de confirmación expiró o ya no es válido. Intenta crear tu cuenta de nuevo.";
+    }
+    if (message === "error") {
+      return "Hubo un error al iniciar sesión. Por favor, intenta de nuevo.";
+    }
+    return null;
+  });
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {

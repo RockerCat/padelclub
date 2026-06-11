@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Button, Card, CardHeader, CardContent, Input } from "@/components/ui";
+import { Mail } from "lucide-react";
 
 function SignupForm() {
   const router = useRouter();
@@ -17,6 +18,7 @@ function SignupForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<ReactNode | null>(null);
   const [loading, setLoading] = useState(false);
+  const [verificationSent, setVerificationSent] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -50,10 +52,14 @@ function SignupForm() {
             <>
               Este correo ya tiene una cuenta.{" "}
               <Link
-                href="/auth/login?next=/clubs/create"
+                href={
+                  inviteToken
+                    ? `/auth/login?next=/invite/${inviteToken}`
+                    : "/auth/login?next=/clubs/create"
+                }
                 className="text-brand-primary hover:underline font-medium"
               >
-                Inicia sesión para crear otro club.
+                Inicia sesión para continuar.
               </Link>
             </>
           );
@@ -67,7 +73,12 @@ function SignupForm() {
         return;
       }
 
-      router.push(inviteToken ? `/invite/${inviteToken}` : "/onboarding");
+      if (inviteToken) {
+        // Show verification pending state — do NOT route away
+        setVerificationSent(true);
+      } else {
+        router.push("/onboarding");
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.toLowerCase().includes("failed to fetch") || msg.toLowerCase().includes("networkerror")) {
@@ -78,6 +89,50 @@ function SignupForm() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (verificationSent) {
+    return (
+      <div className="min-h-screen bg-brand-bg flex items-center justify-center px-4">
+        <div className="w-full max-w-sm">
+          <div className="text-center mb-8">
+            <Link href="/" className="inline-block">
+              <span className="text-3xl font-black tracking-tight text-white">
+                Padel<span className="text-brand-primary">Club</span>
+              </span>
+            </Link>
+          </div>
+          <Card variant="elevated">
+            <CardContent className="pt-8 pb-8">
+              <div className="flex flex-col items-center text-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-brand-primary/15 border border-brand-primary/20 flex items-center justify-center">
+                  <Mail className="w-6 h-6 text-brand-primary" />
+                </div>
+                <div>
+                  <h1 className="text-lg font-bold text-white mb-1">Revisa tu correo</h1>
+                  <p className="text-sm text-brand-muted">
+                    Te enviamos un enlace de confirmación a{" "}
+                    <span className="text-white font-medium">{email}</span>.
+                  </p>
+                  <p className="text-sm text-brand-muted mt-2">
+                    Haz clic en el enlace para confirmar tu cuenta y unirte al club.
+                  </p>
+                </div>
+                <p className="text-xs text-brand-muted/60 mt-2">
+                  ¿No llegó?{" "}
+                  <button
+                    onClick={() => setVerificationSent(false)}
+                    className="text-brand-primary hover:underline"
+                  >
+                    Intenta de nuevo
+                  </button>
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
   }
 
   return (
