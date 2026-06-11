@@ -98,7 +98,8 @@ export default async function ClubSelectorPage() {
             <Link
               key={club.id}
               href={entryPath}
-              className="flex items-center gap-4 px-5 py-4 rounded-2xl bg-brand-surface border border-white/10 hover:border-white/25 hover:bg-white/5 transition-colors group"
+              style={{ "--card-primary": club.primary_color } as React.CSSProperties}
+              className="flex items-center gap-4 px-5 py-4 rounded-2xl bg-brand-surface border border-white/10 hover:border-[var(--card-primary)] hover:bg-[color-mix(in_srgb,var(--card-primary)_6%,transparent)] transition-colors group"
             >
               {/* Logo or initials */}
               <div
@@ -142,7 +143,10 @@ export default async function ClubSelectorPage() {
               </div>
 
               {/* Entrar */}
-              <span className="text-xs font-semibold text-brand-primary shrink-0 group-hover:underline">
+              <span
+                className="text-xs font-semibold shrink-0 group-hover:underline"
+                style={{ color: club.primary_color }}
+              >
                 Entrar →
               </span>
             </Link>

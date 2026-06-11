@@ -153,7 +153,7 @@ export function MembersClient({ members, clubSlug }: MembersClientProps) {
               <Link
                 key={member.id}
                 href={`/${clubSlug}/admin/players/${member.id}`}
-                className="flex items-center gap-4 px-4 py-3.5 rounded-2xl bg-brand-surface border border-white/10 hover:border-white/20 hover:bg-white/5 transition-colors group"
+                className="flex items-center gap-4 px-4 py-3.5 rounded-2xl bg-brand-surface border border-white/10 hover:border-brand-primary/25 hover:bg-brand-primary/5 transition-colors group"
               >
                 {/* Avatar */}
                 <div className="w-9 h-9 rounded-xl bg-brand-primary/15 border border-brand-primary/20 flex items-center justify-center shrink-0">

@@ -37,8 +37,12 @@ export function ClubThemeProvider({
         className="min-h-screen flex"
         style={
           {
+            // Override Tailwind brand tokens so all brand-* utilities pick up club colors
             "--color-brand-primary": primary,
             "--color-brand-secondary": secondary,
+            // Short-hand aliases for explicit inline styles in club-scoped components
+            "--club-primary": primary,
+            "--club-secondary": secondary,
           } as React.CSSProperties
         }
       >

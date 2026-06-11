@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { CalendarDays, Users, TrendingUp } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 
 interface DashboardPageProps {
@@ -67,17 +68,25 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {[
-          { label: "Reservas del mes", value: "—" },
-          { label: "Jugadores activos", value: "—" },
-          { label: "Ocupación promedio", value: "—" },
-        ].map((metric) => (
+        {(
+          [
+            { label: "Reservas del mes", value: "—", Icon: CalendarDays },
+            { label: "Jugadores activos", value: "—", Icon: Users },
+            { label: "Ocupación promedio", value: "—", Icon: TrendingUp },
+          ] as const
+        ).map(({ label, value, Icon }) => (
           <div
-            key={metric.label}
-            className="bg-brand-surface border border-white/10 rounded-2xl p-6"
+            key={label}
+            className="relative bg-brand-surface border border-white/10 rounded-2xl p-6 overflow-hidden"
           >
-            <p className="text-sm text-brand-muted mb-2">{metric.label}</p>
-            <p className="text-3xl font-bold text-white">{metric.value}</p>
+            {/* Club primary top accent */}
+            <div className="absolute inset-x-0 top-0 h-0.5 bg-brand-primary opacity-70" />
+            {/* Metric icon */}
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-4 bg-brand-primary/15 text-brand-primary">
+              <Icon className="w-4 h-4" />
+            </div>
+            <p className="text-sm text-brand-muted mb-1">{label}</p>
+            <p className="text-3xl font-bold text-white">{value}</p>
           </div>
         ))}
       </div>

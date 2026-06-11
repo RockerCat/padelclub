@@ -142,8 +142,17 @@ function NavContent({
     <nav className="flex flex-col h-full">
       <ClubHeader club={club} role={role} />
 
+      {/* Gradient brand accent line */}
+      <div
+        className="h-0.5 mx-4 rounded-full opacity-50 shrink-0"
+        style={{
+          background:
+            "linear-gradient(to right, var(--club-primary), var(--club-secondary))",
+        }}
+      />
+
       {/* Nav items */}
-      <ul className="flex-1 p-3 flex flex-col gap-1 overflow-y-auto">
+      <ul className="flex-1 p-3 flex flex-col gap-0.5 overflow-y-auto">
         {navItems.map((item) => {
           const isActive = item.href
             ? pathname === item.href ||
@@ -169,15 +178,22 @@ function NavContent({
           }
 
           return (
-            <li key={item.label}>
+            <li key={item.label} className="relative">
+              {/* Left pill indicator for active item */}
+              {isActive && (
+                <span
+                  className="absolute left-0 inset-y-1 w-0.5 rounded-r-full"
+                  style={{ backgroundColor: "var(--club-primary)" }}
+                />
+              )}
               <Link
                 href={item.href!}
                 onClick={onLinkClick}
                 className={cn(
                   "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors",
                   isActive
-                    ? "bg-brand-primary/15 text-brand-primary font-medium"
-                    : "text-brand-muted hover:text-white hover:bg-white/5"
+                    ? "bg-brand-primary/10 text-brand-primary font-medium"
+                    : "text-brand-muted hover:text-white hover:bg-brand-primary/5"
                 )}
               >
                 <Icon className="w-4 h-4 shrink-0" />
@@ -202,7 +218,7 @@ function NavContent({
           <Link
             href="/clubs"
             onClick={onLinkClick}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-white/5 transition-colors"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
           >
             <ArrowLeftRight className="w-4 h-4 shrink-0" />
             <span>Cambiar de club</span>
@@ -212,7 +228,7 @@ function NavContent({
           <Link
             href="/clubs/create"
             onClick={onLinkClick}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-white/5 transition-colors"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
           >
             <PlusCircle className="w-4 h-4 shrink-0" />
             <span>Crear otro club</span>
@@ -220,7 +236,7 @@ function NavContent({
         )}
         <button
           onClick={onLogout}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-white/5 transition-colors w-full text-left"
+          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors w-full text-left"
         >
           <LogOut className="w-4 h-4 shrink-0" />
           <span>Salir</span>
@@ -271,7 +287,7 @@ export function AppNav({ club, role, membershipCount }: AppNavProps) {
         </span>
         <button
           onClick={() => setMobileOpen((prev) => !prev)}
-          className="p-2 rounded-xl text-brand-muted hover:text-white hover:bg-white/5 transition-colors shrink-0"
+          className="p-2 rounded-xl text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors shrink-0"
           aria-label="Abrir menú"
         >
           {mobileOpen ? (
