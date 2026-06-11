@@ -12,6 +12,7 @@ type MetricItem = {
   value: string;
   empty: string;
   Icon: React.ComponentType<{ className?: string }>;
+  accent: "primary" | "secondary";
 };
 
 type QuickActionItem = {
@@ -74,18 +75,21 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
       value: "—",
       empty: "Sin reservas aún",
       Icon: CalendarDays,
+      accent: "primary",
     },
     {
       label: "Jugadores activos",
       value: String(memberCount),
       empty: "Sin jugadores aún",
       Icon: Users,
+      accent: "secondary",
     },
     {
       label: "Ocupación promedio",
       value: "—",
       empty: "Sin datos aún",
       Icon: TrendingUp,
+      accent: "primary",
     },
   ];
 
@@ -124,6 +128,14 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
     <div className="p-6 md:p-10">
       {/* Hero */}
       <div className="relative overflow-hidden rounded-2xl bg-brand-surface border border-white/10 p-6 mb-8">
+        {/* Subtle dual-color gradient wash */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              "linear-gradient(135deg, color-mix(in srgb, var(--club-primary) 8%, transparent), color-mix(in srgb, var(--club-secondary) 8%, transparent))",
+          }}
+        />
         <div
           className="absolute inset-x-0 top-0 h-0.5"
           style={{
@@ -157,28 +169,41 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
 
       {/* Metric cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-        {metrics.map(({ label, value, empty, Icon }) => (
-          <div
-            key={label}
-            className="relative bg-brand-surface border border-white/10 rounded-2xl p-6 overflow-hidden"
-          >
-            {/* Top accent */}
-            <div className="absolute inset-x-0 top-0 h-0.5 bg-brand-primary opacity-70" />
-            {/* Ghost watermark */}
-            <Icon className="absolute right-4 bottom-4 w-16 h-16 text-white opacity-[0.04]" />
-            {/* Icon container */}
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4 bg-brand-primary/15 text-brand-primary">
-              <Icon className="w-5 h-5" />
+        {metrics.map(({ label, value, empty, Icon, accent }) => {
+          const accentColor =
+            accent === "secondary" ? "var(--club-secondary)" : "var(--club-primary)";
+          return (
+            <div
+              key={label}
+              className="relative bg-brand-surface border border-white/10 rounded-2xl p-6 overflow-hidden"
+            >
+              {/* Top accent line */}
+              <div
+                className="absolute inset-x-0 top-0 h-0.5 opacity-70"
+                style={{ backgroundColor: accentColor }}
+              />
+              {/* Ghost watermark */}
+              <Icon className="absolute right-4 bottom-4 w-16 h-16 text-white opacity-[0.04]" />
+              {/* Icon container */}
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center mb-4"
+                style={{
+                  backgroundColor: `color-mix(in srgb, ${accentColor} 15%, transparent)`,
+                  color: accentColor,
+                }}
+              >
+                <Icon className="w-5 h-5" />
+              </div>
+              <p className="text-sm text-brand-muted mb-1">{label}</p>
+              <p className="text-3xl font-bold text-white mb-1">{value}</p>
+              {value === "—" && (
+                <p className="text-xs" style={{ color: "var(--club-secondary)" }}>
+                  {empty}
+                </p>
+              )}
             </div>
-            <p className="text-sm text-brand-muted mb-1">{label}</p>
-            <p className="text-3xl font-bold text-white mb-1">{value}</p>
-            {value === "—" && (
-              <p className="text-xs" style={{ color: "var(--club-secondary)" }}>
-                {empty}
-              </p>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Quick actions */}

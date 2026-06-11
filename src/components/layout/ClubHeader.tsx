@@ -35,7 +35,7 @@ export function ClubHeader({ club, role }: ClubHeaderProps) {
     <div className="relative overflow-hidden px-4 pt-6 pb-5 shrink-0">
       {/* Radial glow background — primary top-left, secondary bottom-right */}
       <div
-        className="absolute inset-0 opacity-[0.12] pointer-events-none"
+        className="absolute inset-0 opacity-[0.15] pointer-events-none"
         style={{
           background:
             "radial-gradient(ellipse at 25% 0%, var(--club-primary), transparent 65%), radial-gradient(ellipse at 75% 100%, var(--club-secondary), transparent 65%)",
@@ -77,10 +77,10 @@ export function ClubHeader({ club, role }: ClubHeaderProps) {
 
       {/* Bottom gradient separator — replaces border-b */}
       <div
-        className="absolute inset-x-0 bottom-0 h-px"
+        className="absolute inset-x-0 bottom-0 h-0.5"
         style={{
           background:
-            "linear-gradient(to right, transparent, var(--club-primary) 30%, var(--club-secondary) 70%, transparent)",
+            "linear-gradient(to right, transparent 10%, var(--club-primary) 25%, var(--club-secondary) 75%, transparent 90%)",
         }}
       />
     </div>

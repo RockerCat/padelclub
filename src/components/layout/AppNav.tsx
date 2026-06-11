@@ -27,6 +27,7 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
   disabled?: boolean;
   soon?: boolean;
+  color?: "primary" | "secondary";
 }
 
 interface AppNavProps {
@@ -50,6 +51,7 @@ function getNavItems(slug: string, role: AppNavProps["role"]): NavItem[] {
         label: "Dashboard",
         href: `/${slug}/dashboard`,
         icon: LayoutDashboard,
+        color: "secondary" as const,
       },
       {
         label: "Canchas",
@@ -60,6 +62,7 @@ function getNavItems(slug: string, role: AppNavProps["role"]): NavItem[] {
         label: "Jugadores",
         href: `/${slug}/admin/players`,
         icon: Users,
+        color: "secondary" as const,
       },
       {
         label: "Reservaciones",
@@ -90,6 +93,7 @@ function getNavItems(slug: string, role: AppNavProps["role"]): NavItem[] {
         label: "Jugadores",
         href: `/${slug}/admin/players`,
         icon: Users,
+        color: "secondary" as const,
       },
       {
         label: "Configuración",
@@ -168,13 +172,20 @@ function NavContent({
             );
           }
 
+          const accent =
+            item.color === "secondary" ? "var(--club-secondary)" : "var(--club-primary)";
+
           return (
-            <li key={item.label} className="relative">
+            <li
+              key={item.label}
+              className="relative"
+              style={{ "--item-accent": accent } as React.CSSProperties}
+            >
               {/* Left pill indicator for active item */}
               {isActive && (
                 <span
                   className="absolute left-0 inset-y-1 w-0.5 rounded-r-full"
-                  style={{ backgroundColor: "var(--club-primary)" }}
+                  style={{ backgroundColor: accent }}
                 />
               )}
               <Link
@@ -183,9 +194,17 @@ function NavContent({
                 className={cn(
                   "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors",
                   isActive
-                    ? "bg-brand-primary/20 text-brand-primary font-semibold"
-                    : "text-brand-muted hover:text-white hover:bg-brand-primary/5"
+                    ? "font-semibold"
+                    : "text-brand-muted hover:text-white hover:bg-[color-mix(in_srgb,var(--item-accent)_5%,transparent)]"
                 )}
+                style={
+                  isActive
+                    ? {
+                        backgroundColor: `color-mix(in srgb, ${accent} 18%, transparent)`,
+                        color: accent,
+                      }
+                    : undefined
+                }
               >
                 <Icon className="w-4 h-4 shrink-0" />
                 <span>{item.label}</span>
