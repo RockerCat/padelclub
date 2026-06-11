@@ -14,6 +14,8 @@ import {
   User,
   LogOut,
   Lock,
+  ArrowLeftRight,
+  PlusCircle,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils/cn";
@@ -36,6 +38,7 @@ interface AppNavProps {
     primary_color: string;
   };
   role: "OWNER" | "ADMIN" | "PLAYER";
+  membershipCount: number;
 }
 
 function getNavItems(slug: string, role: AppNavProps["role"]): NavItem[] {
@@ -119,6 +122,7 @@ function getNavItems(slug: string, role: AppNavProps["role"]): NavItem[] {
 interface NavContentProps {
   club: AppNavProps["club"];
   role: AppNavProps["role"];
+  membershipCount: number;
   navItems: NavItem[];
   pathname: string;
   onLinkClick: () => void;
@@ -128,6 +132,7 @@ interface NavContentProps {
 function NavContent({
   club,
   role,
+  membershipCount,
   navItems,
   pathname,
   onLinkClick,
@@ -193,6 +198,26 @@ function NavContent({
             Próx.
           </span>
         </div>
+        {membershipCount >= 2 && (
+          <Link
+            href="/clubs"
+            onClick={onLinkClick}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-white/5 transition-colors"
+          >
+            <ArrowLeftRight className="w-4 h-4 shrink-0" />
+            <span>Cambiar de club</span>
+          </Link>
+        )}
+        {role === "OWNER" && (
+          <Link
+            href="/clubs/create"
+            onClick={onLinkClick}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-white/5 transition-colors"
+          >
+            <PlusCircle className="w-4 h-4 shrink-0" />
+            <span>Crear otro club</span>
+          </Link>
+        )}
         <button
           onClick={onLogout}
           className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-white/5 transition-colors w-full text-left"
@@ -207,7 +232,7 @@ function NavContent({
 
 // ─── AppNav main component ────────────────────────────────────────────────────
 
-export function AppNav({ club, role }: AppNavProps) {
+export function AppNav({ club, role, membershipCount }: AppNavProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -231,6 +256,7 @@ export function AppNav({ club, role }: AppNavProps) {
         <NavContent
           club={club}
           role={role}
+          membershipCount={membershipCount}
           navItems={navItems}
           pathname={pathname}
           onLinkClick={closeMobile}
@@ -269,6 +295,7 @@ export function AppNav({ club, role }: AppNavProps) {
             <NavContent
               club={club}
               role={role}
+              membershipCount={membershipCount}
               navItems={navItems}
               pathname={pathname}
               onLinkClick={closeMobile}

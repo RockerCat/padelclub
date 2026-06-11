@@ -1,7 +1,7 @@
 # PadelClub — MVP Architecture
 
 > Source of truth for technical decisions during MVP development.
-> Last updated: 2026-06-10 (rev 2 — player model clarified, R2/R10/R11 added)
+> Last updated: 2026-06-11 (rev 4 — Sprint 2.6: multi-club ownership, onboarding guard, auth-aware CTA)
 
 ---
 
@@ -36,30 +36,72 @@ PadelClub is a **multi-tenant SaaS platform** for amateur padel clubs. Each club
 
 ## 3. Current Repository State
 
+As of Sprint 2.5 (2026-06-11):
+
 ```
 src/
   app/
-    (marketing)/          ← public landing page (complete)
-      layout.tsx          ← Navbar + Footer
-      page.tsx            ← / route
-    layout.tsx            ← root layout (Geist fonts, metadata)
-    globals.css           ← Tailwind 4 @theme tokens
-    favicon.ico
+    (marketing)/              ← public landing page ✅
+      layout.tsx              ← Navbar (with Login button) + Footer
+      page.tsx                ← / route
+    (app)/
+      [club]/                 ← authenticated tenant shell ✅
+        layout.tsx            ← auth guard, AppNav, UpdateLastClub
+        page.tsx              ← player portal home (stub)
+        dashboard/page.tsx    ← OWNER dashboard (metrics stub)
+        admin/
+          layout.tsx          ← requires ADMIN or OWNER
+          courts/             ← Courts CRUD ✅ (Sprint 2A)
+          players/            ← Members + Invitations ✅ (Sprint 2B)
+          settings/           ← Club branding + config ✅ (Sprint 1)
+    auth/
+      login/                  ← LoginForm with 0/1/many club routing ✅
+      signup/                 ← SignupForm with invite token support ✅
+      callback/               ← Supabase OAuth callback ✅
+    clubs/page.tsx            ← Club selector (multi-club users) ✅ (Sprint 2.5)
+    invite/[token]/           ← Public invite landing + claim flow ✅ (Sprint 2B)
+    onboarding/               ← New club creation wizard ✅ (Sprint 1)
+    unauthorized/             ← 403 page ✅
   components/
     features/
-      marketing/          ← Hero, PainPoints, Features, Audience
-    layout/               ← Navbar, Footer
+      marketing/              ← Hero, PainPoints, Features, Audience
+    layout/
+      Navbar.tsx              ← Marketing navbar with Login button
+      AppNav.tsx              ← Authenticated sidebar (club-scoped)
+      ClubHeader.tsx          ← Club logo + role in sidebar header
+      UpdateLastClub.tsx      ← Invisible client component, fires last_club_id update
   lib/
     supabase/
-      client.ts           ← browser Supabase client (needs refactor)
+      client.ts               ← createBrowserClient (@supabase/ssr) ✅
+      server.ts               ← createServerClient (@supabase/ssr) ✅
+    utils/
+      cn.ts                   ← clsx + tailwind-merge ✅
+      navigation.ts           ← getClubEntryPath(slug, role) ✅
+    actions/
+      profile.ts              ← updateLastClub server action ✅
+  types/
+    database.ts               ← Manual types (profiles, clubs, club_members,
+                                  invitation_links, courts) ✅
 public/
-  branding/               ← logo-primary.png, logo-icon.png
-assets/
-  branding/               ← source logo files
-docs/                     ← this directory (new)
+  branding/                   ← logo-primary.png, logo-icon.png
+supabase/
+  migrations/
+    20260610000001_sprint1_core_schema.sql
+    20260610000002_fix_onboarding_rls.sql
+    20260610000003_fix_missing_profiles.sql
+    20260610000004_fix_ambiguous_id.sql
+    20260611000001_sprint2a_courts.sql
+    20260611000002_sprint2b_invite_claim.sql
+    20260611000003_sprint2_5_last_club.sql
+docs/
+  PADELCLUB_MVP_ARCHITECTURE.md    ← this file
+  DATABASE_SCHEMA.md
+  ROUTES_AND_NAVIGATION.md
+  DEVELOPMENT_ROADMAP.md
 ```
 
-**⚠ Critical gap:** `src/lib/supabase/client.ts` uses a bare `createClient` call. This must be replaced with the `@supabase/ssr` pattern before any authenticated code is written.
+**DB tables implemented:** `profiles`, `clubs`, `club_members`, `invitation_links`, `courts`
+**DB functions implemented:** `club_role`, `is_club_member`, `create_club_with_owner`, `get_invitation_preview`, `claim_invitation`
 
 ---
 
@@ -419,16 +461,162 @@ $$;
 ### R11 — Ranking formula must be decided before implementation
 **Risk:** HIGH for trust. The automatic ranking trigger cannot be written until the points formula is agreed upon with a real club owner. A ranking that assigns wrong points — or changes after players have competed — destroys credibility. This decision must happen before Sprint 5 begins. Hardcoded constants are acceptable for MVP. A `ranking_rules` table is a Phase 2 option if clubs need per-club customization.
 
+### Role Experience Architecture
+
+Three distinct experiences exist in the platform. Each role has a dedicated entry path and scope.
+
+#### OWNER
+- Entry: `/{slug}/admin/settings`
+- Scope: full platform control
+- Features: dashboard (metrics), courts, players, invitations, club settings, all admin features
+- Cannot be deactivated or have role changed via UI
+
+#### ADMIN
+- Entry: `/{slug}/admin/courts`
+- Scope: daily operations
+- Features: courts management, players list, invitations (PLAYER role only)
+- Cannot access club settings (branding, critical config)
+- Cannot promote members to OWNER
+
+#### PLAYER
+- Entry: `/{slug}` (player portal — future)
+- Scope: club participation
+- Features (future): reservations, rankings view, tournament registration, clinic registration, own profile
+- Cannot access `/admin/` routes
+- Experience will be designed before Sprint 3 Reservations
+
+#### Post-Login Routing Logic
+
+```
+login success
+  │
+  ├── ?next= param present → follow next
+  │
+  ├── 0 active clubs → /onboarding
+  │
+  ├── 1 active club → getClubEntryPath(slug, role)
+  │     OWNER  → /{slug}/admin/settings
+  │     ADMIN  → /{slug}/admin/courts
+  │     PLAYER → /{slug}
+  │
+  └── 2+ active clubs → /clubs (selector)
+        └── sorted: last_club_id first, then alphabetical
+              └── click "Entrar" → getClubEntryPath(slug, role)
+```
+
+#### `getClubEntryPath(slug, role)` — Canonical navigation utility
+
+Defined in `src/lib/utils/navigation.ts`. Must be used in:
+- `LoginForm.tsx` (post-login redirect)
+- `/clubs` page (club selector)
+- Any future redirect after club context is established
+
+Do not hardcode role-based paths anywhere else.
+
 ### R12 — Reservations are the Core Domain
 
 Reservations are the central entity of the platform.
 
 Before implementing Sprint 3, the reservation model must be reviewed and validated:
 
-- Who creates reservations?
-- Can players create reservations?
-- Can reservations have missing players?
-- How do open matches interact with reservations?
-- How do rankings and tournaments consume reservation data?
+**Questions that must be answered before implementation:**
 
-The reservation workflow should be validated before implementation.
+| Question | Why it matters |
+|---|---|
+| Who creates reservations? | Determines the UI entry point and permission model |
+| Can players create reservations? | Defines whether the PLAYER portal is needed first |
+| Can reservations have missing players? | Affects schema (nullable `player_ids` vs open slots) |
+| What is the minimum reservation unit? | 1 court · 1 time slot · N players |
+| How do open matches interact with reservations? | Open match = reservation with fewer than 4 players? |
+| How do rankings consume reservation data? | Do rankings trigger on reservation completion or on explicit result entry? |
+| How do tournaments consume reservation data? | Does a tournament round auto-create reservations? |
+| What are the club's operating hours? | Needed for availability calendar |
+| What is the minimum/maximum duration? | Business rule — e.g. 60 or 90 minutes |
+| Can the same court be double-booked? | Overlap prevention is a hard constraint |
+
+**Decision:** The reservation workflow must be reviewed with a real club owner before Sprint 3 begins. A 30-minute discovery session covers all 10 questions above.
+
+---
+
+## 12. Multi-Club Ownership
+
+### Core Rule: Account ≠ Club
+
+A PadelClub account and a club are independent entities. Creating an account does not create a club. Joining a club does not create a new account.
+
+One account can:
+- be `OWNER` of multiple clubs
+- be `ADMIN` of multiple clubs
+- be `PLAYER` in multiple clubs
+- hold different roles in different clubs simultaneously (e.g., OWNER in Club A, PLAYER in Club B)
+
+### Data Model
+
+Roles are stored in `club_members (club_id, profile_id, role)`. There is no global role on `profiles`. Every role query must be scoped to a specific `club_id`.
+
+```
+auth.users (1) ──→ (N) club_members ──→ (N) clubs
+                         role: OWNER | ADMIN | PLAYER
+                         is_active: boolean
+```
+
+### Route Responsibilities
+
+| Route | Purpose | Who uses it |
+|---|---|---|
+| `/auth/signup` | Create account (no club created) | Anyone new to the platform |
+| `/onboarding` | Create the **first** club after account creation | Authenticated user with 0 clubs |
+| `/clubs/create` | Create an **additional** club | Authenticated user with 1+ clubs |
+| `/clubs` | Select which club to enter | Any user with 1+ clubs |
+
+### Routing Behavior
+
+#### `/onboarding`
+- Not authenticated → `/auth/login`
+- 0 clubs → show form
+- 1+ clubs → `/clubs`
+
+#### `/clubs`
+- Not authenticated → `/auth/login`
+- 0 clubs → `/onboarding`
+- 1+ clubs → always show the selector (no auto-redirect)
+  - Only the login flow redirects directly when there is exactly 1 club
+
+#### `/clubs/create`
+- Not authenticated → `/auth/login?next=/clubs/create`
+- Authenticated → show form (creates club + OWNER membership, then → `/{slug}/admin/settings`)
+
+#### Post-login routing
+```
+login success
+  │
+  ├── ?next= param present → follow next
+  │
+  ├── 0 clubs → /onboarding
+  │
+  ├── 1 club → getClubEntryPath(slug, role)   ← only login does this auto-redirect
+  │
+  └── 2+ clubs → /clubs
+```
+
+### Landing Page CTA
+
+"Crear mi club" on the marketing Navbar behaves differently based on session state:
+
+| State | Destination |
+|---|---|
+| Not authenticated | `/auth/signup` |
+| Authenticated | `/clubs/create` |
+
+The check runs client-side via `supabase.auth.getSession()` in a `useEffect`. Default href is `/auth/signup` (no flash for unauthenticated visitors).
+
+### AppNav: OWNER-only actions
+
+| Action | Role | Condition |
+|---|---|---|
+| Cambiar de club | any | membershipCount ≥ 2 |
+| Crear otro club | OWNER only | always visible |
+
+### Invitation Rules
+
+Invitation links are scoped to a single club. Accepting an invitation does not affect the user's membership in other clubs. If the invited user already belongs to the club, `claim_invitation` returns an error.

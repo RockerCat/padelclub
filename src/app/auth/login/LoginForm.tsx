@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { getClubEntryPath } from "@/lib/utils/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Button, Card, CardHeader, CardContent, Input } from "@/components/ui";
@@ -53,32 +54,32 @@ export function LoginForm() {
         return;
       }
 
-      // Get the logged-in user's id to filter only their own memberships
+      // Get the logged-in user's id to determine destination
       const { data: { user } } = await supabase.auth.getUser();
 
       const { data: memberships } = await supabase
         .from("club_members")
-        .select("role, clubs!inner(slug)")
+        .select("role, clubs!inner(id, slug)")
         .eq("profile_id", user!.id)
         .eq("is_active", true)
-        .order("joined_at", { ascending: true })
-        .limit(1);
+        .order("joined_at", { ascending: true });
 
+      // 0 clubs → onboarding
       if (!memberships || memberships.length === 0) {
         router.push("/onboarding");
         return;
       }
 
-      const first = memberships[0];
-      const club = first.clubs as unknown as { slug: string };
-      const slug = club.slug;
-      const role = first.role;
-
-      if (role === "OWNER") {
-        router.push(`/${slug}/admin/settings`);
-      } else {
-        router.push(`/${slug}`);
+      // 1 club → direct entry based on role
+      if (memberships.length === 1) {
+        const { role, clubs } = memberships[0];
+        const club = clubs as unknown as { slug: string };
+        router.push(getClubEntryPath(club.slug, role));
+        return;
       }
+
+      // Multiple clubs → club selector (handles last_club_id sorting server-side)
+      router.push("/clubs");
     } finally {
       setLoading(false);
     }

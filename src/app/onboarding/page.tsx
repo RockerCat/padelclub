@@ -12,6 +12,17 @@ export default async function OnboardingPage() {
     redirect("/auth/login");
   }
 
+  // If user already belongs to clubs, send them to the selector instead
+  const { count } = await supabase
+    .from("club_members")
+    .select("id", { count: "exact", head: true })
+    .eq("profile_id", user.id)
+    .eq("is_active", true);
+
+  if ((count ?? 0) > 0) {
+    redirect("/clubs");
+  }
+
   return (
     <div className="min-h-screen bg-brand-bg flex items-center justify-center px-4">
       <div className="w-full max-w-md">

@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
+import type { ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -14,7 +15,7 @@ function SignupForm() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ReactNode | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -45,18 +46,35 @@ function SignupForm() {
 
       if (authError) {
         if (authError.message.includes("User already registered")) {
-          setError("Ya existe una cuenta con este correo. ¿Quieres iniciar sesión?");
+          setError(
+            <>
+              Este correo ya tiene una cuenta.{" "}
+              <Link
+                href="/auth/login?next=/clubs/create"
+                className="text-brand-primary hover:underline font-medium"
+              >
+                Inicia sesión para crear otro club.
+              </Link>
+            </>
+          );
         } else if (authError.message.includes("Invalid email")) {
           setError("El correo electrónico no es válido.");
         } else if (authError.message.includes("Password should be")) {
           setError("La contraseña debe tener al menos 6 caracteres.");
         } else {
-          setError("Error al crear la cuenta. Por favor, intenta de nuevo.");
+          setError(authError.message || "Error al crear la cuenta. Por favor, intenta de nuevo.");
         }
         return;
       }
 
       router.push(inviteToken ? `/invite/${inviteToken}` : "/onboarding");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.toLowerCase().includes("failed to fetch") || msg.toLowerCase().includes("networkerror")) {
+        setError("No se pudo conectar al servidor. Verifica tu conexión a internet.");
+      } else {
+        setError("Error inesperado. Por favor, intenta de nuevo.");
+      }
     } finally {
       setLoading(false);
     }
@@ -125,10 +143,14 @@ function SignupForm() {
             <p className="text-center text-sm text-brand-muted mt-6">
               ¿Ya tienes cuenta?{" "}
               <Link
-                href={inviteToken ? `/auth/login?next=/invite/${inviteToken}` : "/auth/login"}
+                href={
+                  inviteToken
+                    ? `/auth/login?next=/invite/${inviteToken}`
+                    : "/auth/login?next=/clubs/create"
+                }
                 className="text-brand-primary hover:underline font-medium"
               >
-                Inicia sesión
+                {inviteToken ? "Inicia sesión" : "Inicia sesión para crear otro club"}
               </Link>
             </p>
           </CardContent>

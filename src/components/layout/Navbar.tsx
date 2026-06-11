@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Menu, X } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 const navLinks = [
   { label: "Características", href: "#features" },
@@ -32,6 +33,14 @@ function Brand() {
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [createClubHref, setCreateClubHref] = useState("/auth/signup");
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) setCreateClubHref("/clubs/create");
+    });
+  }, []);
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-brand-bg/80 backdrop-blur-md">
@@ -52,7 +61,19 @@ export default function Navbar() {
             ))}
           </nav>
 
-          <div className="hidden md:flex items-center">
+          <div className="hidden md:flex items-center gap-3">
+            <Link
+              href="/auth/login"
+              className="rounded-lg border border-white/15 px-4 py-2 text-sm font-semibold text-white hover:border-white/30 hover:bg-white/5 transition-colors"
+            >
+              Iniciar sesión
+            </Link>
+            <Link
+              href={createClubHref}
+              className="rounded-lg border border-brand-primary/30 bg-brand-primary/10 px-4 py-2 text-sm font-semibold text-brand-primary hover:bg-brand-primary/20 transition-colors"
+            >
+              Crear mi club
+            </Link>
             <a
               href="https://wa.me/573173672033?text=Hola%2C%20quiero%20conocer%20m%C3%A1s%20sobre%20PadelClub%20para%20mi%20club%20de%20p%C3%A1del."
               target="_blank"
@@ -86,11 +107,25 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
+            <Link
+              href="/auth/login"
+              className="rounded-lg border border-white/15 px-4 py-2.5 text-sm font-semibold text-white text-center hover:border-white/30 transition-colors"
+              onClick={() => setMobileOpen(false)}
+            >
+              Iniciar sesión
+            </Link>
+            <Link
+              href={createClubHref}
+              className="rounded-lg border border-brand-primary/30 bg-brand-primary/10 px-4 py-2.5 text-sm font-semibold text-brand-primary text-center hover:bg-brand-primary/20 transition-colors"
+              onClick={() => setMobileOpen(false)}
+            >
+              Crear mi club
+            </Link>
             <a
               href="https://wa.me/573173672033?text=Hola%2C%20quiero%20conocer%20m%C3%A1s%20sobre%20PadelClub%20para%20mi%20club%20de%20p%C3%A1del."
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-1 rounded-lg bg-brand-primary px-4 py-2.5 text-sm font-semibold text-brand-bg text-center"
+              className="rounded-lg bg-brand-primary px-4 py-2.5 text-sm font-semibold text-brand-bg text-center"
               onClick={() => setMobileOpen(false)}
             >
               Hablar por WhatsApp

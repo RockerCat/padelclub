@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AppNav } from "@/components/layout/AppNav";
+import { UpdateLastClub } from "@/components/layout/UpdateLastClub";
 import type { ClubRole } from "@/types/database";
 
 interface ClubLayoutProps {
@@ -60,6 +61,15 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
 
   const role = membership.role as ClubRole;
 
+  // Count total active memberships to decide whether to show "Cambiar de club"
+  const { count } = await supabase
+    .from("club_members")
+    .select("id", { count: "exact", head: true })
+    .eq("profile_id", user.id)
+    .eq("is_active", true);
+
+  const membershipCount = count ?? 1;
+
   return (
     <div
       className="min-h-screen flex"
@@ -70,7 +80,8 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
         } as React.CSSProperties
       }
     >
-      <AppNav club={club} role={role} />
+      <UpdateLastClub clubId={club.id} />
+      <AppNav club={club} role={role} membershipCount={membershipCount} />
       <main className="flex-1 min-w-0">{children}</main>
     </div>
   );
