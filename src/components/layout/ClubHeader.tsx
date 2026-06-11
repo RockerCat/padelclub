@@ -1,5 +1,3 @@
-import { cn } from "@/lib/utils/cn";
-
 interface ClubHeaderProps {
   club: {
     name: string;
@@ -34,36 +32,57 @@ function roleBadgeLabel(role: string): string {
 
 export function ClubHeader({ club, role }: ClubHeaderProps) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10">
-      {/* Logo or initials */}
+    <div className="relative overflow-hidden px-4 pt-6 pb-5 shrink-0">
+      {/* Radial glow background — primary top-left, secondary bottom-right */}
       <div
-        className={cn(
-          "w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold shrink-0 overflow-hidden",
-          !club.logo_url && "bg-white/10 text-white"
-        )}
-        style={
-          !club.logo_url
-            ? { backgroundColor: `${club.primary_color}22`, color: club.primary_color }
-            : undefined
-        }
-      >
-        {club.logo_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={club.logo_url}
-            alt={`Logo de ${club.name}`}
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          getInitials(club.name)
-        )}
+        className="absolute inset-0 opacity-[0.12] pointer-events-none"
+        style={{
+          background:
+            "radial-gradient(ellipse at 25% 0%, var(--club-primary), transparent 65%), radial-gradient(ellipse at 75% 100%, var(--club-secondary), transparent 65%)",
+        }}
+      />
+
+      {/* Content */}
+      <div className="relative flex flex-col items-center gap-3 text-center">
+        {/* Logo */}
+        <div
+          className="w-20 h-20 rounded-2xl flex items-center justify-center text-2xl font-bold shrink-0 overflow-hidden ring-1 ring-white/10"
+          style={
+            !club.logo_url
+              ? {
+                  backgroundColor: `${club.primary_color}22`,
+                  color: club.primary_color,
+                }
+              : undefined
+          }
+        >
+          {club.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={club.logo_url}
+              alt={`Logo de ${club.name}`}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            getInitials(club.name)
+          )}
+        </div>
+
+        {/* Name + role */}
+        <div>
+          <p className="text-sm font-bold text-white leading-tight">{club.name}</p>
+          <p className="text-xs text-brand-muted mt-0.5">{roleBadgeLabel(role)}</p>
+        </div>
       </div>
 
-      {/* Club name and role */}
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-white truncate">{club.name}</p>
-        <p className="text-xs text-brand-muted">{roleBadgeLabel(role)}</p>
-      </div>
+      {/* Bottom gradient separator — replaces border-b */}
+      <div
+        className="absolute inset-x-0 bottom-0 h-px"
+        style={{
+          background:
+            "linear-gradient(to right, transparent, var(--club-primary) 30%, var(--club-secondary) 70%, transparent)",
+        }}
+      />
     </div>
   );
 }

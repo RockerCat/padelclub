@@ -1,10 +1,26 @@
 import { notFound, redirect } from "next/navigation";
-import { CalendarDays, Users, TrendingUp } from "lucide-react";
+import Link from "next/link";
+import { CalendarDays, Users, TrendingUp, Home, Settings, Lock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 
 interface DashboardPageProps {
   params: Promise<{ club: string }>;
 }
+
+type MetricItem = {
+  label: string;
+  value: string;
+  empty: string;
+  Icon: React.ComponentType<{ className?: string }>;
+};
+
+type QuickActionItem = {
+  label: string;
+  Icon: React.ComponentType<{ className?: string }>;
+  href: string | null;
+  color: string;
+  disabled: boolean;
+};
 
 export default async function DashboardPage({ params }: DashboardPageProps) {
   const { club: slug } = await params;
@@ -14,32 +30,17 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    redirect("/auth/login");
-  }
+  if (!user) redirect("/auth/login");
 
-  console.log("[user]", user?.id);
-  console.log("[club lookup]", slug);
-
-  // Step 1: resolve slug → club id
-  const result = await supabase
+  const { data: club } = await supabase
     .from("clubs")
-    .select("id")
+    .select("id, name")
     .eq("slug", slug)
     .eq("is_active", true)
     .single();
 
-  console.log("[club result]", result);
-  console.log("[club data]", result.data);
-  console.log("[club error]", result.error);
+  if (!club) notFound();
 
-  const club = result.data;
-
-  if (!club) {
-    notFound();
-  }
-
-  // Step 2: verify the user is an active member and is OWNER
   const { data: membership } = await supabase
     .from("club_members")
     .select("role")
@@ -48,47 +49,183 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
     .eq("is_active", true)
     .single();
 
-  console.log("[membership]", membership);
+  if (!membership) redirect("/unauthorized");
+  if (membership.role !== "OWNER") redirect(`/${slug}`);
 
-  if (!membership) {
-    redirect("/unauthorized");
-  }
+  const [courtResult, memberResult] = await Promise.all([
+    supabase
+      .from("courts")
+      .select("id", { count: "exact", head: true })
+      .eq("club_id", club.id)
+      .eq("is_active", true),
+    supabase
+      .from("club_members")
+      .select("id", { count: "exact", head: true })
+      .eq("club_id", club.id)
+      .eq("is_active", true),
+  ]);
 
-  if (membership.role !== "OWNER") {
-    redirect(`/${slug}`);
-  }
+  const courtCount = courtResult.count ?? 0;
+  const memberCount = memberResult.count ?? 0;
+
+  const metrics: MetricItem[] = [
+    {
+      label: "Reservas del mes",
+      value: "—",
+      empty: "Sin reservas aún",
+      Icon: CalendarDays,
+    },
+    {
+      label: "Jugadores activos",
+      value: String(memberCount),
+      empty: "Sin jugadores aún",
+      Icon: Users,
+    },
+    {
+      label: "Ocupación promedio",
+      value: "—",
+      empty: "Sin datos aún",
+      Icon: TrendingUp,
+    },
+  ];
+
+  const quickActions: QuickActionItem[] = [
+    {
+      label: "Canchas",
+      Icon: Home,
+      href: `/${slug}/admin/courts`,
+      color: "var(--club-primary)",
+      disabled: false,
+    },
+    {
+      label: "Jugadores",
+      Icon: Users,
+      href: `/${slug}/admin/players`,
+      color: "var(--club-secondary)",
+      disabled: false,
+    },
+    {
+      label: "Configuración",
+      Icon: Settings,
+      href: `/${slug}/admin`,
+      color: "var(--club-primary)",
+      disabled: false,
+    },
+    {
+      label: "Reservaciones",
+      Icon: CalendarDays,
+      href: null,
+      color: "var(--club-secondary)",
+      disabled: true,
+    },
+  ];
 
   return (
     <div className="p-6 md:p-10">
-      <h1 className="text-2xl font-bold text-white mb-2">
-        Dashboard del propietario
-      </h1>
-      <p className="text-brand-muted mb-8">
-        Las métricas aparecerán cuando el club tenga reservas.
-      </p>
+      {/* Hero */}
+      <div className="relative overflow-hidden rounded-2xl bg-brand-surface border border-white/10 p-6 mb-8">
+        <div
+          className="absolute inset-x-0 top-0 h-0.5"
+          style={{
+            background:
+              "linear-gradient(to right, var(--club-primary), var(--club-secondary))",
+          }}
+        />
+        <p className="text-sm text-brand-muted mb-0.5">Bienvenido a</p>
+        <h1 className="text-2xl font-bold text-white mb-5">{club.name}</h1>
+        <div className="flex flex-wrap gap-6">
+          <div className="flex items-baseline gap-2">
+            <span
+              className="text-3xl font-bold tabular-nums"
+              style={{ color: "var(--club-primary)" }}
+            >
+              {courtCount}
+            </span>
+            <span className="text-sm text-brand-muted">canchas</span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span
+              className="text-3xl font-bold tabular-nums"
+              style={{ color: "var(--club-secondary)" }}
+            >
+              {memberCount}
+            </span>
+            <span className="text-sm text-brand-muted">jugadores</span>
+          </div>
+        </div>
+      </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {(
-          [
-            { label: "Reservas del mes", value: "—", Icon: CalendarDays },
-            { label: "Jugadores activos", value: "—", Icon: Users },
-            { label: "Ocupación promedio", value: "—", Icon: TrendingUp },
-          ] as const
-        ).map(({ label, value, Icon }) => (
+      {/* Metric cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+        {metrics.map(({ label, value, empty, Icon }) => (
           <div
             key={label}
             className="relative bg-brand-surface border border-white/10 rounded-2xl p-6 overflow-hidden"
           >
-            {/* Club primary top accent */}
+            {/* Top accent */}
             <div className="absolute inset-x-0 top-0 h-0.5 bg-brand-primary opacity-70" />
-            {/* Metric icon */}
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-4 bg-brand-primary/15 text-brand-primary">
-              <Icon className="w-4 h-4" />
+            {/* Ghost watermark */}
+            <Icon className="absolute right-4 bottom-4 w-16 h-16 text-white opacity-[0.04]" />
+            {/* Icon container */}
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4 bg-brand-primary/15 text-brand-primary">
+              <Icon className="w-5 h-5" />
             </div>
             <p className="text-sm text-brand-muted mb-1">{label}</p>
-            <p className="text-3xl font-bold text-white">{value}</p>
+            <p className="text-3xl font-bold text-white mb-1">{value}</p>
+            {value === "—" && (
+              <p className="text-xs" style={{ color: "var(--club-secondary)" }}>
+                {empty}
+              </p>
+            )}
           </div>
         ))}
+      </div>
+
+      {/* Quick actions */}
+      <div>
+        <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-3">
+          Acciones rápidas
+        </h2>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {quickActions.map(({ label, Icon, href, color, disabled }) => {
+            if (disabled) {
+              return (
+                <div
+                  key={label}
+                  className="flex flex-col items-center justify-center gap-2 p-5 rounded-2xl bg-brand-surface border border-white/5 opacity-40 cursor-not-allowed"
+                >
+                  <Icon className="w-6 h-6 text-brand-muted" />
+                  <span className="text-xs font-medium text-brand-muted">{label}</span>
+                  <span className="text-[10px] font-medium bg-white/5 border border-white/10 text-brand-muted px-1.5 py-0.5 rounded-md flex items-center gap-1">
+                    <Lock className="w-2.5 h-2.5" />
+                    Próx.
+                  </span>
+                </div>
+              );
+            }
+            return (
+              <Link
+                key={label}
+                href={href!}
+                style={{ "--qa-color": color } as React.CSSProperties}
+                className="flex flex-col items-center justify-center gap-2 p-5 rounded-2xl bg-brand-surface border border-white/10 hover:border-[var(--qa-color)] hover:bg-[color-mix(in_srgb,var(--qa-color)_6%,transparent)] transition-colors group"
+              >
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center"
+                  style={{
+                    backgroundColor: "color-mix(in srgb, var(--qa-color) 15%, transparent)",
+                    color: "var(--qa-color)",
+                  }}
+                >
+                  <Icon className="w-5 h-5" />
+                </div>
+                <span className="text-xs font-medium text-brand-muted group-hover:text-white transition-colors">
+                  {label}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

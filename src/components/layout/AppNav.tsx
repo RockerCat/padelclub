@@ -142,15 +142,6 @@ function NavContent({
     <nav className="flex flex-col h-full">
       <ClubHeader club={club} role={role} />
 
-      {/* Gradient brand accent line */}
-      <div
-        className="h-0.5 mx-4 rounded-full opacity-50 shrink-0"
-        style={{
-          background:
-            "linear-gradient(to right, var(--club-primary), var(--club-secondary))",
-        }}
-      />
-
       {/* Nav items */}
       <ul className="flex-1 p-3 flex flex-col gap-0.5 overflow-y-auto">
         {navItems.map((item) => {
@@ -192,7 +183,7 @@ function NavContent({
                 className={cn(
                   "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors",
                   isActive
-                    ? "bg-brand-primary/10 text-brand-primary font-medium"
+                    ? "bg-brand-primary/20 text-brand-primary font-semibold"
                     : "text-brand-muted hover:text-white hover:bg-brand-primary/5"
                 )}
               >
