@@ -2,7 +2,7 @@
 
 import { useTransition, useState } from "react";
 import Link from "next/link";
-import { Card, CardHeader, CardContent, Button } from "@/components/ui";
+import { Card, CardContent, Button } from "@/components/ui";
 import { CheckCircle } from "lucide-react";
 import { claimInvitation } from "./actions";
 
@@ -46,12 +46,12 @@ export function AcceptInviteCard({
       <Card variant="elevated">
         <CardContent className="pt-8 pb-8">
           <div className="flex flex-col items-center text-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center">
-              <CheckCircle className="w-7 h-7 text-emerald-400" />
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center">
+              <CheckCircle className="w-6 h-6 text-emerald-400" />
             </div>
             <div>
               <h1 className="text-lg font-bold text-white mb-1">
-                Ya eres {roleLabel} de {clubName}
+                ¡Ya eres {roleLabel} de {clubName}!
               </h1>
               <p className="text-sm text-brand-muted">
                 Tu acceso ha sido confirmado.
@@ -70,20 +70,11 @@ export function AcceptInviteCard({
 
   return (
     <Card variant="elevated">
-      <CardHeader>
-        <div className="text-center">
-          <div className="w-14 h-14 rounded-2xl bg-brand-primary/15 border border-brand-primary/20 flex items-center justify-center mx-auto mb-3">
-            <span className="text-2xl font-black text-brand-primary">
-              {clubName[0]?.toUpperCase() ?? "C"}
-            </span>
-          </div>
-          <h1 className="text-lg font-bold text-white">Únete a {clubName}</h1>
-          <p className="text-sm text-brand-muted mt-1">
-            Has sido invitado como {roleLabel}.
-          </p>
-        </div>
-      </CardHeader>
-      <CardContent>
+      <CardContent className="pt-6">
+        <p className="text-sm text-brand-muted text-center mb-5">
+          Has sido invitado como{" "}
+          <span className="text-white font-medium">{roleLabel}</span>.
+        </p>
         {error && (
           <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-center mb-3">
             {error}

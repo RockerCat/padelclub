@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { CheckCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { Card, CardHeader, CardContent, Button } from "@/components/ui";
+import { Card, CardContent, Button } from "@/components/ui";
 import { AcceptInviteCard } from "./AcceptInviteCard";
 
 interface InvitePageProps {
@@ -8,32 +9,112 @@ interface InvitePageProps {
   searchParams: Promise<{ error?: string }>;
 }
 
+export type ClubBranding = {
+  clubName: string;
+  logoUrl: string | null;
+  primaryColor: string;
+  secondaryColor: string;
+  roleLabel: string;
+};
+
 const ROLE_LABELS: Record<string, string> = {
   PLAYER: "jugador",
   ADMIN: "administrador",
 };
 
-const ERROR_MESSAGES: Record<string, string> = {
+const CALLBACK_ERROR_MESSAGES: Record<string, string> = {
   access_denied: "El enlace de confirmación expiró o ya no es válido.",
   otp_expired: "El enlace de confirmación expiró.",
 };
 
-function Layout({ children }: { children: React.ReactNode }) {
+// ─── Club logo mark ──────────────────────────────────────────────────────────
+
+function ClubLogoMark({
+  logoUrl,
+  name,
+  primaryColor,
+}: {
+  logoUrl: string | null;
+  name: string;
+  primaryColor: string;
+}) {
+  if (logoUrl) {
+    return (
+      <img
+        src={logoUrl}
+        alt={name}
+        className="w-16 h-16 rounded-2xl object-cover border border-white/10"
+      />
+    );
+  }
   return (
-    <div className="min-h-screen bg-brand-bg flex items-center justify-center px-4">
+    <div
+      className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black"
+      style={{
+        backgroundColor: `color-mix(in srgb, ${primaryColor} 15%, transparent)`,
+        color: primaryColor,
+        border: `1px solid color-mix(in srgb, ${primaryColor} 20%, transparent)`,
+      }}
+    >
+      {name[0]?.toUpperCase() ?? "C"}
+    </div>
+  );
+}
+
+// ─── Page layout ─────────────────────────────────────────────────────────────
+
+function Layout({
+  children,
+  branding,
+}: {
+  children: React.ReactNode;
+  branding: ClubBranding | null;
+}) {
+  return (
+    <div
+      className="min-h-screen bg-brand-bg flex flex-col items-center justify-center px-4 py-12"
+      style={
+        branding
+          ? ({
+              "--color-brand-primary": branding.primaryColor,
+              "--color-brand-secondary": branding.secondaryColor,
+            } as React.CSSProperties)
+          : undefined
+      }
+    >
       <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <Link href="/">
-            <span className="text-3xl font-black tracking-tight text-white">
-              Padel<span className="text-brand-primary">Club</span>
-            </span>
-          </Link>
-        </div>
+        {branding ? (
+          <div className="flex flex-col items-center mb-8 gap-3">
+            <ClubLogoMark
+              logoUrl={branding.logoUrl}
+              name={branding.clubName}
+              primaryColor={branding.primaryColor}
+            />
+            <h2 className="text-xl font-bold text-white">{branding.clubName}</h2>
+          </div>
+        ) : (
+          <div className="text-center mb-8">
+            <Link href="/">
+              <span className="text-3xl font-black tracking-tight text-white">
+                Padel<span className="text-brand-primary">Club</span>
+              </span>
+            </Link>
+          </div>
+        )}
+
         {children}
+
+        {branding && (
+          <p className="text-xs text-brand-muted/40 text-center mt-6">
+            Powered by PadelClub
+          </p>
+        )}
       </div>
     </div>
   );
 }
+
+// ─── Page ────────────────────────────────────────────────────────────────────
 
 export default async function InvitePage({ params, searchParams }: InvitePageProps) {
   const { token } = await params;
@@ -55,16 +136,30 @@ export default async function InvitePage({ params, searchParams }: InvitePagePro
     club_name?: string;
     club_slug?: string;
     club_logo_url?: string | null;
+    primary_color?: string;
+    secondary_color?: string;
   } | null;
 
-  // Error from Supabase auth callback (access_denied, otp_expired, etc.)
+  // Extract branding whenever we have it (valid or not — club identity doesn't change)
+  const branding: ClubBranding | null =
+    info?.club_name && info.primary_color && info.secondary_color
+      ? {
+          clubName: info.club_name,
+          logoUrl: info.club_logo_url ?? null,
+          primaryColor: info.primary_color,
+          secondaryColor: info.secondary_color,
+          roleLabel: ROLE_LABELS[info.role ?? "PLAYER"] ?? "miembro",
+        }
+      : null;
+
+  // ── Error from Supabase auth callback ─────────────────────────────────────
   if (urlError) {
     const message =
-      ERROR_MESSAGES[urlError] ??
+      CALLBACK_ERROR_MESSAGES[urlError] ??
       "Hubo un problema al confirmar tu cuenta. Intenta de nuevo.";
 
     return (
-      <Layout>
+      <Layout branding={branding}>
         <Card variant="elevated">
           <CardContent className="pt-6">
             <p className="text-4xl mb-4 text-center">⚠️</p>
@@ -92,7 +187,7 @@ export default async function InvitePage({ params, searchParams }: InvitePagePro
     );
   }
 
-  // Token not found or invalid
+  // ── Invalid / expired / revoked token ─────────────────────────────────────
   if (!info || !info.valid) {
     const reason = !info
       ? "Este link de invitación no existe."
@@ -105,7 +200,7 @@ export default async function InvitePage({ params, searchParams }: InvitePagePro
       : "Link de invitación inválido.";
 
     return (
-      <Layout>
+      <Layout branding={branding}>
         <Card variant="elevated">
           <CardContent className="pt-6">
             <p className="text-4xl mb-4 text-center">🔒</p>
@@ -124,14 +219,15 @@ export default async function InvitePage({ params, searchParams }: InvitePagePro
     );
   }
 
-  const roleLabel = ROLE_LABELS[info.role ?? "PLAYER"] ?? "miembro";
-  const clubName = info.club_name ?? "el club";
+  const roleLabel = branding?.roleLabel ?? ROLE_LABELS[info.role ?? "PLAYER"] ?? "miembro";
   const clubSlug = info.club_slug!;
+  const clubName = info.club_name ?? "el club";
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // ── Authenticated ──────────────────────────────────────────────────────────
   if (user) {
     // Check if already a member of this club
     const { data: memberships } = await supabase
@@ -147,21 +243,19 @@ export default async function InvitePage({ params, searchParams }: InvitePagePro
     if (existing) {
       const existingRoleLabel = ROLE_LABELS[existing.role] ?? "miembro";
       return (
-        <Layout>
+        <Layout branding={branding}>
           <Card variant="elevated">
             <CardContent className="pt-8 pb-8">
               <div className="flex flex-col items-center text-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-brand-primary/15 border border-brand-primary/20 flex items-center justify-center">
-                  <span className="text-2xl font-black text-brand-primary">
-                    {clubName[0]?.toUpperCase() ?? "C"}
-                  </span>
+                <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center">
+                  <CheckCircle className="w-6 h-6 text-emerald-400" />
                 </div>
                 <div>
                   <h1 className="text-lg font-bold text-white mb-1">
-                    Ya formas parte de {clubName}
+                    Ya formas parte de este club
                   </h1>
                   <p className="text-sm text-brand-muted">
-                    Eres {existingRoleLabel} de este club.
+                    Eres {existingRoleLabel}.
                   </p>
                 </div>
                 <Link href={`/${clubSlug}`} className="w-full">
@@ -178,7 +272,7 @@ export default async function InvitePage({ params, searchParams }: InvitePagePro
 
     // Not yet a member — show accept card
     return (
-      <Layout>
+      <Layout branding={branding}>
         <AcceptInviteCard
           token={token}
           clubName={clubName}
@@ -189,24 +283,15 @@ export default async function InvitePage({ params, searchParams }: InvitePagePro
     );
   }
 
-  // Not authenticated
+  // ── Not authenticated ──────────────────────────────────────────────────────
   return (
-    <Layout>
+    <Layout branding={branding}>
       <Card variant="elevated">
-        <CardHeader>
-          <div className="text-center">
-            <div className="w-14 h-14 rounded-2xl bg-brand-primary/15 border border-brand-primary/20 flex items-center justify-center mx-auto mb-3">
-              <span className="text-2xl font-black text-brand-primary">
-                {clubName[0]?.toUpperCase() ?? "C"}
-              </span>
-            </div>
-            <h1 className="text-lg font-bold text-white">Únete a {clubName}</h1>
-            <p className="text-sm text-brand-muted mt-1">
-              Has sido invitado como {roleLabel}.
-            </p>
-          </div>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
+          <p className="text-sm text-brand-muted text-center mb-5">
+            Has sido invitado como{" "}
+            <span className="text-white font-medium">{roleLabel}</span>.
+          </p>
           <div className="flex flex-col gap-3">
             <Link href={`/auth/signup?invite=${token}`}>
               <Button size="lg" className="w-full">
@@ -219,7 +304,7 @@ export default async function InvitePage({ params, searchParams }: InvitePagePro
               </Button>
             </Link>
           </div>
-          <p className="text-xs text-brand-muted text-center mt-4">
+          <p className="text-xs text-brand-muted text-center mt-5">
             Invitación válida hasta{" "}
             {new Date(info.expires_at!).toLocaleDateString("es-MX", {
               day: "2-digit",
