@@ -141,6 +141,46 @@ export function OnboardingForm() {
             )}
           </div>
 
+          {/* Visibility */}
+          <div className="flex flex-col gap-2">
+            <span className="text-sm font-medium text-white/80">Visibilidad</span>
+            <div className="flex flex-col gap-2">
+              {[
+                {
+                  value: "public",
+                  label: "Público",
+                  desc: "Los jugadores pueden encontrar y unirse al club libremente.",
+                },
+                {
+                  value: "private",
+                  label: "Privado",
+                  desc: "Solo acceso mediante invitación de un administrador.",
+                },
+              ].map((opt) => (
+                <label
+                  key={opt.value}
+                  className="relative flex items-start gap-3 p-3 rounded-xl border border-white/10 cursor-pointer hover:border-white/20 has-[:checked]:border-brand-primary/50 has-[:checked]:bg-brand-primary/10 transition-colors"
+                >
+                  <input
+                    type="radio"
+                    name="visibility"
+                    value={opt.value}
+                    defaultChecked={opt.value === "public"}
+                    className="mt-0.5 w-4 h-4 accent-brand-primary shrink-0"
+                  />
+                  <div>
+                    <span className="text-sm font-medium text-white block">
+                      {opt.label}
+                    </span>
+                    <span className="text-xs text-brand-muted leading-snug">
+                      {opt.desc}
+                    </span>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
           {state.error && (
             <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
               {state.error}

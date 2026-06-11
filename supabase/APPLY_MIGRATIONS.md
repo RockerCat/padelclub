@@ -107,6 +107,38 @@ SELECT id, name, public FROM storage.buckets WHERE id = 'club-logos';
 
 Debe devolver una fila. Si devuelve vacío, el bucket no fue creado.
 
+## Migración 005 — Visibilidad del club + exploración pública (PENDIENTE)
+
+`supabase/migrations/20260611000005_club_visibility.sql`
+
+Ejecutar en el **SQL Editor** del proyecto Supabase:
+`https://supabase.com/dashboard/project/rfzyqmvqmqsjigcvxxnf/sql/new`
+
+Este script:
+1. Agrega columna `visibility TEXT NOT NULL DEFAULT 'public'` a `clubs`
+2. Reemplaza `create_club_with_owner(text, text)` con versión 3-param que acepta `p_visibility`
+3. Crea `get_public_clubs()` — función SECURITY DEFINER que devuelve clubes públicos excluyendo los del usuario
+4. Crea `join_public_club(uuid)` — función SECURITY DEFINER para auto-unirse a clubes públicos
+
+### Verificar después de ejecutar
+
+```sql
+-- Columna visibility existe
+SELECT column_name, data_type, column_default
+FROM information_schema.columns
+WHERE table_name = 'clubs' AND column_name = 'visibility';
+
+-- Funciones nuevas registradas
+SELECT routine_name FROM information_schema.routines
+WHERE routine_schema = 'public'
+  AND routine_name IN ('get_public_clubs', 'join_public_club', 'create_club_with_owner');
+
+-- Clubes existentes tienen visibility = 'public'
+SELECT id, name, visibility FROM clubs LIMIT 5;
+```
+
+---
+
 ## Validación post-migración
 
 En SQL Editor, ejecutar:

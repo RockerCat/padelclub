@@ -32,6 +32,7 @@ export interface Database {
           primary_color: string;
           secondary_color: string;
           bg_color: string;
+          visibility: string;
           whatsapp: string | null;
           facebook: string | null;
           instagram: string | null;
@@ -49,6 +50,7 @@ export interface Database {
           primary_color?: string;
           secondary_color?: string;
           bg_color?: string;
+          visibility?: string;
           whatsapp?: string | null;
           facebook?: string | null;
           instagram?: string | null;
@@ -66,6 +68,7 @@ export interface Database {
           primary_color?: string;
           secondary_color?: string;
           bg_color?: string;
+          visibility?: string;
           whatsapp?: string | null;
           facebook?: string | null;
           instagram?: string | null;
@@ -257,8 +260,28 @@ export interface Database {
       };
       // public.create_club_with_owner — atomic club creation + owner bootstrap
       create_club_with_owner: {
-        Args: { p_name: string; p_slug: string };
+        Args: { p_name: string; p_slug: string; p_visibility?: string };
         Returns: Array<{ id: string; slug: string }>;
+      };
+      // public.get_public_clubs — public clubs the caller is not a member of
+      get_public_clubs: {
+        Args: Record<string, never>;
+        Returns: Array<{
+          id: string;
+          name: string;
+          slug: string;
+          description: string | null;
+          logo_url: string | null;
+          primary_color: string;
+          secondary_color: string;
+          member_count: number;
+          court_count: number;
+        }>;
+      };
+      // public.join_public_club — self-join a public club as PLAYER
+      join_public_club: {
+        Args: { p_club_id: string };
+        Returns: void;
       };
       // public.get_invitation_preview — anon-accessible invite info
       get_invitation_preview: {

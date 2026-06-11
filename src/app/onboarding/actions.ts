@@ -48,6 +48,8 @@ export async function createClub(
 
     const name = (formData.get("name") as string | null)?.trim() ?? "";
     const slug = (formData.get("slug") as string | null)?.trim() ?? "";
+    const rawVisibility = formData.get("visibility") as string | null;
+    const visibility = rawVisibility === "private" ? "private" : "public";
 
     console.log("[createClub] step=input", { name, slug });
 
@@ -87,7 +89,7 @@ export async function createClub(
     // Call atomic SECURITY DEFINER function (inserts club + owner membership)
     const { data: rpcData, error: rpcError } = await supabase.rpc(
       "create_club_with_owner",
-      { p_name: name, p_slug: slug }
+      { p_name: name, p_slug: slug, p_visibility: visibility }
     );
 
     console.log("[createClub] step=rpc", {
