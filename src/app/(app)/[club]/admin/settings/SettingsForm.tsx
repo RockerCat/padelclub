@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { updateClub, type UpdateClubState } from "./actions";
 import { Button, Card, CardHeader, CardContent, Input, LogoUpload } from "@/components/ui";
 import { useClubTheme } from "@/components/layout/ClubThemeProvider";
@@ -13,11 +14,20 @@ interface SettingsFormProps {
 const initialState: UpdateClubState = {};
 
 export function SettingsForm({ club }: SettingsFormProps) {
+  const router = useRouter();
   const boundAction = updateClub.bind(null, club.id);
   const [state, action, pending] = useActionState(boundAction, initialState);
   const [primaryColor, setPrimaryColor] = useState(club.primary_color);
   const [secondaryColor, setSecondaryColor] = useState(club.secondary_color);
   const { setColors } = useClubTheme();
+
+  useEffect(() => {
+    if (!state.success) return;
+    const timer = setTimeout(() => {
+      router.push(`/${club.slug}/dashboard`);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [state.success, router, club.slug]);
 
   function handlePrimaryChange(e: React.ChangeEvent<HTMLInputElement>) {
     const color = e.target.value;
@@ -180,7 +190,7 @@ export function SettingsForm({ club }: SettingsFormProps) {
       )}
       {state.success && (
         <p className="text-sm text-green-400 bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3">
-          Cambios guardados correctamente.
+          Configuración guardada. Redirigiendo al dashboard…
         </p>
       )}
 

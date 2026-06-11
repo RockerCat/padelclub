@@ -71,8 +71,8 @@ function getNavItems(slug: string, role: AppNavProps["role"]): NavItem[] {
         soon: true,
       },
       {
-        label: "Panel de admin",
-        href: `/${slug}/admin`,
+        label: "Configuración",
+        href: `/${slug}/admin/settings`,
         icon: Settings,
       }
     );
