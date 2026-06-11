@@ -1,27 +1,83 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { createClub, type CreateClubState } from "./actions";
+import { useActionState, useState, useEffect, useRef } from "react";
+import {
+  createClub,
+  checkSlugAvailability,
+  type CreateClubState,
+} from "./actions";
 import { Button, Card, CardHeader, CardContent, Input } from "@/components/ui";
 
+type SlugStatus = "idle" | "short" | "checking" | "available" | "unavailable";
+
 const initialState: CreateClubState = {};
+
+function generateSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+const SLUG_STATUS_LABEL: Record<
+  SlugStatus,
+  { text: string; className: string } | null
+> = {
+  idle: null,
+  short: {
+    text: "Usa al menos 3 caracteres",
+    className: "text-xs text-brand-muted",
+  },
+  checking: {
+    text: "Verificando disponibilidad...",
+    className: "text-xs text-brand-muted",
+  },
+  available: {
+    text: "Identificador disponible",
+    className: "text-xs text-green-400",
+  },
+  unavailable: {
+    text: "Identificador no disponible",
+    className: "text-xs text-red-400",
+  },
+};
 
 export function OnboardingForm() {
   const [state, action, pending] = useActionState(createClub, initialState);
   const [slugValue, setSlugValue] = useState("");
+  const [slugEdited, setSlugEdited] = useState(false);
+  const [slugStatus, setSlugStatus] = useState<SlugStatus>("idle");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function scheduleAvailabilityCheck(slug: string) {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (slug.length === 0) {
+      setSlugStatus("idle");
+      return;
+    }
+    if (slug.length < 3) {
+      setSlugStatus("short");
+      return;
+    }
+
+    setSlugStatus("checking");
+    debounceRef.current = setTimeout(async () => {
+      const { available } = await checkSlugAvailability(slug);
+      setSlugStatus(available ? "available" : "unavailable");
+    }, 500);
+  }
 
   function handleNameChange(e: React.ChangeEvent<HTMLInputElement>) {
-    // Auto-generate slug from name if user hasn't typed one
-    if (!slugValue) {
-      const suggested = e.target.value
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/\p{M}/gu, "") // remove Unicode combining marks (accents)
-        .replace(/[^a-z0-9\s-]/g, "")
-        .trim()
-        .replace(/\s+/g, "-")
-        .replace(/-+/g, "-");
+    if (!slugEdited) {
+      const suggested = generateSlug(e.target.value);
       setSlugValue(suggested);
+      scheduleAvailabilityCheck(suggested);
     }
   }
 
@@ -31,7 +87,18 @@ export function OnboardingForm() {
       .replace(/[^a-z0-9-]/g, "")
       .replace(/-+/g, "-");
     setSlugValue(val);
+    setSlugEdited(true);
+    scheduleAvailabilityCheck(val);
   }
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  const statusInfo = SLUG_STATUS_LABEL[slugStatus];
+  const showServerSlugError = !!state.fieldErrors?.slug;
 
   return (
     <Card variant="elevated">
@@ -63,8 +130,15 @@ export function OnboardingForm() {
               value={slugValue}
               onChange={handleSlugChange}
               error={state.fieldErrors?.slug}
-              hint="Solo letras minúsculas, números y guiones. Será tu URL: padelclub.co/tu-identificador"
+              hint={
+                slugStatus === "idle"
+                  ? "Solo letras minúsculas, números y guiones. Será tu URL: padelclub.co/tu-identificador"
+                  : undefined
+              }
             />
+            {statusInfo && !showServerSlugError && (
+              <p className={statusInfo.className}>{statusInfo.text}</p>
+            )}
           </div>
 
           {state.error && (

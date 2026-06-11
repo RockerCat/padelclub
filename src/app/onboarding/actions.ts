@@ -5,6 +5,21 @@ import { createClient } from "@/lib/supabase/server";
 
 const SLUG_REGEX = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/;
 
+export async function checkSlugAvailability(
+  slug: string
+): Promise<{ available: boolean }> {
+  if (!slug || slug.length < 3) return { available: false };
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("clubs")
+    .select("id")
+    .eq("slug", slug)
+    .maybeSingle();
+
+  return { available: !data };
+}
+
 export type CreateClubState = {
   error?: string;
   fieldErrors?: {
