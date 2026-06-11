@@ -74,12 +74,21 @@ export function SignupForm({ inviteToken, branding }: SignupFormProps) {
               </Link>
             </>
           );
-        } else if (authError.message.includes("Invalid email")) {
+        } else if (
+          authError.message.toLowerCase().includes("rate limit") ||
+          authError.message.toLowerCase().includes("too many requests")
+        ) {
+          setError(
+            "Hemos enviado muchos correos en poco tiempo. Espera unos minutos e intenta de nuevo."
+          );
+        } else if (authError.message.includes("Invalid email") || authError.message.includes("email_address_invalid")) {
           setError("El correo electrónico no es válido.");
         } else if (authError.message.includes("Password should be")) {
           setError("La contraseña debe tener al menos 6 caracteres.");
+        } else if (authError.message.includes("signup_disabled")) {
+          setError("El registro está deshabilitado temporalmente. Intenta más tarde.");
         } else {
-          setError(authError.message || "Error al crear la cuenta. Por favor, intenta de nuevo.");
+          setError("Error al crear la cuenta. Por favor, intenta de nuevo.");
         }
         return;
       }

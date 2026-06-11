@@ -270,25 +270,38 @@ export function TeamClient({
               {activeInvites.map((link) => (
                 <div
                   key={link.id}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/5 border border-white/10"
+                  className="rounded-xl bg-white/5 border border-white/10 overflow-hidden"
                 >
-                  <LinkIcon className="w-3.5 h-3.5 text-brand-muted shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <span className="text-xs text-brand-muted">
-                      Admin · Expira {formatDate(link.expires_at)}
-                      {link.uses > 0 && ` · ${link.uses} usos`}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <CopyButton token={link.token} />
-                    <button
-                      onClick={() => handleRevokeInvite(link.id)}
-                      disabled={revoking}
-                      className="p-1.5 rounded-lg text-brand-muted/50 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                      title="Revocar invitación"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
+                  <div className="flex items-center gap-3 px-3 py-2.5">
+                    <LinkIcon className="w-3.5 h-3.5 text-brand-muted shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-xs text-brand-muted">
+                        Admin · Expira {formatDate(link.expires_at)}
+                        {link.uses > 0 && ` · ${link.uses} usos`}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <CopyButton token={link.token} />
+                      {process.env.NODE_ENV === "development" && (
+                        <Link
+                          href={`/invite/${link.token}`}
+                          target="_blank"
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20 transition-colors"
+                          title="Dev: abrir invitación directamente"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          Dev
+                        </Link>
+                      )}
+                      <button
+                        onClick={() => handleRevokeInvite(link.id)}
+                        disabled={revoking}
+                        className="p-1.5 rounded-lg text-brand-muted/50 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                        title="Revocar invitación"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
