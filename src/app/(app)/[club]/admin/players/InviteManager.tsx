@@ -20,6 +20,7 @@ interface InviteManagerProps {
   clubSlug: string;
   callerRole: "OWNER" | "ADMIN";
   activeLinks: InviteLink[];
+  fixedRole?: "PLAYER" | "ADMIN";
 }
 
 function CopyButton({ token }: { token: string }) {
@@ -61,10 +62,10 @@ function formatExpiry(iso: string) {
   });
 }
 
-export function InviteManager({ clubId, clubSlug, callerRole, activeLinks }: InviteManagerProps) {
+export function InviteManager({ clubId, clubSlug, callerRole, activeLinks, fixedRole }: InviteManagerProps) {
   const router = useRouter();
   const [showForm, setShowForm] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<"PLAYER" | "ADMIN">("PLAYER");
+  const [selectedRole, setSelectedRole] = useState<"PLAYER" | "ADMIN">(fixedRole ?? "PLAYER");
   const [error, setError] = useState<string | null>(null);
   const [creating, startCreate] = useTransition();
   const [revoking, startRevoke] = useTransition();
@@ -132,7 +133,7 @@ export function InviteManager({ clubId, clubSlug, callerRole, activeLinks }: Inv
       {/* Create form */}
       {showForm ? (
         <div className="flex flex-col gap-3 p-4 rounded-xl bg-white/5 border border-white/10">
-          {callerRole === "OWNER" && (
+          {callerRole === "OWNER" && !fixedRole && (
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium text-white/70">Rol</label>
               <div className="flex gap-2">

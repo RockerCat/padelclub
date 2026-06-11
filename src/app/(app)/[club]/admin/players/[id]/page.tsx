@@ -81,15 +81,19 @@ export default async function MemberDetailPage({ params }: MemberDetailPageProps
   const isSelf = member.profile_id === user.id;
   const memberRole = member.role as "OWNER" | "ADMIN" | "PLAYER";
 
+  const backHref =
+    memberRole === "PLAYER" ? `/${slug}/admin/players` : `/${slug}/admin/team`;
+  const backLabel = memberRole === "PLAYER" ? "Jugadores" : "Equipo del club";
+
   return (
     <div className="p-6 md:p-10">
       {/* Back */}
       <Link
-        href={`/${slug}/admin/players`}
+        href={backHref}
         className="inline-flex items-center gap-1.5 text-sm text-brand-muted hover:text-white transition-colors mb-6"
       >
         <ArrowLeft className="w-4 h-4" />
-        Jugadores
+        {backLabel}
       </Link>
 
       {/* Header */}

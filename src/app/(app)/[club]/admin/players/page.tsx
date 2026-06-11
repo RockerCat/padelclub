@@ -42,18 +42,20 @@ export default async function PlayersPage({ params }: PlayersPageProps) {
 
   const callerRole = membership.role as "OWNER" | "ADMIN";
 
-  // Load all members with profiles
+  // Load PLAYER-role members only
   const { data: members } = await supabase
     .from("club_members")
     .select("id, club_id, profile_id, role, is_active, joined_at, profiles(full_name, avatar_url, phone)")
     .eq("club_id", club.id)
+    .eq("role", "PLAYER")
     .order("joined_at", { ascending: false });
 
-  // Load active invitation links
+  // Load active PLAYER invitation links only
   const { data: inviteLinks } = await supabase
     .from("invitation_links")
     .select("id, token, role, expires_at, uses, max_uses")
     .eq("club_id", club.id)
+    .eq("role", "PLAYER")
     .eq("is_active", true)
     .order("created_at", { ascending: false });
 
@@ -66,7 +68,7 @@ export default async function PlayersPage({ params }: PlayersPageProps) {
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-white">Jugadores</h1>
         <p className="text-brand-muted mt-1 text-sm">
-          {memberList.length} {memberList.length === 1 ? "miembro" : "miembros"} en el club.
+          {memberList.length} {memberList.length === 1 ? "jugador" : "jugadores"} en el club.
         </p>
       </div>
 
@@ -79,10 +81,10 @@ export default async function PlayersPage({ params }: PlayersPageProps) {
           <CardHeader>
             <div className="flex items-center gap-2">
               <UserPlus className="w-4 h-4 text-brand-muted" />
-              <h2 className="text-base font-semibold text-white">Invitar miembros</h2>
+              <h2 className="text-base font-semibold text-white">Invitar jugadores</h2>
             </div>
             <p className="text-xs text-brand-muted mt-1">
-              Comparte un link para que nuevos miembros se unan al club. Los links expiran en 7 días.
+              Comparte un link para que nuevos jugadores se unan al club. Los links expiran en 7 días.
             </p>
           </CardHeader>
           <CardContent>
@@ -91,6 +93,7 @@ export default async function PlayersPage({ params }: PlayersPageProps) {
               clubSlug={slug}
               callerRole={callerRole}
               activeLinks={activeLinks}
+              fixedRole="PLAYER"
             />
           </CardContent>
         </Card>

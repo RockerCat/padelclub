@@ -25,13 +25,10 @@ interface MembersClientProps {
   clubSlug: string;
 }
 
-type FilterKey = "all" | "OWNER" | "ADMIN" | "PLAYER" | "active" | "inactive";
+type FilterKey = "all" | "active" | "inactive";
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "all", label: "Todos" },
-  { key: "PLAYER", label: "Jugadores" },
-  { key: "ADMIN", label: "Admins" },
-  { key: "OWNER", label: "Owners" },
   { key: "active", label: "Activos" },
   { key: "inactive", label: "Inactivos" },
 ];
@@ -66,7 +63,6 @@ export function MembersClient({ members, clubSlug }: MembersClientProps) {
 
   const filtered = members
     .filter((m) => {
-      if (filter === "OWNER" || filter === "ADMIN" || filter === "PLAYER") return m.role === filter;
       if (filter === "active") return m.is_active;
       if (filter === "inactive") return !m.is_active;
       return true;
@@ -99,7 +95,7 @@ export function MembersClient({ members, clubSlug }: MembersClientProps) {
               : members.filter((m) => {
                   if (f.key === "active") return m.is_active;
                   if (f.key === "inactive") return !m.is_active;
-                  return m.role === f.key;
+                  return true;
                 }).length;
 
           return (

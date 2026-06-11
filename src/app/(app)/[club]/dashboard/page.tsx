@@ -51,7 +51,7 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
     .single();
 
   if (!membership) redirect("/unauthorized");
-  if (membership.role !== "OWNER") redirect(`/${slug}`);
+  if (!["OWNER", "ADMIN"].includes(membership.role)) redirect(`/${slug}`);
 
   const [courtResult, memberResult] = await Promise.all([
     supabase

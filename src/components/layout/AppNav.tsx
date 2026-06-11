@@ -16,6 +16,7 @@ import {
   Lock,
   ArrowLeftRight,
   PlusCircle,
+  ShieldCheck,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils/cn";
@@ -65,6 +66,11 @@ function getNavItems(slug: string, role: AppNavProps["role"]): NavItem[] {
         color: "secondary" as const,
       },
       {
+        label: "Administradores",
+        href: `/${slug}/admin/team`,
+        icon: ShieldCheck,
+      },
+      {
         label: "Reservaciones",
         icon: CalendarDays,
         disabled: true,
@@ -78,6 +84,12 @@ function getNavItems(slug: string, role: AppNavProps["role"]): NavItem[] {
     );
   } else if (role === "ADMIN") {
     base.push(
+      {
+        label: "Dashboard",
+        href: `/${slug}/dashboard`,
+        icon: LayoutDashboard,
+        color: "secondary" as const,
+      },
       {
         label: "Canchas",
         href: `/${slug}/admin/courts`,
