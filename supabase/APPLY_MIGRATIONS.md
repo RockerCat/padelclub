@@ -27,17 +27,85 @@ npx supabase gen types typescript \
   > src/types/database.ts
 ```
 
-## Storage Bucket — club-logos
+## Storage Bucket — club-logos (PENDIENTE — ejecutar antes de subir logos)
 
-Crear manualmente en el dashboard:
+El bucket aún **no existe** en el proyecto hosted. Sin él toda subida falla con 403/404.
 
+### Opción rápida: SQL Editor
+
+1. Ir a https://supabase.com/dashboard/project/rfzyqmvqmqsjigcvxxnf/sql/new
+2. Copiar y ejecutar el contenido completo de:
+   `supabase/migrations/20260611000004_club_logos_storage.sql`
+
+Esto crea el bucket **y** las 4 políticas RLS en un solo paso.
+
+### Opción alternativa: Dashboard UI + SQL para policies
+
+**Paso 1 — Crear el bucket en el dashboard:**
 1. Ir a https://supabase.com/dashboard/project/rfzyqmvqmqsjigcvxxnf/storage/buckets
 2. **New bucket**
-3. Nombre: `club-logos`
+3. Nombre: `club-logos` (exactamente, con guión)
 4. **Public bucket**: ✅ activado
-5. **Allowed MIME types**: `image/png, image/jpeg, image/webp, image/svg+xml`
-6. **Max upload size**: `1 MB`
+5. **Allowed MIME types**: `image/png, image/jpeg, image/webp`
+6. **Max upload size**: `2097152` (2 MB en bytes)
 7. Guardar
+
+**Paso 2 — Crear las policies RLS en SQL Editor:**
+
+```sql
+-- Public read
+CREATE POLICY "club_logos_select"
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'club-logos');
+
+-- Owners can upload (path format: clubs/{club_id}/logo-{ts}.{ext})
+CREATE POLICY "club_logos_insert"
+  ON storage.objects FOR INSERT
+  WITH CHECK (
+    bucket_id = 'club-logos'
+    AND auth.uid() IS NOT NULL
+    AND EXISTS (
+      SELECT 1 FROM public.club_members cm
+      WHERE cm.profile_id = auth.uid()
+        AND cm.role = 'OWNER' AND cm.is_active = true
+        AND cm.club_id::text = (storage.foldername(name))[2]
+    )
+  );
+
+CREATE POLICY "club_logos_update"
+  ON storage.objects FOR UPDATE
+  USING (
+    bucket_id = 'club-logos'
+    AND auth.uid() IS NOT NULL
+    AND EXISTS (
+      SELECT 1 FROM public.club_members cm
+      WHERE cm.profile_id = auth.uid()
+        AND cm.role = 'OWNER' AND cm.is_active = true
+        AND cm.club_id::text = (storage.foldername(name))[2]
+    )
+  );
+
+CREATE POLICY "club_logos_delete"
+  ON storage.objects FOR DELETE
+  USING (
+    bucket_id = 'club-logos'
+    AND auth.uid() IS NOT NULL
+    AND EXISTS (
+      SELECT 1 FROM public.club_members cm
+      WHERE cm.profile_id = auth.uid()
+        AND cm.role = 'OWNER' AND cm.is_active = true
+        AND cm.club_id::text = (storage.foldername(name))[2]
+    )
+  );
+```
+
+### Verificar que el bucket existe
+
+```sql
+SELECT id, name, public FROM storage.buckets WHERE id = 'club-logos';
+```
+
+Debe devolver una fila. Si devuelve vacío, el bucket no fue creado.
 
 ## Validación post-migración
 

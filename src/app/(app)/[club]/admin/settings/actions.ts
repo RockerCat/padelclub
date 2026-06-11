@@ -7,6 +7,50 @@ export type UpdateClubState = {
   error?: string;
 };
 
+/**
+ * Called immediately after a logo is uploaded to Storage.
+ * Persists the public URL to clubs.logo_url so the sidebar reflects the
+ * new logo on the next router.refresh() without waiting for the main form save.
+ */
+export async function updateClubLogo(
+  clubId: string,
+  logoUrl: string | null
+): Promise<{ error?: string }> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    return { error: "No autenticado." };
+  }
+
+  const { data: membership } = await supabase
+    .from("club_members")
+    .select("role")
+    .eq("club_id", clubId)
+    .eq("profile_id", user.id)
+    .eq("is_active", true)
+    .single();
+
+  if (!membership || membership.role !== "OWNER") {
+    return { error: "No tienes permiso para editar este club." };
+  }
+
+  const { error: updateError } = await supabase
+    .from("clubs")
+    .update({ logo_url: logoUrl || null })
+    .eq("id", clubId);
+
+  if (updateError) {
+    return { error: updateError.message };
+  }
+
+  return {};
+}
+
 export async function updateClub(
   clubId: string,
   _prevState: UpdateClubState,
