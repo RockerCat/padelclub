@@ -370,6 +370,88 @@ export async function updateReservation(
   redirect(`/${clubSlug}/admin/reservations?updated=1`);
 }
 
+// ─── getAvailableSlots ────────────────────────────────────────────────────────
+
+function minsToTime(m: number): string {
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+}
+
+export async function getAvailableSlots(
+  clubId: string,
+  courtId: string,
+  date: string,
+  excludeReservationId?: string
+): Promise<{ slots: string[]; closed: boolean }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { slots: [], closed: false };
+
+  // Effective operating hours for this day
+  const [y, mo, d] = date.split("-").map(Number);
+  const dayOfWeek = new Date(y, mo - 1, d).getDay();
+
+  const { data: ohRow } = await supabase
+    .from("club_operating_hours")
+    .select("day_of_week, is_open, opens_at, closes_at")
+    .eq("club_id", clubId)
+    .eq("day_of_week", dayOfWeek)
+    .maybeSingle();
+
+  const hours = getEffectiveHour(
+    ohRow
+      ? [{ day_of_week: dayOfWeek, is_open: ohRow.is_open, opens_at: ohRow.opens_at, closes_at: ohRow.closes_at }]
+      : [],
+    dayOfWeek
+  );
+
+  if (!hours.is_open || !hours.opens_at || !hours.closes_at) {
+    return { slots: [], closed: true };
+  }
+
+  // Base 30-min slots within operating hours
+  const openMins = sharedTimeToMinutes(hours.opens_at);
+  const closeMins = sharedTimeToMinutes(hours.closes_at);
+  const baseSlots: string[] = [];
+  for (let t = openMins; t + 30 <= closeMins; t += 30) {
+    baseSlots.push(minsToTime(t));
+  }
+
+  // Filter past slots when date is today (server-side best-effort)
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const futureSlots =
+    date === todayStr
+      ? baseSlots.filter((s) => sharedTimeToMinutes(s) > now.getHours() * 60 + now.getMinutes())
+      : baseSlots;
+
+  // Fetch existing confirmed reservations for conflict detection
+  let resQuery = supabase
+    .from("reservations")
+    .select("start_time, duration_minutes")
+    .eq("club_id", clubId)
+    .eq("court_id", courtId)
+    .eq("date", date)
+    .eq("status", "confirmed");
+
+  if (excludeReservationId) resQuery = resQuery.neq("id", excludeReservationId);
+
+  const { data: existing } = await resQuery;
+
+  // Slot T is blocked if T falls inside any existing reservation window [resStart, resEnd)
+  const available = futureSlots.filter((slot) => {
+    const slotMins = sharedTimeToMinutes(slot);
+    return !(existing ?? []).some((r) => {
+      const rStart = sharedTimeToMinutes(r.start_time);
+      const rEnd = rStart + r.duration_minutes;
+      return slotMins >= rStart && slotMins < rEnd;
+    });
+  });
+
+  return { slots: available, closed: false };
+}
+
 // ─── getReservationForEdit ────────────────────────────────────────────────────
 
 export type ReservationEditData = {

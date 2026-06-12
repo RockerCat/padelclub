@@ -181,12 +181,14 @@ export function ReservationModal({
                 courts={courts}
                 members={members}
                 defaultDate={modalState.initialDate ?? today}
+                clubId={clubId}
                 initialValues={initialValues}
                 submitLabel={isCreate ? "Crear reserva" : "Guardar cambios"}
                 cancelHref={`/${clubSlug}/admin/reservations`}
                 onSuccess={() => onSuccess(modalState.mode)}
                 onDirtyChange={setIsDirty}
                 inModal
+                editingReservationId={isCreate ? undefined : modalState.reservationId}
               />
             ) : null}
           </div>

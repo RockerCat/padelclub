@@ -92,6 +92,7 @@ export default async function NewReservationPage({
           courts={courts}
           members={members}
           defaultDate={defaultDate}
+          clubId={club.id}
           cancelHref={`/${slug}/admin/reservations`}
         />
       )}

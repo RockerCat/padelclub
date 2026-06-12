@@ -3,6 +3,7 @@
 import { useActionState, useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui";
+import { getAvailableSlots } from "./actions";
 import type { ReservationFormState } from "./actions";
 
 type Court = { id: string; name: string };
@@ -24,12 +25,14 @@ interface ReservationFormProps {
   courts: Court[];
   members: Member[];
   defaultDate: string;
+  clubId: string;
   initialValues?: InitialValues;
   submitLabel?: string;
   cancelHref: string;
   onSuccess?: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   inModal?: boolean;
+  editingReservationId?: string;
 }
 
 const inputClass =
@@ -53,17 +56,86 @@ const TYPE_OPTIONS = [
   { value: "block", label: "Bloqueo" },
 ];
 
+// ─── TimeSlotPicker ───────────────────────────────────────────────────────────
+
+function TimeSlotPicker({
+  value,
+  onChange,
+  slots,
+  loading,
+  closed,
+  hasCourtAndDate,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  slots: string[];
+  loading: boolean;
+  closed: boolean;
+  hasCourtAndDate: boolean;
+}) {
+  return (
+    <div>
+      {/* Always render hidden input so formData always has start_time */}
+      <input type="hidden" name="start_time" value={value} />
+
+      {!hasCourtAndDate ? (
+        <p className="text-sm text-brand-muted/50 py-2">
+          Selecciona cancha y fecha para ver horarios disponibles
+        </p>
+      ) : closed ? (
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 text-sm text-brand-muted">
+          Club cerrado este día
+        </div>
+      ) : loading ? (
+        <div className="grid grid-cols-4 sm:grid-cols-5 gap-1.5">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <div key={i} className="h-9 rounded-lg bg-white/5 animate-pulse" />
+          ))}
+        </div>
+      ) : slots.length === 0 ? (
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 text-sm text-brand-muted">
+          No hay horarios disponibles para esta fecha.
+        </div>
+      ) : (
+        <div
+          className="grid grid-cols-4 sm:grid-cols-5 gap-1.5 max-h-[180px] overflow-y-auto pr-0.5"
+          style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.08) transparent" }}
+        >
+          {slots.map((slot) => (
+            <button
+              key={slot}
+              type="button"
+              onClick={() => onChange(slot)}
+              className={`h-9 rounded-lg text-[13px] font-medium transition-colors ${
+                slot === value
+                  ? "bg-brand-primary text-brand-bg font-semibold"
+                  : "border border-white/10 text-brand-muted hover:border-brand-primary/40 hover:text-white bg-white/[0.03]"
+              }`}
+            >
+              {slot}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── ReservationForm ──────────────────────────────────────────────────────────
+
 export function ReservationForm({
   action,
   courts,
   members,
   defaultDate,
+  clubId,
   initialValues,
   submitLabel = "Crear reserva",
   cancelHref,
   onSuccess,
   onDirtyChange,
   inModal,
+  editingReservationId,
 }: ReservationFormProps) {
   const [state, formAction, pending] = useActionState(action, {});
 
@@ -72,8 +144,7 @@ export function ReservationForm({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state?.success]);
 
-  // ─── Controlled field state ── all values live here, never in DOM ───────────
-  // Compute local today (uses local time, not UTC) for min-date constraint
+  // Local today for min-date constraint
   const localToday = (() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -94,6 +165,36 @@ export function ReservationForm({
     () => new Set(initialValues?.player_ids ?? [])
   );
 
+  // Available time slots
+  const [slots, setSlots] = useState<string[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(
+    !!(initialValues?.court_id && (initialValues?.date ?? defaultDate))
+  );
+  const [slotsClosed, setSlotsClosed] = useState(false);
+
+  // Refetch slots whenever court or date changes
+  useEffect(() => {
+    if (!courtId || !date) {
+      setSlots([]);
+      setSlotsLoading(false);
+      setSlotsClosed(false);
+      return;
+    }
+    setSlotsLoading(true);
+    let cancelled = false;
+    getAvailableSlots(clubId, courtId, date, editingReservationId).then(
+      ({ slots: s, closed }) => {
+        if (cancelled) return;
+        setSlots(s);
+        setSlotsClosed(closed);
+        setSlotsLoading(false);
+        // If the selected time is no longer in the new slot list, reset it
+        setStartTime((prev) => (s.includes(prev) ? prev : ""));
+      }
+    );
+    return () => { cancelled = true; };
+  }, [courtId, date, clubId, editingReservationId]);
+
   function markDirty() { onDirtyChange?.(true); }
 
   function togglePlayer(id: string) {
@@ -104,6 +205,11 @@ export function ReservationForm({
       else next.add(id);
       return next;
     });
+  }
+
+  function handleSlotSelect(slot: string) {
+    setStartTime(slot);
+    markDirty();
   }
 
   return (
@@ -129,36 +235,31 @@ export function ReservationForm({
         </select>
       </div>
 
-      {/* Fecha + Hora */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="flex flex-col gap-1.5">
-          <label className={labelClass}>Fecha</label>
-          <input
-            type="date"
-            name="date"
-            required
-            min={localToday}
-            value={date}
-            onChange={(e) => { setDate(e.target.value); markDirty(); }}
-            className={inputClass}
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label className={labelClass}>Hora de inicio</label>
-          <input
-            type="time"
-            name="start_time"
-            required
-            step={900}
-            min={date === localToday ? (() => {
-              const n = new Date();
-              return `${String(n.getHours()).padStart(2, "0")}:${String(n.getMinutes()).padStart(2, "0")}`;
-            })() : undefined}
-            value={startTime}
-            onChange={(e) => { setStartTime(e.target.value); markDirty(); }}
-            className={inputClass}
-          />
-        </div>
+      {/* Fecha */}
+      <div className="flex flex-col gap-1.5">
+        <label className={labelClass}>Fecha</label>
+        <input
+          type="date"
+          name="date"
+          required
+          min={localToday}
+          value={date}
+          onChange={(e) => { setDate(e.target.value); markDirty(); }}
+          className={inputClass}
+        />
+      </div>
+
+      {/* Hora de inicio */}
+      <div className="flex flex-col gap-1.5">
+        <label className={labelClass}>Hora de inicio</label>
+        <TimeSlotPicker
+          value={startTime}
+          onChange={handleSlotSelect}
+          slots={slots}
+          loading={slotsLoading}
+          closed={slotsClosed}
+          hasCourtAndDate={!!(courtId && date)}
+        />
       </div>
 
       {/* Duración + Tipo */}

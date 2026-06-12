@@ -124,6 +124,8 @@ export default async function EditReservationPage({
         courts={courts}
         members={members}
         defaultDate={today}
+        clubId={club.id}
+        editingReservationId={reservationId}
         initialValues={{
           court_id: reservation.court_id,
           date: reservation.date,
