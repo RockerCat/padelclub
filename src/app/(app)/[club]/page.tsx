@@ -88,9 +88,12 @@ export default async function ClubHomePage({ params }: ClubHomePageProps) {
           </Link>
         )}
         {role === "PLAYER" && (
-          <span className="inline-flex items-center gap-2 h-10 px-5 rounded-xl border border-white/10 text-brand-muted text-sm font-semibold cursor-not-allowed">
-            Reservaciones — Próximamente
-          </span>
+          <Link
+            href={`/${slug}/reservations`}
+            className="inline-flex items-center gap-2 h-10 px-5 rounded-xl border border-white/20 text-white text-sm font-semibold hover:border-white/40 hover:bg-white/5 transition-all"
+          >
+            Ver reservaciones
+          </Link>
         )}
       </div>
     </div>

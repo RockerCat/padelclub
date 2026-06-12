@@ -72,9 +72,9 @@ function getNavItems(slug: string, role: AppNavProps["role"]): NavItem[] {
       },
       {
         label: "Reservaciones",
+        href: `/${slug}/admin/reservations`,
         icon: CalendarDays,
-        disabled: true,
-        soon: true,
+        color: "secondary" as const,
       },
       {
         label: "Configuración",
@@ -97,9 +97,9 @@ function getNavItems(slug: string, role: AppNavProps["role"]): NavItem[] {
       },
       {
         label: "Reservaciones",
+        href: `/${slug}/admin/reservations`,
         icon: CalendarDays,
-        disabled: true,
-        soon: true,
+        color: "secondary" as const,
       },
       {
         label: "Jugadores",
@@ -123,9 +123,8 @@ function getNavItems(slug: string, role: AppNavProps["role"]): NavItem[] {
       },
       {
         label: "Reservaciones",
+        href: `/${slug}/reservations`,
         icon: CalendarDays,
-        disabled: true,
-        soon: true,
       }
     );
   }

@@ -196,6 +196,109 @@ export interface Database {
           },
         ];
       };
+      reservations: {
+        Row: {
+          id: string;
+          club_id: string;
+          court_id: string;
+          created_by: string;
+          date: string;
+          start_time: string;
+          duration_minutes: number;
+          type: "match" | "class" | "block";
+          title: string | null;
+          notes: string | null;
+          status: "confirmed" | "cancelled";
+          cancelled_at: string | null;
+          cancelled_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          club_id: string;
+          court_id: string;
+          created_by: string;
+          date: string;
+          start_time: string;
+          duration_minutes?: number;
+          type?: "match" | "class" | "block";
+          title?: string | null;
+          notes?: string | null;
+          status?: "confirmed" | "cancelled";
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          court_id?: string;
+          date?: string;
+          start_time?: string;
+          duration_minutes?: number;
+          type?: "match" | "class" | "block";
+          title?: string | null;
+          notes?: string | null;
+          status?: "confirmed" | "cancelled";
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      club_operating_hours: {
+        Row: {
+          id: string;
+          club_id: string;
+          day_of_week: number;
+          is_open: boolean;
+          opens_at: string | null;
+          closes_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          club_id: string;
+          day_of_week: number;
+          is_open?: boolean;
+          opens_at?: string | null;
+          closes_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          is_open?: boolean;
+          opens_at?: string | null;
+          closes_at?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "club_operating_hours_club_id_fkey";
+            columns: ["club_id"];
+            isOneToOne: false;
+            referencedRelation: "clubs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      reservation_players: {
+        Row: {
+          id: string;
+          reservation_id: string;
+          profile_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          reservation_id: string;
+          profile_id: string;
+          created_at?: string;
+        };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
       invitation_links: {
         Row: {
           id: string;
@@ -334,3 +437,10 @@ export type ClubMemberWithClub = ClubMember & {
 };
 
 export type Court = Tables<"courts">;
+
+export type Reservation = Tables<"reservations">;
+export type ReservationPlayer = Tables<"reservation_players">;
+export type ReservationType = Reservation["type"];
+export type ReservationStatus = Reservation["status"];
+
+export type ClubOperatingHour = Tables<"club_operating_hours">;

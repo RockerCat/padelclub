@@ -1,0 +1,360 @@
+"use server";
+
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import {
+  getEffectiveHour,
+  validateAgainstOperatingHours,
+  timeToMinutes as sharedTimeToMinutes,
+} from "@/lib/operatingHours";
+
+export type ReservationFormState = {
+  error?: string;
+};
+
+const isDev = process.env.NODE_ENV === "development";
+
+// ─── Permission guard ─────────────────────────────────────────────────────────
+
+async function requireAdminRole(clubId: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    console.error("[reservations] auth.getUser failed:", userError);
+    return { supabase: null, user: null, error: "No autenticado." };
+  }
+
+  const { data: membership, error: memberError } = await supabase
+    .from("club_members")
+    .select("role")
+    .eq("club_id", clubId)
+    .eq("profile_id", user.id)
+    .eq("is_active", true)
+    .single();
+
+  if (memberError) {
+    console.error("[reservations] membership lookup failed:", memberError);
+  }
+
+  if (!membership || !["OWNER", "ADMIN"].includes(membership.role)) {
+    console.error("[reservations] access denied — role:", membership?.role ?? "none", "userId:", user.id, "clubId:", clubId);
+    return { supabase: null, user: null, error: "Sin permiso." };
+  }
+
+  return { supabase, user, error: null };
+}
+
+// ─── Operating hours check ────────────────────────────────────────────────────
+
+async function checkOperatingHours(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  clubId: string,
+  date: string,
+  startTime: string,
+  durationMinutes: number
+): Promise<string | null> {
+  const d = new Date(date + "T00:00:00");
+  const dayOfWeek = d.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+
+  const { data } = await supabase
+    .from("club_operating_hours")
+    .select("is_open, opens_at, closes_at")
+    .eq("club_id", clubId)
+    .eq("day_of_week", dayOfWeek)
+    .maybeSingle();
+
+  const hours = getEffectiveHour(
+    data
+      ? [{ day_of_week: dayOfWeek, is_open: data.is_open, opens_at: data.opens_at, closes_at: data.closes_at }]
+      : [],
+    dayOfWeek
+  );
+
+  return validateAgainstOperatingHours(hours, startTime, durationMinutes);
+}
+
+// ─── Overlap check ────────────────────────────────────────────────────────────
+
+async function checkOverlap(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  courtId: string,
+  date: string,
+  startTime: string,
+  durationMinutes: number,
+  excludeId?: string
+): Promise<boolean> {
+  let query = supabase
+    .from("reservations")
+    .select("start_time, duration_minutes")
+    .eq("court_id", courtId)
+    .eq("date", date)
+    .eq("status", "confirmed");
+
+  if (excludeId) query = query.neq("id", excludeId);
+
+  const { data: existing, error } = await query;
+
+  if (error) {
+    console.error("[reservations] overlap check query failed:", error);
+    // Don't block the insert on overlap check failure
+    return false;
+  }
+
+  const newStart = sharedTimeToMinutes(startTime);
+  const newEnd = newStart + durationMinutes;
+
+  for (const r of existing ?? []) {
+    const existStart = sharedTimeToMinutes(r.start_time);
+    const existEnd = existStart + r.duration_minutes;
+    if (newStart < existEnd && newEnd > existStart) return true;
+  }
+  return false;
+}
+
+// ─── Parse + validate ─────────────────────────────────────────────────────────
+
+function parseFormData(formData: FormData) {
+  const courtId = (formData.get("court_id") as string | null)?.trim() ?? "";
+  const date = (formData.get("date") as string | null)?.trim() ?? "";
+  const rawTime = (formData.get("start_time") as string | null)?.trim() ?? "";
+  // Browser sends HH:MM; Postgres time accepts HH:MM but we normalise to HH:MM:SS
+  const startTime = rawTime.length === 5 ? `${rawTime}:00` : rawTime;
+  const durationMinutes = parseInt(
+    (formData.get("duration_minutes") as string | null) ?? "60",
+    10
+  );
+  const type = (formData.get("type") as string | null)?.trim() ?? "match";
+  const title = (formData.get("title") as string | null)?.trim() || null;
+  const notes = (formData.get("notes") as string | null)?.trim() || null;
+  const playerIds = formData.getAll("players") as string[];
+
+  return { courtId, date, startTime, durationMinutes, type, title, notes, playerIds };
+}
+
+function validate(
+  courtId: string,
+  date: string,
+  startTime: string,
+  durationMinutes: number,
+  type: string,
+  title: string | null
+): string | null {
+  if (!courtId) return "Selecciona una cancha.";
+  if (!date) return "Selecciona una fecha.";
+  if (!startTime || startTime === ":00") return "Selecciona una hora de inicio.";
+  if (![30, 60, 90, 120].includes(durationMinutes)) return "Duración inválida.";
+  if (!["match", "class", "block"].includes(type)) return "Tipo inválido.";
+  if (type === "block" && !title) return "El título es obligatorio para bloqueos.";
+  return null;
+}
+
+// ─── createReservation ────────────────────────────────────────────────────────
+
+export async function createReservation(
+  clubId: string,
+  clubSlug: string,
+  _prevState: ReservationFormState,
+  formData: FormData
+): Promise<ReservationFormState> {
+  const { supabase, user, error: authError } = await requireAdminRole(clubId);
+  if (authError || !supabase || !user) return { error: authError! };
+
+  const { courtId, date, startTime, durationMinutes, type, title, notes, playerIds } =
+    parseFormData(formData);
+
+  console.log("[createReservation] parsed input:", {
+    clubId,
+    courtId,
+    date,
+    startTime,
+    duration: durationMinutes,
+    type,
+    title,
+    players: playerIds,
+  });
+
+  const validationError = validate(courtId, date, startTime, durationMinutes, type, title);
+  if (validationError) {
+    console.log("[createReservation] validation failed:", validationError);
+    return { error: validationError };
+  }
+
+  // Verify court belongs to this club and is active
+  const { data: court, error: courtError } = await supabase
+    .from("courts")
+    .select("id")
+    .eq("id", courtId)
+    .eq("club_id", clubId)
+    .eq("is_active", true)
+    .single();
+
+  if (courtError) {
+    console.error("[createReservation] court lookup error:", courtError);
+  }
+  if (!court) {
+    return { error: isDev ? `[DEV] Cancha no encontrada o inactiva (court_id: ${courtId})` : "La cancha seleccionada no está disponible." };
+  }
+
+  // Operating hours check
+  const hoursError = await checkOperatingHours(supabase, clubId, date, startTime, durationMinutes);
+  if (hoursError) return { error: hoursError };
+
+  // Overlap check
+  const hasOverlap = await checkOverlap(supabase, courtId, date, startTime, durationMinutes);
+  if (hasOverlap) {
+    return { error: "Ya existe una reserva en ese horario para esta cancha." };
+  }
+
+  // Insert reservation
+  const reservationData = {
+    club_id: clubId,
+    court_id: courtId,
+    created_by: user.id,
+    date,
+    start_time: startTime,
+    duration_minutes: durationMinutes,
+    type: type as "match" | "class" | "block",
+    title,
+    notes,
+  };
+
+  console.log("[createReservation] inserting:", reservationData);
+
+  const { data: reservation, error: insertError } = await supabase
+    .from("reservations")
+    .insert(reservationData)
+    .select("id")
+    .single();
+
+  if (insertError || !reservation) {
+    console.error("[createReservation] insert failed:", {
+      clubId,
+      courtId,
+      date,
+      startTime,
+      duration: durationMinutes,
+      players: playerIds,
+      reservationData,
+      supabaseError: insertError,
+    });
+    return {
+      error: isDev
+        ? `[DEV] Error al insertar: ${insertError?.message ?? "sin datos"} (código: ${insertError?.code ?? "—"}, hint: ${insertError?.hint ?? "—"})`
+        : "Error al crear la reserva. Intenta de nuevo.",
+    };
+  }
+
+  // Insert players
+  if (playerIds.length > 0) {
+    const { error: playersError } = await supabase
+      .from("reservation_players")
+      .insert(playerIds.map((profileId) => ({ reservation_id: reservation.id, profile_id: profileId })));
+
+    if (playersError) {
+      console.error("[createReservation] players insert failed:", {
+        reservationId: reservation.id,
+        playerIds,
+        supabaseError: playersError,
+      });
+      // Reservation was created; don't block on player insert failure
+    }
+  }
+
+  console.log("[createReservation] success — reservationId:", reservation.id);
+  redirect(`/${clubSlug}/admin/reservations`);
+}
+
+// ─── updateReservation ────────────────────────────────────────────────────────
+
+export async function updateReservation(
+  clubId: string,
+  clubSlug: string,
+  reservationId: string,
+  _prevState: ReservationFormState,
+  formData: FormData
+): Promise<ReservationFormState> {
+  const { supabase, error: authError } = await requireAdminRole(clubId);
+  if (authError || !supabase) return { error: authError! };
+
+  const { courtId, date, startTime, durationMinutes, type, title, notes, playerIds } =
+    parseFormData(formData);
+
+  console.log("[updateReservation] parsed input:", { reservationId, clubId, courtId, date, startTime, duration: durationMinutes, type, title, players: playerIds });
+
+  const validationError = validate(courtId, date, startTime, durationMinutes, type, title);
+  if (validationError) return { error: validationError };
+
+  const { data: court, error: courtError } = await supabase
+    .from("courts")
+    .select("id")
+    .eq("id", courtId)
+    .eq("club_id", clubId)
+    .eq("is_active", true)
+    .single();
+
+  if (courtError) console.error("[updateReservation] court lookup error:", courtError);
+  if (!court) {
+    return { error: isDev ? `[DEV] Cancha no encontrada (court_id: ${courtId})` : "La cancha seleccionada no está disponible." };
+  }
+
+  const hoursErrorUpdate = await checkOperatingHours(supabase, clubId, date, startTime, durationMinutes);
+  if (hoursErrorUpdate) return { error: hoursErrorUpdate };
+
+  const hasOverlap = await checkOverlap(supabase, courtId, date, startTime, durationMinutes, reservationId);
+  if (hasOverlap) return { error: "Ya existe una reserva en ese horario para esta cancha." };
+
+  const { error: updateError } = await supabase
+    .from("reservations")
+    .update({ court_id: courtId, date, start_time: startTime, duration_minutes: durationMinutes, type: type as "match" | "class" | "block", title, notes })
+    .eq("id", reservationId)
+    .eq("club_id", clubId);
+
+  if (updateError) {
+    console.error("[updateReservation] update failed:", { reservationId, supabaseError: updateError });
+    return {
+      error: isDev
+        ? `[DEV] Error al actualizar: ${updateError.message} (código: ${updateError.code})`
+        : "Error al guardar los cambios. Intenta de nuevo.",
+    };
+  }
+
+  // Replace players
+  await supabase.from("reservation_players").delete().eq("reservation_id", reservationId);
+
+  if (playerIds.length > 0) {
+    const { error: playersError } = await supabase
+      .from("reservation_players")
+      .insert(playerIds.map((profileId) => ({ reservation_id: reservationId, profile_id: profileId })));
+
+    if (playersError) console.error("[updateReservation] players insert failed:", playersError);
+  }
+
+  redirect(`/${clubSlug}/admin/reservations`);
+}
+
+// ─── cancelReservation ────────────────────────────────────────────────────────
+
+export async function cancelReservation(
+  clubId: string,
+  clubSlug: string,
+  reservationId: string
+): Promise<void> {
+  const { supabase, user, error: authError } = await requireAdminRole(clubId);
+  if (authError || !supabase || !user) return;
+
+  const { error } = await supabase
+    .from("reservations")
+    .update({ status: "cancelled", cancelled_at: new Date().toISOString(), cancelled_by: user.id })
+    .eq("id", reservationId)
+    .eq("club_id", clubId);
+
+  if (error) console.error("[cancelReservation] failed:", { reservationId, supabaseError: error });
+
+  redirect(`/${clubSlug}/admin/reservations`);
+}

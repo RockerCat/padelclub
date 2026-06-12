@@ -1,7 +1,9 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SettingsForm } from "./SettingsForm";
+import { OperatingHoursForm } from "./OperatingHoursForm";
 import type { Club } from "@/types/database";
+import { DEFAULT_OPERATING_HOURS, type OperatingHour } from "@/lib/operatingHours";
 
 interface SettingsPageProps {
   params: Promise<{ club: string }>;
@@ -19,10 +21,6 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     redirect("/auth/login");
   }
 
-  console.log("[user]", user?.id);
-  console.log("[club lookup]", slug);
-
-  // Step 1: resolve slug → full club row (needed for the settings form)
   const result = await supabase
     .from("clubs")
     .select("*")
@@ -30,17 +28,9 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     .eq("is_active", true)
     .single();
 
-  console.log("[club result]", result);
-  console.log("[club data]", result.data);
-  console.log("[club error]", result.error);
-
   const club = result.data;
+  if (!club) notFound();
 
-  if (!club) {
-    notFound();
-  }
-
-  // Step 2: verify the user is OWNER of this club
   const { data: membership } = await supabase
     .from("club_members")
     .select("role")
@@ -49,15 +39,26 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     .eq("is_active", true)
     .single();
 
-  console.log("[membership]", membership);
+  if (!membership) redirect("/unauthorized");
+  if (membership.role !== "OWNER") redirect(`/${slug}`);
 
-  if (!membership) {
-    redirect("/unauthorized");
-  }
+  // Fetch configured operating hours, merge with defaults for any missing days
+  const { data: dbHours } = await supabase
+    .from("club_operating_hours")
+    .select("day_of_week, is_open, opens_at, closes_at")
+    .eq("club_id", club.id)
+    .order("day_of_week");
 
-  if (membership.role !== "OWNER") {
-    redirect(`/${slug}`);
-  }
+  const mergedHours: OperatingHour[] = DEFAULT_OPERATING_HOURS.map((def) => {
+    const found = (dbHours ?? []).find((h) => h.day_of_week === def.day_of_week);
+    if (!found) return def;
+    return {
+      day_of_week: found.day_of_week,
+      is_open: found.is_open,
+      opens_at: found.opens_at,
+      closes_at: found.closes_at,
+    };
+  });
 
   return (
     <div className="p-6 md:p-10">
@@ -67,7 +68,11 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
           Actualiza la información y apariencia de tu club.
         </p>
       </div>
-      <SettingsForm club={club as Club} />
+
+      <div className="flex flex-col gap-6 max-w-2xl">
+        <SettingsForm club={club as Club} />
+        <OperatingHoursForm clubId={club.id} initialHours={mergedHours} />
+      </div>
     </div>
   );
 }

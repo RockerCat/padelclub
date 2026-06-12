@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { timeToMinutes, type OperatingHour } from "@/lib/operatingHours";
 
 export type UpdateClubState = {
   success?: boolean;
@@ -111,6 +112,61 @@ export async function updateClub(
 
   if (updateError) {
     return { error: "Error al guardar los cambios. Por favor, intenta de nuevo." };
+  }
+
+  return { success: true };
+}
+
+export async function saveOperatingHours(
+  clubId: string,
+  hours: OperatingHour[]
+): Promise<{ success?: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !user) return { error: "No autenticado." };
+
+  const { data: membership } = await supabase
+    .from("club_members")
+    .select("role")
+    .eq("club_id", clubId)
+    .eq("profile_id", user.id)
+    .eq("is_active", true)
+    .single();
+
+  if (!membership || membership.role !== "OWNER") {
+    return { error: "Solo el propietario puede modificar los horarios." };
+  }
+
+  // Validate each day
+  for (const h of hours) {
+    if (h.is_open) {
+      if (!h.opens_at || !h.closes_at) {
+        return { error: "Ingresa hora de apertura y cierre para los días abiertos." };
+      }
+      if (timeToMinutes(h.opens_at) >= timeToMinutes(h.closes_at)) {
+        return { error: "La hora de apertura debe ser anterior a la de cierre." };
+      }
+    }
+  }
+
+  const rows = hours.map((h) => ({
+    club_id: clubId,
+    day_of_week: h.day_of_week,
+    is_open: h.is_open,
+    opens_at: h.is_open ? (h.opens_at ?? null) : null,
+    closes_at: h.is_open ? (h.closes_at ?? null) : null,
+  }));
+
+  const { error: upsertError } = await supabase
+    .from("club_operating_hours")
+    .upsert(rows, { onConflict: "club_id,day_of_week" });
+
+  if (upsertError) {
+    console.error("[saveOperatingHours] upsert failed:", upsertError);
+    return { error: "Error al guardar los horarios. Intenta de nuevo." };
   }
 
   return { success: true };

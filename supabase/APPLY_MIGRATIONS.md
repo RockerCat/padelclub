@@ -139,6 +139,85 @@ SELECT id, name, visibility FROM clubs LIMIT 5;
 
 ---
 
+## Migración 006 — Branding en invitaciones (PENDIENTE)
+
+`supabase/migrations/20260611000006_invite_branding.sql`
+
+Recrea `get_invitation_preview` añadiendo `primary_color` y `secondary_color` en el objeto devuelto para que las pantallas de invitación/signup muestren los colores del club.
+
+---
+
+## Migración 007 — Módulo de Reservaciones (PENDIENTE)
+
+`supabase/migrations/20260611000007_sprint3_reservations.sql`
+
+Ejecutar en el **SQL Editor**:
+`https://supabase.com/dashboard/project/rfzyqmvqmqsjigcvxxnf/sql/new`
+
+Este script:
+1. Crea tabla `reservations` (cancha, fecha, hora, duración, tipo, estado)
+2. Crea tabla `reservation_players` (relación N:N reserva–jugador)
+3. Crea índices para consultas por club+fecha y cancha+fecha
+4. Agrega trigger `set_reservations_updated_at`
+5. Activa RLS y crea políticas:
+   - Todos los miembros pueden leer reservas de su club
+   - Solo OWNER/ADMIN pueden crear y modificar
+
+### Verificar después de ejecutar
+
+```sql
+-- Tablas existen
+SELECT table_name FROM information_schema.tables
+WHERE table_schema = 'public'
+  AND table_name IN ('reservations', 'reservation_players');
+
+-- RLS activo
+SELECT tablename, rowsecurity FROM pg_tables
+WHERE schemaname = 'public'
+  AND tablename IN ('reservations', 'reservation_players');
+
+-- Políticas creadas
+SELECT policyname, tablename FROM pg_policies
+WHERE schemaname = 'public'
+  AND tablename IN ('reservations', 'reservation_players');
+```
+
+---
+
+## Migración 008 — Horarios de operación del club (PENDIENTE)
+
+`supabase/migrations/20260611000008_operating_hours.sql`
+
+Ejecutar en el **SQL Editor**:
+`https://supabase.com/dashboard/project/rfzyqmvqmqsjigcvxxnf/sql/new`
+
+Este script:
+1. Crea tabla `club_operating_hours` (horario por día de la semana: apertura, cierre, abierto/cerrado)
+2. Restricción `UNIQUE(club_id, day_of_week)` — un horario por día por club
+3. `CHECK` que valida que apertura < cierre cuando `is_open = true`
+4. Agrega trigger `set_club_operating_hours_updated_at`
+5. Activa RLS y crea políticas:
+   - Todos los miembros activos pueden leer
+   - Solo OWNER puede insertar, actualizar y eliminar
+
+### Verificar después de ejecutar
+
+```sql
+-- Tabla existe
+SELECT table_name FROM information_schema.tables
+WHERE table_schema = 'public' AND table_name = 'club_operating_hours';
+
+-- RLS activo
+SELECT tablename, rowsecurity FROM pg_tables
+WHERE schemaname = 'public' AND tablename = 'club_operating_hours';
+
+-- Políticas creadas
+SELECT policyname, cmd FROM pg_policies
+WHERE schemaname = 'public' AND tablename = 'club_operating_hours';
+```
+
+---
+
 ## Validación post-migración
 
 En SQL Editor, ejecutar:
