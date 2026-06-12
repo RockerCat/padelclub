@@ -5,7 +5,7 @@ import type { CalendarReservation, CalendarCourt, WeekDay } from "./WeekCalendar
 
 interface AdminReservationsPageProps {
   params: Promise<{ club: string }>;
-  searchParams: Promise<{ week?: string }>;
+  searchParams: Promise<{ week?: string; updated?: string; cancelled?: string }>;
 }
 
 // ─── Date helpers (no timezone drift: always treat dates as local) ─────────────
@@ -38,7 +38,8 @@ export default async function AdminReservationsPage({
   searchParams,
 }: AdminReservationsPageProps) {
   const { club: slug } = await params;
-  const { week: weekParam } = await searchParams;
+  const { week: weekParam, updated, cancelled } = await searchParams;
+  const successMessage = updated ? "updated" : cancelled ? "cancelled" : undefined;
 
   const supabase = await createClient();
   const {
@@ -156,6 +157,8 @@ export default async function AdminReservationsPage({
         nextWeekHref={`/${slug}/admin/reservations?week=${toDateStr(addDays(weekMonday, 7))}`}
         todayStr={todayStr}
         clubSlug={slug}
+        clubId={club.id}
+        successMessage={successMessage}
       />
     </div>
   );

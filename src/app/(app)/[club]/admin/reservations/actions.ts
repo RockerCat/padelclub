@@ -282,6 +282,17 @@ export async function updateReservation(
   const { supabase, error: authError } = await requireAdminRole(clubId);
   if (authError || !supabase) return { error: authError! };
 
+  const { data: currentStatus } = await supabase
+    .from("reservations")
+    .select("status")
+    .eq("id", reservationId)
+    .eq("club_id", clubId)
+    .maybeSingle();
+
+  if (currentStatus?.status === "cancelled") {
+    return { error: "No se puede editar una reserva cancelada." };
+  }
+
   const { courtId, date, startTime, durationMinutes, type, title, notes, playerIds } =
     parseFormData(formData);
 
@@ -335,7 +346,7 @@ export async function updateReservation(
     if (playersError) console.error("[updateReservation] players insert failed:", playersError);
   }
 
-  redirect(`/${clubSlug}/admin/reservations`);
+  redirect(`/${clubSlug}/admin/reservations?updated=1`);
 }
 
 // ─── cancelReservation ────────────────────────────────────────────────────────
@@ -356,5 +367,5 @@ export async function cancelReservation(
 
   if (error) console.error("[cancelReservation] failed:", { reservationId, supabaseError: error });
 
-  redirect(`/${clubSlug}/admin/reservations`);
+  redirect(`/${clubSlug}/admin/reservations?cancelled=1`);
 }

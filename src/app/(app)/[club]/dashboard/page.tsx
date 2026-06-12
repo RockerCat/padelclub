@@ -1,6 +1,19 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { CalendarDays, Users, Home, Settings, Plus, ArrowRight } from "lucide-react";
+import {
+  CalendarDays,
+  Clock,
+  TrendingUp,
+  TrendingDown,
+  Users,
+  Plus,
+  ArrowRight,
+  Home,
+  Settings,
+  Flame,
+  XCircle,
+  type LucideIcon,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import {
   DEFAULT_OPERATING_HOURS,
@@ -32,51 +45,100 @@ function addDays(d: Date, n: number): Date {
   return r;
 }
 
-const MONTH_ES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+const MONTH_ES   = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
 const WEEKDAY_ES = ["dom","lun","mar","mié","jue","vie","sáb"];
 
-function formatReservationDate(dateStr: string, todayStr: string): string {
-  const tomorrowStr = toDateStr(addDays(new Date(todayStr + "T00:00:00"), 1));
+function formatDate(dateStr: string, todayStr: string, yesterdayStr: string): string {
   if (dateStr === todayStr) return "Hoy";
-  if (dateStr === tomorrowStr) return "Mañana";
+  if (dateStr === yesterdayStr) return "Ayer";
   const d = new Date(dateStr + "T00:00:00");
   return `${WEEKDAY_ES[d.getDay()]} ${d.getDate()} ${MONTH_ES[d.getMonth()]}`;
 }
 
-function formatCreatedAt(isoStr: string): string {
-  // Parse ISO string directly to avoid server timezone drift
-  const [, month, day] = isoStr.slice(0, 10).split("-").map(Number);
-  const time = isoStr.slice(11, 16);
-  return `${day} ${MONTH_ES[month - 1]} · ${time}`;
+function formatHours(minutes: number): string {
+  if (minutes === 0) return "0";
+  const h = minutes / 60;
+  return h % 1 === 0 ? String(h) : h.toFixed(1);
+}
+
+function computePeakHour(startTimes: string[]): { hour: number; count: number } | null {
+  if (!startTimes.length) return null;
+  const freq = new Map<number, number>();
+  for (const t of startTimes) {
+    const h = parseInt(t.slice(0, 2), 10);
+    freq.set(h, (freq.get(h) ?? 0) + 1);
+  }
+  let maxH = 0, maxC = 0;
+  for (const [h, c] of freq) {
+    if (c > maxC) { maxH = h; maxC = c; }
+  }
+  return { hour: maxH, count: maxC };
 }
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
-
-type UpcomingRow = {
-  id: string;
-  date: string;
-  start_time: string;
-  type: string;
-  courts: { name: string } | null;
-  reservation_players: Array<{ profiles: { full_name: string | null } | null }>;
-};
 
 type RecentRow = {
   id: string;
   date: string;
   start_time: string;
-  created_at: string;
-  created_by: string;
+  duration_minutes: number;
   type: string;
   status: string;
   courts: { name: string } | null;
 };
 
+// ─── KPI card sub-component ───────────────────────────────────────────────────
+
+function KpiCard({
+  label,
+  value,
+  unit,
+  sub,
+  Icon,
+  color,
+}: {
+  label: string;
+  value: string;
+  unit?: string;
+  sub?: string;
+  Icon: LucideIcon;
+  color: string;
+}) {
+  return (
+    <div className="relative bg-brand-surface border border-white/10 rounded-2xl p-5 overflow-hidden">
+      <div
+        className="absolute inset-x-0 top-0 h-[3px]"
+        style={{ backgroundColor: color, opacity: 0.8 }}
+      />
+      <Icon className="absolute right-4 bottom-4 w-14 h-14 text-white opacity-[0.04]" />
+      <div
+        className="w-9 h-9 rounded-xl flex items-center justify-center mb-4"
+        style={{
+          backgroundColor: `color-mix(in srgb, ${color} 15%, transparent)`,
+          color,
+        }}
+      >
+        <Icon className="w-4 h-4" />
+      </div>
+      <p className="text-xs text-brand-muted mb-1 leading-tight">{label}</p>
+      <p className="leading-none mb-1" style={{ color }}>
+        <span className="text-3xl font-bold tabular-nums">{value}</span>
+        {unit && (
+          <span className="text-xl font-semibold ml-0.5">{unit}</span>
+        )}
+      </p>
+      {sub && <p className="text-[11px] text-brand-muted/70">{sub}</p>}
+    </div>
+  );
+}
+
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-const COURT_COLORS = ["#B7E000","#1698BE","#F87171","#FB923C","#A78BFA","#34D399"];
-
-const TYPE_LABELS: Record<string, string> = { match: "Partido", class: "Clase", block: "Bloqueo" };
+const TYPE_LABELS: Record<string, string> = {
+  match: "Partido",
+  class: "Clase",
+  block: "Bloqueo",
+};
 
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
@@ -84,7 +146,9 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
   const { club: slug } = await params;
 
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login");
 
   const { data: club } = await supabase
@@ -108,135 +172,181 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
   // ─── Date ranges ─────────────────────────────────────────────────────────────
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const todayStr = toDateStr(today);
-  const weekMonday = getWeekMonday(today);
-  const mondayStr = toDateStr(weekMonday);
-  const sundayStr = toDateStr(addDays(weekMonday, 6));
-  const monthStartStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
-  const thirtyDaysAgoStr = toDateStr(addDays(today, -30));
+  const todayStr      = toDateStr(today);
+  const yesterdayStr  = toDateStr(addDays(today, -1));
+  const weekMonday    = getWeekMonday(today);
+  const mondayStr     = toDateStr(weekMonday);
+  const sundayStr     = toDateStr(addDays(weekMonday, 6));
+  const thirtyDaysAgo = toDateStr(addDays(today, -30));
 
-  // ─── Round 1: parallel fetches ────────────────────────────────────────────────
+  // Previous week: compare same number of days elapsed (Mon-today vs Mon-sameday last week)
+  const msPerDay           = 24 * 60 * 60 * 1000;
+  const daysElapsed        = Math.round((today.getTime() - weekMonday.getTime()) / msPerDay);
+  const prevWeekMonday     = addDays(weekMonday, -7);
+  const prevWeekMondayStr  = toDateStr(prevWeekMonday);
+  const prevWeekSameDayStr = toDateStr(addDays(prevWeekMonday, daysElapsed));
+
+  // ─── Round 1: all independent fetches in parallel ────────────────────────────
   const [
     weekCountRes,
-    monthCountRes,
     courtsRes,
-    memberCountRes,
-    upcomingRes,
-    recentCreatedRes,
     weekOccupancyRes,
-    thirtyDayResRes,
+    thirtyDayAllRes,
     operatingHoursRes,
+    recentRes,
+    prevWeekCountRes,
   ] = await Promise.all([
-    supabase
-      .from("reservations").select("id", { count: "exact", head: true })
-      .eq("club_id", club.id).eq("status", "confirmed")
-      .gte("date", mondayStr).lte("date", sundayStr),
-    supabase
-      .from("reservations").select("id", { count: "exact", head: true })
-      .eq("club_id", club.id).eq("status", "confirmed")
-      .gte("date", monthStartStr).lte("date", todayStr),
-    supabase
-      .from("courts").select("id, name, sort_order")
-      .eq("club_id", club.id).eq("is_active", true)
-      .order("sort_order", { ascending: true }),
-    supabase
-      .from("club_members").select("id", { count: "exact", head: true })
-      .eq("club_id", club.id).eq("is_active", true),
-    // Next 5 upcoming (today onward, confirmed, sorted by date+time)
+    // KPI 1 — confirmed reservations this week
     supabase
       .from("reservations")
-      .select("id, date, start_time, type, courts(name), reservation_players(profiles(full_name))")
-      .eq("club_id", club.id).eq("status", "confirmed")
-      .gte("date", todayStr)
-      .order("date", { ascending: true }).order("start_time", { ascending: true })
-      .limit(5),
-    // Last 10 created (any status, for activity feed)
-    supabase
-      .from("reservations")
-      .select("id, date, start_time, created_at, created_by, type, status, courts(name)")
+      .select("id", { count: "exact", head: true })
       .eq("club_id", club.id)
-      .order("created_at", { ascending: false })
-      .limit(10),
-    // This week confirmed — used for occupancy calculation
+      .eq("status", "confirmed")
+      .gte("date", mondayStr)
+      .lte("date", sundayStr),
+
+    // Courts — id + name ordered for per-court breakdown
     supabase
-      .from("reservations").select("court_id, duration_minutes")
-      .eq("club_id", club.id).eq("status", "confirmed")
-      .gte("date", mondayStr).lte("date", sundayStr),
-    // Last 30 days confirmed IDs — used to count active players
+      .from("courts")
+      .select("id, name")
+      .eq("club_id", club.id)
+      .eq("is_active", true)
+      .order("name"),
+
+    // KPI 2 + KPI 3 + per-court occupancy: confirmed this week with court_id
     supabase
-      .from("reservations").select("id")
-      .eq("club_id", club.id).eq("status", "confirmed")
-      .gte("date", thirtyDaysAgoStr),
-    // Club operating hours — for accurate occupancy calculation
+      .from("reservations")
+      .select("court_id, duration_minutes")
+      .eq("club_id", club.id)
+      .eq("status", "confirmed")
+      .gte("date", mondayStr)
+      .lte("date", sundayStr),
+
+    // Insights source: all reservations last 30 days (confirmed + cancelled)
+    // Used for: active players, peak hour, cancellation rate
+    supabase
+      .from("reservations")
+      .select("id, status, start_time")
+      .eq("club_id", club.id)
+      .gte("date", thirtyDaysAgo),
+
+    // Occupancy denominator — club operating hours
     supabase
       .from("club_operating_hours")
       .select("day_of_week, is_open, opens_at, closes_at")
       .eq("club_id", club.id),
+
+    // Actividad reciente — last 10 by created_at, any status
+    supabase
+      .from("reservations")
+      .select("id, date, start_time, duration_minutes, type, status, courts(name)")
+      .eq("club_id", club.id)
+      .order("created_at", { ascending: false })
+      .limit(10),
+
+    // Week comparison — confirmed count in prev week (same days elapsed for fair comparison)
+    supabase
+      .from("reservations")
+      .select("id", { count: "exact", head: true })
+      .eq("club_id", club.id)
+      .eq("status", "confirmed")
+      .gte("date", prevWeekMondayStr)
+      .lte("date", prevWeekSameDayStr),
   ]);
 
-  const weekCount = weekCountRes.count ?? 0;
-  const monthCount = monthCountRes.count ?? 0;
-  const courts = courtsRes.data ?? [];
-  const memberCount = memberCountRes.count ?? 0;
-  const upcoming = (upcomingRes.data ?? []) as unknown as UpcomingRow[];
-  const recentCreated = (recentCreatedRes.data ?? []) as unknown as RecentRow[];
-  const recentResIds = (thirtyDayResRes.data ?? []).map((r) => r.id);
-  const creatorIds = [...new Set(recentCreated.map((r) => r.created_by).filter(Boolean))];
+  const weekCount     = weekCountRes.count ?? 0;
+  const prevWeekCount = prevWeekCountRes.count ?? 0;
+  const courts        = courtsRes.data ?? [];
+  const thirtyDayAll  = thirtyDayAllRes.data ?? [];
+  const recent        = (recentRes.data ?? []) as unknown as RecentRow[];
 
-  // ─── Round 2: parallel (depend on round 1 results) ────────────────────────────
-  const [activePlayersData, creatorProfilesData] = await Promise.all([
-    recentResIds.length > 0
-      ? supabase
-          .from("reservation_players").select("profile_id")
-          .in("reservation_id", recentResIds)
+  // Split 30-day data by status
+  const confirmedIds30   = thirtyDayAll.filter((r) => r.status === "confirmed").map((r) => r.id);
+  const confirmedCount30 = confirmedIds30.length;
+  const cancelledCount30 = thirtyDayAll.filter((r) => r.status === "cancelled").length;
+
+  // ─── Round 2: active players (depends on confirmedIds30) ─────────────────────
+  const activePlayers =
+    confirmedIds30.length > 0
+      ? await supabase
+          .from("reservation_players")
+          .select("profile_id")
+          .in("reservation_id", confirmedIds30)
           .then((r) => r.data ?? [])
-      : Promise.resolve([] as Array<{ profile_id: string }>),
-    creatorIds.length > 0
-      ? supabase
-          .from("profiles").select("id, full_name")
-          .in("id", creatorIds)
-          .then((r) => r.data ?? [])
-      : Promise.resolve([] as Array<{ id: string; full_name: string | null }>),
-  ]);
+      : [];
 
-  const activePlayerCount = new Set(activePlayersData.map((p) => p.profile_id)).size;
-  const creatorMap = new Map(creatorProfilesData.map((p) => [p.id, p.full_name]));
+  const activePlayerCount = new Set(activePlayers.map((p) => p.profile_id)).size;
 
-  // ─── Operating hours + weekly availability ───────────────────────────────────
+  // ─── Operating hours (occupancy denominator) ─────────────────────────────────
   const dbHours = (operatingHoursRes.data ?? []) as OperatingHour[];
-  // Merge DB rows with defaults for any day not yet configured
   const effectiveHours: OperatingHour[] = DEFAULT_OPERATING_HOURS.map((def) => {
     const found = dbHours.find((h) => h.day_of_week === def.day_of_week);
-    return found
-      ? { day_of_week: found.day_of_week, is_open: found.is_open, opens_at: found.opens_at, closes_at: found.closes_at }
-      : def;
+    return found ?? def;
   });
-  // Mon(1) → Sat(6) → Sun(0)
-  const weekDayNums = [1, 2, 3, 4, 5, 6, 0];
-  const availableMinutesPerWeek = computeWeeklyAvailableMinutes(effectiveHours, weekDayNums);
-  const availableHoursPerWeek = Math.round((availableMinutesPerWeek / 60) * 10) / 10;
+  const weekDayNums          = [1, 2, 3, 4, 5, 6, 0];
+  const availableMinPerCourt = computeWeeklyAvailableMinutes(effectiveHours, weekDayNums);
 
-  // ─── Court occupancy (this week) ─────────────────────────────────────────────
-  const occupancyByCourtId = new Map<string, number>();
-  for (const r of weekOccupancyRes.data ?? []) {
-    occupancyByCourtId.set(r.court_id, (occupancyByCourtId.get(r.court_id) ?? 0) + r.duration_minutes);
+  // ─── KPI 2: Horas reservadas · KPI 3: Ocupación semanal ─────────────────────
+  type OccupancyRow = { court_id: string; duration_minutes: number };
+  const weekOccupancyData = (weekOccupancyRes.data ?? []) as OccupancyRow[];
+  const weekMinutes = weekOccupancyData.reduce((sum, r) => sum + r.duration_minutes, 0);
+  const totalAvailableMinutes = availableMinPerCourt * courts.length;
+  const occupancyPct =
+    totalAvailableMinutes > 0
+      ? Math.min(100, Math.round((weekMinutes / totalAvailableMinutes) * 100))
+      : 0;
+  const occupancyColor =
+    occupancyPct >= 70 ? "#22C55E" : occupancyPct >= 40 ? "#EAB308" : "#EF4444";
+
+  // ─── Insights: per-court occupancy ───────────────────────────────────────────
+  const reservedMinByCourt = new Map<string, number>();
+  for (const r of weekOccupancyData) {
+    reservedMinByCourt.set(r.court_id, (reservedMinByCourt.get(r.court_id) ?? 0) + r.duration_minutes);
   }
-  const courtOccupancy = courts.map((c, i) => {
-    const reserved = occupancyByCourtId.get(c.id) ?? 0;
+  const courtOccupancy = (courts as { id: string; name: string }[]).map((c) => {
+    const reservedMin = reservedMinByCourt.get(c.id) ?? 0;
+    const pct =
+      availableMinPerCourt > 0
+        ? Math.min(100, Math.round((reservedMin / availableMinPerCourt) * 100))
+        : 0;
     return {
       id: c.id,
       name: c.name,
-      color: COURT_COLORS[i % COURT_COLORS.length],
-      reservedHours: Math.round((reserved / 60) * 10) / 10,
-      availableHours: availableHoursPerWeek,
-      percentage:
-        availableMinutesPerWeek > 0
-          ? Math.min(100, Math.round((reserved / availableMinutesPerWeek) * 100))
-          : 0,
+      reservedHours: +(reservedMin / 60).toFixed(1),
+      availableHours: +(availableMinPerCourt / 60).toFixed(1),
+      pct,
+      color: pct >= 70 ? "#22C55E" : pct >= 40 ? "#EAB308" : "#EF4444",
     };
   });
 
-  const isEmpty = recentCreated.length === 0;
+  // ─── Insights: hora pico ─────────────────────────────────────────────────────
+  const confirmedStartTimes = thirtyDayAll
+    .filter((r) => r.status === "confirmed")
+    .map((r) => r.start_time as string);
+  const peakHour = computePeakHour(confirmedStartTimes);
+
+  // ─── Insights: tasa de cancelación ───────────────────────────────────────────
+  const totalCount30    = confirmedCount30 + cancelledCount30;
+  const cancellationPct =
+    totalCount30 > 0 ? Math.round((cancelledCount30 / totalCount30) * 100) : 0;
+
+  // ─── Insights: comparación vs semana anterior ────────────────────────────────
+  // Same-days-elapsed comparison: if today is Wed, Mon–Wed this week vs Mon–Wed last week
+  let weekChangeLabel  = "—";
+  let weekChangeColor  = "#94A3B8";
+  let weekChangeTrend: "up" | "down" | "flat" = "flat";
+  if (prevWeekCount === 0 && weekCount > 0) {
+    weekChangeLabel = `+${weekCount}`;
+    weekChangeColor = "#22C55E";
+    weekChangeTrend = "up";
+  } else if (prevWeekCount > 0) {
+    const pct = Math.round(((weekCount - prevWeekCount) / prevWeekCount) * 100);
+    weekChangeLabel = pct > 0 ? `▲ +${pct}%` : pct < 0 ? `▼ ${pct}%` : "=";
+    weekChangeColor = pct > 0 ? "#22C55E" : pct < 0 ? "#EF4444" : "#94A3B8";
+    weekChangeTrend = pct > 0 ? "up" : pct < 0 ? "down" : "flat";
+  }
+
+  const isEmpty = recent.length === 0;
 
   return (
     <div className="p-6 md:p-10">
@@ -245,47 +355,52 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
       <div className="relative overflow-hidden rounded-2xl bg-brand-surface border border-white/10 p-6 mb-8">
         <div
           className="absolute inset-0 pointer-events-none"
-          style={{ background: "linear-gradient(135deg, color-mix(in srgb, var(--club-primary) 8%, transparent), color-mix(in srgb, var(--club-secondary) 8%, transparent))" }}
+          style={{
+            background:
+              "linear-gradient(135deg, color-mix(in srgb, var(--club-primary) 8%, transparent), color-mix(in srgb, var(--club-secondary) 8%, transparent))",
+          }}
         />
         <div
           className="absolute inset-x-0 top-0 h-0.5"
-          style={{ background: "linear-gradient(to right, var(--club-primary), var(--club-secondary))" }}
+          style={{
+            background: "linear-gradient(to right, var(--club-primary), var(--club-secondary))",
+          }}
         />
         <p className="text-sm text-brand-muted mb-0.5 relative">Panel del club</p>
-        <h1 className="text-2xl font-bold text-white mb-5 relative">{club.name}</h1>
-        <div className="flex flex-wrap gap-6 relative">
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-bold tabular-nums" style={{ color: "var(--club-primary)" }}>
-              {courts.length}
-            </span>
-            <span className="text-sm text-brand-muted">canchas</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-bold tabular-nums" style={{ color: "var(--club-secondary)" }}>
-              {memberCount}
-            </span>
-            <span className="text-sm text-brand-muted">jugadores</span>
-          </div>
-        </div>
+        <h1 className="text-2xl font-bold text-white mb-1 relative">{club.name}</h1>
+        <p className="text-sm text-brand-muted relative">
+          {courts.length === 0
+            ? "Sin canchas activas"
+            : courts.length === 1
+            ? "1 cancha activa"
+            : `${courts.length} canchas activas`}
+        </p>
       </div>
 
       {isEmpty ? (
-        /* ─── Empty state ────────────────────────────────────────────────── */
+        /* ─── Empty state ─────────────────────────────────────────────────── */
         <div className="flex flex-col items-center justify-center text-center py-16 px-6 bg-brand-surface border border-dashed border-white/10 rounded-2xl mb-8">
           <div
             className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6"
-            style={{ backgroundColor: "color-mix(in srgb, var(--club-primary) 12%, transparent)" }}
+            style={{
+              backgroundColor: "color-mix(in srgb, var(--club-primary) 12%, transparent)",
+            }}
           >
             <CalendarDays className="w-8 h-8" style={{ color: "var(--club-primary)" }} />
           </div>
-          <h2 className="text-xl font-bold text-white mb-2">Aún no tienes reservas registradas</h2>
+          <h2 className="text-xl font-bold text-white mb-2">
+            Aún no tienes reservas registradas
+          </h2>
           <p className="text-sm text-brand-muted mb-8 max-w-sm">
-            Registra la primera reserva de tu club para comenzar a ver métricas y estadísticas aquí.
+            Registra la primera reserva de tu club para comenzar a ver métricas aquí.
           </p>
           <Link
             href={`/${slug}/admin/reservations/new`}
             className="inline-flex items-center gap-2 h-10 px-6 rounded-xl text-sm font-semibold transition-all hover:brightness-110"
-            style={{ backgroundColor: "var(--club-primary)", color: "var(--club-bg, #001A24)" }}
+            style={{
+              backgroundColor: "var(--club-primary)",
+              color: "var(--club-bg, #001A24)",
+            }}
           >
             <Plus className="w-4 h-4" />
             Crear primera reserva
@@ -294,177 +409,268 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
       ) : (
         <>
           {/* ─── KPIs ──────────────────────────────────────────────────────── */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            {(
-              [
-                { label: "Reservas esta semana", value: weekCount, accent: "primary", Icon: CalendarDays },
-                { label: "Reservas este mes", value: monthCount, accent: "secondary", Icon: CalendarDays },
-                { label: "Jugadores activos", value: activePlayerCount, accent: "primary", Icon: Users, sub: "últimos 30 días" },
-                { label: "Canchas activas", value: courts.length, accent: "secondary", Icon: Home },
-              ] as const
-            ).map(({ label, value, accent, Icon, ...rest }) => {
-              const color = accent === "primary" ? "var(--club-primary)" : "var(--club-secondary)";
-              const sub = "sub" in rest ? rest.sub : undefined;
-              return (
-                <div key={label} className="relative bg-brand-surface border border-white/10 rounded-2xl p-5 overflow-hidden">
-                  <div className="absolute inset-x-0 top-0 h-0.5 opacity-70" style={{ backgroundColor: color }} />
-                  <Icon className="absolute right-4 bottom-4 w-14 h-14 text-white opacity-[0.04]" />
-                  <div
-                    className="w-9 h-9 rounded-xl flex items-center justify-center mb-4"
-                    style={{ backgroundColor: `color-mix(in srgb, ${color} 15%, transparent)`, color }}
-                  >
-                    <Icon className="w-4 h-4" />
-                  </div>
-                  <p className="text-xs text-brand-muted mb-0.5 leading-tight">{label}</p>
-                  <p className="text-3xl font-bold text-white tabular-nums leading-none mb-1">{value}</p>
-                  {sub && <p className="text-[11px] text-brand-muted/70">{sub}</p>}
-                </div>
-              );
-            })}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <KpiCard
+              label="Reservas esta semana"
+              value={String(weekCount)}
+              Icon={CalendarDays}
+              color="var(--club-primary)"
+            />
+            <KpiCard
+              label="Horas reservadas"
+              value={formatHours(weekMinutes)}
+              unit="h"
+              sub="esta semana"
+              Icon={Clock}
+              color="var(--club-secondary)"
+            />
+            <KpiCard
+              label="Ocupación semanal"
+              value={String(occupancyPct)}
+              unit="%"
+              Icon={TrendingUp}
+              color={occupancyColor}
+            />
+            <KpiCard
+              label="Jugadores activos"
+              value={String(activePlayerCount)}
+              sub="últimos 30 días"
+              Icon={Users}
+              color="var(--club-primary)"
+            />
           </div>
 
-          {/* ─── Occupancy + Upcoming ─────────────────────────────────────── */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          {/* ─── Insights del Club ───────────────────────────────────────── */}
+          <div className="mb-8">
+            <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-4">
+              Insights del Club
+            </h2>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-            {/* Court occupancy */}
-            <div className="bg-brand-surface border border-white/10 rounded-2xl p-6">
-              <div className="flex items-center justify-between mb-5">
-                <h2 className="text-sm font-semibold text-white">Ocupación de canchas</h2>
-                <span className="text-xs text-brand-muted">Esta semana</span>
+              {/* ── Ocupación por cancha ───────────────────────────────── */}
+              <div className="bg-brand-surface border border-white/10 rounded-2xl p-5">
+                <div className="flex items-center justify-between mb-5">
+                  <p className="text-sm font-semibold text-white">Ocupación por cancha</p>
+                  <span className="text-[11px] text-brand-muted">Esta semana</span>
+                </div>
+                {courtOccupancy.length === 0 ? (
+                  <p className="text-sm text-brand-muted">Sin canchas activas</p>
+                ) : (
+                  <div className="flex flex-col gap-5">
+                    {courtOccupancy.map((c) => (
+                      <div key={c.id}>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-white">{c.name}</span>
+                          <span
+                            className="text-sm font-bold tabular-nums"
+                            style={{ color: c.color }}
+                          >
+                            {c.pct}%
+                          </span>
+                        </div>
+                        <div className="h-2 rounded-full bg-white/[0.07] overflow-hidden mb-1.5">
+                          <div
+                            className="h-full rounded-full"
+                            style={{ width: `${c.pct}%`, backgroundColor: c.color }}
+                          />
+                        </div>
+                        <p className="text-[11px] text-brand-muted/70">
+                          {c.reservedHours}h reservadas · {c.availableHours}h disponibles
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              {courtOccupancy.length === 0 ? (
-                <p className="text-sm text-brand-muted text-center py-8">No hay canchas activas</p>
-              ) : (
-                <div className="flex flex-col gap-5">
-                  {courtOccupancy.map((c) => (
-                    <div key={c.id}>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-sm font-medium text-white">{c.name}</span>
-                        <span className="text-sm font-bold tabular-nums" style={{ color: c.color }}>
-                          {c.percentage}%
+
+              {/* ── Right column: 3 stacked insight cards ───────────────── */}
+              <div className="flex flex-col gap-4">
+
+                {/* Hora pico */}
+                <div className="bg-brand-surface border border-white/10 rounded-2xl p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-sm font-semibold text-white">Hora pico</p>
+                    <span className="text-[11px] text-brand-muted">Últimos 30 días</span>
+                  </div>
+                  {peakHour ? (
+                    <>
+                      <div className="flex items-center gap-2.5 mb-1">
+                        <div
+                          className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                          style={{
+                            backgroundColor: "color-mix(in srgb, #EAB308 15%, transparent)",
+                          }}
+                        >
+                          <Flame className="w-3.5 h-3.5" style={{ color: "#EAB308" }} />
+                        </div>
+                        <span
+                          className="text-2xl font-bold tabular-nums"
+                          style={{ color: "#EAB308" }}
+                        >
+                          {String(peakHour.hour).padStart(2, "0")}:00
+                          <span className="text-base font-normal text-brand-muted ml-1">
+                            – {String(peakHour.hour + 1).padStart(2, "0")}:00
+                          </span>
                         </span>
                       </div>
-                      <div className="h-2 bg-white/[0.07] rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full"
-                          style={{
-                            width: `${c.percentage > 0 ? Math.max(c.percentage, 2) : 0}%`,
-                            backgroundColor: c.color,
-                          }}
-                        />
-                      </div>
-                      <p className="text-xs text-brand-muted/60 mt-1.5">
-                        {c.reservedHours}h de {c.availableHours}h disponibles esta semana
+                      <p className="text-[11px] text-brand-muted/70">
+                        {peakHour.count} reserva{peakHour.count !== 1 ? "s" : ""} en este horario
                       </p>
-                    </div>
-                  ))}
+                    </>
+                  ) : (
+                    <p className="text-sm text-brand-muted">Sin datos suficientes</p>
+                  )}
                 </div>
-              )}
-            </div>
 
-            {/* Upcoming reservations */}
-            <div className="bg-brand-surface border border-white/10 rounded-2xl p-6">
-              <div className="flex items-center justify-between mb-5">
-                <h2 className="text-sm font-semibold text-white">Próximas reservas</h2>
-                <Link
-                  href={`/${slug}/admin/reservations`}
-                  className="text-xs text-brand-muted hover:text-white transition-colors flex items-center gap-1"
-                >
-                  Ver todas
-                  <ArrowRight className="w-3 h-3" />
-                </Link>
-              </div>
-              {upcoming.length === 0 ? (
-                <div className="flex flex-col items-center text-center py-8 gap-3">
-                  <p className="text-sm text-brand-muted">No hay reservas próximas</p>
-                  <Link
-                    href={`/${slug}/admin/reservations/new`}
-                    className="text-xs font-medium hover:underline"
-                    style={{ color: "var(--club-primary)" }}
-                  >
-                    Crear reserva
-                  </Link>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {upcoming.map((r) => {
-                    const players = r.reservation_players
-                      .map((rp) => rp.profiles?.full_name)
-                      .filter((n): n is string => !!n);
-                    const playerSummary =
-                      players.length === 0
-                        ? null
-                        : players.length <= 2
-                        ? players.join(", ")
-                        : `${players[0]} +${players.length - 1}`;
-
-                    return (
-                      <Link
-                        key={r.id}
-                        href={`/${slug}/admin/reservations/${r.id}`}
-                        className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.05] hover:border-white/10 transition-all"
-                      >
-                        <div className="text-center min-w-[44px] shrink-0">
-                          <p className="text-[10px] text-brand-muted leading-tight">
-                            {formatReservationDate(r.date, todayStr)}
-                          </p>
-                          <p className="text-sm font-bold text-white leading-snug">
-                            {r.start_time.slice(0, 5)}
-                          </p>
+                {/* Cancelaciones */}
+                <div className="bg-brand-surface border border-white/10 rounded-2xl p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-sm font-semibold text-white">Cancelaciones</p>
+                    <span className="text-[11px] text-brand-muted">Últimos 30 días</span>
+                  </div>
+                  {totalCount30 > 0 ? (
+                    <>
+                      <div className="flex items-center gap-2.5 mb-1">
+                        <div
+                          className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                          style={{
+                            backgroundColor:
+                              cancelledCount30 === 0
+                                ? "color-mix(in srgb, #22C55E 15%, transparent)"
+                                : "color-mix(in srgb, #EF4444 15%, transparent)",
+                          }}
+                        >
+                          <XCircle
+                            className="w-3.5 h-3.5"
+                            style={{
+                              color: cancelledCount30 === 0 ? "#22C55E" : "#EF4444",
+                            }}
+                          />
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-white truncate">
-                            {r.courts?.name ?? "—"}
-                          </p>
-                          {playerSummary && (
-                            <p className="text-xs text-brand-muted truncate">{playerSummary}</p>
+                        <span
+                          className="text-2xl font-bold tabular-nums"
+                          style={{
+                            color: cancelledCount30 === 0 ? "#22C55E" : "#EF4444",
+                          }}
+                        >
+                          {cancellationPct}%
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-brand-muted/70">
+                        {cancelledCount30} de {totalCount30} reserva
+                        {totalCount30 !== 1 ? "s" : ""} cancelada
+                        {cancelledCount30 !== 1 ? "s" : ""}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-sm text-brand-muted">Sin datos suficientes</p>
+                  )}
+                </div>
+
+                {/* Comparación vs semana anterior */}
+                <div className="bg-brand-surface border border-white/10 rounded-2xl p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-sm font-semibold text-white">Vs semana anterior</p>
+                    <span className="text-[11px] text-brand-muted">Mismo período</span>
+                  </div>
+                  {prevWeekCount === 0 && weekCount === 0 ? (
+                    <p className="text-sm text-brand-muted">Sin reservas en ambas semanas</p>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2.5 mb-1">
+                        <div
+                          className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                          style={{
+                            backgroundColor: `color-mix(in srgb, ${weekChangeColor} 15%, transparent)`,
+                          }}
+                        >
+                          {weekChangeTrend === "down" ? (
+                            <TrendingDown
+                              className="w-3.5 h-3.5"
+                              style={{ color: weekChangeColor }}
+                            />
+                          ) : (
+                            <TrendingUp
+                              className="w-3.5 h-3.5"
+                              style={{ color: weekChangeColor }}
+                            />
                           )}
                         </div>
-                        <span className="shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-md bg-white/5 text-brand-muted">
-                          {TYPE_LABELS[r.type] ?? r.type}
+                        <span
+                          className="text-2xl font-bold tabular-nums"
+                          style={{ color: weekChangeColor }}
+                        >
+                          {weekChangeLabel}
                         </span>
-                      </Link>
-                    );
-                  })}
+                      </div>
+                      <p className="text-[11px] text-brand-muted/70">
+                        {weekCount} esta sem · {prevWeekCount} semana anterior
+                      </p>
+                    </>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           </div>
 
-          {/* ─── Recent activity ──────────────────────────────────────────── */}
-          <div className="bg-brand-surface border border-white/10 rounded-2xl p-6 mb-6">
+          {/* ─── Actividad reciente ──────────────────────────────────────── */}
+          <div className="bg-brand-surface border border-white/10 rounded-2xl p-6 mb-8">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-sm font-semibold text-white">Actividad reciente</h2>
-              <span className="text-xs text-brand-muted">Últimas 10 creadas</span>
+              <Link
+                href={`/${slug}/admin/reservations`}
+                className="text-xs text-brand-muted hover:text-white transition-colors flex items-center gap-1"
+              >
+                Ver calendario
+                <ArrowRight className="w-3 h-3" />
+              </Link>
             </div>
-            <div className="flex flex-col divide-y divide-white/[0.05]">
-              {recentCreated.map((r) => (
+
+            {/* Table header — desktop only */}
+            <div className="hidden md:grid grid-cols-[140px_1fr_80px_120px] gap-4 px-3 pb-2.5 border-b border-white/[0.06]">
+              {["Fecha", "Cancha", "Horario", "Estado"].map((h) => (
+                <span
+                  key={h}
+                  className="text-[11px] font-semibold text-brand-muted uppercase tracking-wider"
+                >
+                  {h}
+                </span>
+              ))}
+            </div>
+
+            {/* Rows */}
+            <div className="flex flex-col divide-y divide-white/[0.04]">
+              {recent.map((r) => (
                 <Link
                   key={r.id}
                   href={`/${slug}/admin/reservations/${r.id}`}
-                  className="flex items-center gap-3 py-3 px-2 -mx-2 rounded-lg hover:bg-white/[0.03] transition-colors"
+                  className="flex flex-col md:grid md:grid-cols-[140px_1fr_80px_120px] md:gap-4 md:items-center px-3 py-3 -mx-3 rounded-xl hover:bg-white/[0.03] transition-colors"
                 >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                      <span className="text-sm font-medium text-white truncate">
-                        {r.courts?.name ?? "—"}
-                      </span>
-                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-white/5 text-brand-muted shrink-0">
-                        {TYPE_LABELS[r.type] ?? r.type}
-                      </span>
-                      {r.status === "cancelled" && (
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 shrink-0">
-                          Cancelada
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-brand-muted">
-                      {r.date} · {r.start_time.slice(0, 5)} · {creatorMap.get(r.created_by) ?? "—"}
-                    </p>
+                  <span className="text-xs text-brand-muted md:text-sm md:text-white">
+                    {formatDate(r.date, todayStr, yesterdayStr)}
+                  </span>
+                  <div className="flex items-center gap-2 mt-0.5 md:mt-0">
+                    <span className="text-sm font-medium text-white">
+                      {r.courts?.name ?? "—"}
+                    </span>
+                    <span className="md:hidden text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-brand-muted font-medium">
+                      {TYPE_LABELS[r.type] ?? r.type}
+                    </span>
                   </div>
-                  <p className="text-xs text-brand-muted/50 shrink-0 hidden sm:block whitespace-nowrap">
-                    {formatCreatedAt(r.created_at)}
-                  </p>
+                  <span className="text-sm font-mono text-white mt-0.5 md:mt-0">
+                    {r.start_time.slice(0, 5)}
+                  </span>
+                  {r.status === "confirmed" ? (
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-green-400 mt-0.5 md:mt-0">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
+                      Confirmada
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-red-400 mt-0.5 md:mt-0">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
+                      Cancelada
+                    </span>
+                  )}
                 </Link>
               ))}
             </div>
@@ -472,7 +678,7 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
         </>
       )}
 
-      {/* ─── Quick access (always visible) ───────────────────────────────── */}
+      {/* ─── Acceso rápido (siempre visible) ─────────────────────────────── */}
       <div>
         <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-3">
           Acceso rápido
@@ -481,9 +687,9 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
           {(
             [
               { label: "Reservaciones", Icon: CalendarDays, href: `/${slug}/admin/reservations`, color: "var(--club-primary)" },
-              { label: "Canchas",        Icon: Home,         href: `/${slug}/admin/courts`,        color: "var(--club-secondary)" },
-              { label: "Jugadores",      Icon: Users,        href: `/${slug}/admin/players`,       color: "var(--club-primary)" },
-              { label: "Configuración",  Icon: Settings,     href: `/${slug}/admin`,               color: "var(--club-secondary)" },
+              { label: "Canchas",       Icon: Home,         href: `/${slug}/admin/courts`,        color: "var(--club-secondary)" },
+              { label: "Jugadores",     Icon: Users,        href: `/${slug}/admin/players`,       color: "var(--club-primary)" },
+              { label: "Configuración", Icon: Settings,     href: `/${slug}/admin`,               color: "var(--club-secondary)" },
             ] as const
           ).map(({ label, Icon, href, color }) => (
             <Link
@@ -494,7 +700,10 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
             >
               <div
                 className="w-10 h-10 rounded-xl flex items-center justify-center"
-                style={{ backgroundColor: `color-mix(in srgb, ${color} 15%, transparent)`, color }}
+                style={{
+                  backgroundColor: `color-mix(in srgb, ${color} 15%, transparent)`,
+                  color,
+                }}
               >
                 <Icon className="w-5 h-5" />
               </div>

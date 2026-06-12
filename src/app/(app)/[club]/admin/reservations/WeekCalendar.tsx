@@ -1,8 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect, useTransition } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Plus, CalendarDays } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  CalendarDays,
+  MoreVertical,
+  Pencil,
+  XCircle,
+  Check,
+  X,
+} from "lucide-react";
+import { cancelReservation } from "./actions";
 
 // ─── Court color palette (dark-theme safe) ────────────────────────────────────
 
@@ -53,6 +65,8 @@ interface WeekCalendarProps {
   nextWeekHref: string;
   todayStr: string;
   clubSlug: string;
+  clubId: string;
+  successMessage?: string; // "updated" | "cancelled"
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -62,6 +76,9 @@ const TYPE_LABELS: Record<string, string> = {
   class: "Clase",
   block: "Bloqueo",
 };
+
+const MODAL_MONTHS = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+const MODAL_DAYS   = ["dom","lun","mar","mié","jue","vie","sáb"];
 
 function fmt(t: string) {
   return t.slice(0, 5);
@@ -80,18 +97,97 @@ function groupByDate(reservations: CalendarReservation[]) {
   }, {});
 }
 
+function formatModalDate(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  return `${MODAL_DAYS[dt.getDay()]} ${dt.getDate()} ${MODAL_MONTHS[dt.getMonth()]}`;
+}
+
+// ─── ActionMenu (⋮ dropdown shared by desktop + mobile cards) ─────────────────
+
+function ActionMenu({
+  editHref,
+  onCancel,
+  size = "sm",
+}: {
+  editHref: string;
+  onCancel: () => void;
+  size?: "sm" | "md";
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [open]);
+
+  const btnCls =
+    size === "md"
+      ? "w-7 h-7 flex items-center justify-center rounded-lg text-brand-muted hover:text-white hover:bg-white/10 transition-colors"
+      : "w-5 h-5 flex items-center justify-center rounded text-brand-muted/60 hover:text-white hover:bg-white/10 transition-colors";
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        className={btnCls}
+        aria-label="Opciones"
+      >
+        <MoreVertical className={size === "md" ? "w-4 h-4" : "w-3 h-3"} />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-0.5 bg-[#0e3347] border border-white/20 rounded-xl shadow-xl overflow-hidden min-w-[104px] z-[200]">
+          <Link
+            href={editHref}
+            className="flex items-center gap-2 px-3 py-2.5 text-xs text-white hover:bg-white/5 transition-colors"
+            onClick={() => setOpen(false)}
+          >
+            <Pencil className="w-3 h-3 shrink-0" />
+            Editar
+          </Link>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              onCancel();
+            }}
+            className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-red-400 hover:bg-red-500/10 transition-colors border-t border-white/[0.06]"
+          >
+            <XCircle className="w-3 h-3 shrink-0" />
+            Cancelar
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── ReservationBlock (desktop column card) ───────────────────────────────────
 
 function ReservationBlock({
   r,
   color,
   clubSlug,
+  onCancelClick,
 }: {
   r: CalendarReservation;
   color: CourtColor;
   clubSlug: string;
+  onCancelClick: () => void;
 }) {
-  // Truncate players to keep block compact
   const playerSummary =
     r.players.length === 0
       ? null
@@ -99,28 +195,36 @@ function ReservationBlock({
       ? r.players.join(", ")
       : `${r.players[0]}, +${r.players.length - 1}`;
 
+  const editHref = `/${clubSlug}/admin/reservations/${r.id}`;
+
   return (
-    <Link
-      href={`/${clubSlug}/admin/reservations/${r.id}`}
-      style={{ backgroundColor: color.bg, borderLeftColor: color.accent }}
-      className="block rounded-lg px-2.5 py-2 border-l-[3px] hover:brightness-125 active:brightness-90 transition-all cursor-pointer"
-    >
-      <p className="text-[11px] font-bold leading-tight mb-0.5" style={{ color: color.accent }}>
-        {fmt(r.start_time)}–{endTime(r.start_time, r.duration_minutes)}
-      </p>
-      <p className="text-[11px] font-medium text-white leading-tight truncate">
-        {r.courtName}
-      </p>
-      <p className="text-[10px] text-brand-muted leading-tight truncate">
-        {TYPE_LABELS[r.type] ?? r.type}
-        {r.title ? ` · ${r.title}` : ""}
-      </p>
-      {playerSummary && (
-        <p className="text-[10px] text-brand-muted/60 leading-tight truncate mt-0.5">
-          {playerSummary}
+    <div className="relative">
+      <Link
+        href={editHref}
+        style={{ backgroundColor: color.bg, borderLeftColor: color.accent }}
+        className="block rounded-lg px-2.5 py-2 pr-7 border-l-[3px] hover:brightness-125 active:brightness-90 transition-all cursor-pointer"
+      >
+        <p className="text-[11px] font-bold leading-tight mb-0.5" style={{ color: color.accent }}>
+          {fmt(r.start_time)}–{endTime(r.start_time, r.duration_minutes)}
         </p>
-      )}
-    </Link>
+        <p className="text-[11px] font-medium text-white leading-tight truncate">
+          {r.courtName}
+        </p>
+        <p className="text-[10px] text-brand-muted leading-tight truncate">
+          {TYPE_LABELS[r.type] ?? r.type}
+          {r.title ? ` · ${r.title}` : ""}
+        </p>
+        {playerSummary && (
+          <p className="text-[10px] text-brand-muted/60 leading-tight truncate mt-0.5">
+            {playerSummary}
+          </p>
+        )}
+      </Link>
+
+      <div className="absolute top-1 right-1 z-10">
+        <ActionMenu editHref={editHref} onCancel={onCancelClick} size="sm" />
+      </div>
+    </div>
   );
 }
 
@@ -132,12 +236,14 @@ function DayColumn({
   courtColorMap,
   isToday,
   clubSlug,
+  onCancelClick,
 }: {
   day: WeekDay;
   reservations: CalendarReservation[];
   courtColorMap: Map<string, CourtColor>;
   isToday: boolean;
   clubSlug: string;
+  onCancelClick: (r: CalendarReservation) => void;
 }) {
   const sorted = [...reservations].sort((a, b) =>
     a.start_time.localeCompare(b.start_time)
@@ -182,6 +288,7 @@ function DayColumn({
             r={r}
             color={courtColorMap.get(r.court_id) ?? COURT_PALETTE[0]}
             clubSlug={clubSlug}
+            onCancelClick={() => onCancelClick(r)}
           />
         ))}
       </div>
@@ -205,11 +312,13 @@ function MobileDayList({
   reservations,
   courtColorMap,
   clubSlug,
+  onCancelClick,
 }: {
   day: WeekDay;
   reservations: CalendarReservation[];
   courtColorMap: Map<string, CourtColor>;
   clubSlug: string;
+  onCancelClick: (r: CalendarReservation) => void;
 }) {
   const sorted = [...reservations].sort((a, b) =>
     a.start_time.localeCompare(b.start_time)
@@ -238,30 +347,40 @@ function MobileDayList({
         <div className="flex flex-col gap-2">
           {sorted.map((r) => {
             const color = courtColorMap.get(r.court_id) ?? COURT_PALETTE[0];
+            const editHref = `/${clubSlug}/admin/reservations/${r.id}`;
             return (
-              <Link
-                key={r.id}
-                href={`/${clubSlug}/admin/reservations/${r.id}`}
-                style={{ backgroundColor: color.bg, borderLeftColor: color.accent }}
-                className="block rounded-xl p-4 border-l-[3px]"
-              >
-                <p className="text-sm font-bold mb-1" style={{ color: color.accent }}>
-                  {fmt(r.start_time)} – {endTime(r.start_time, r.duration_minutes)}
-                  <span className="text-xs font-normal text-brand-muted ml-2">
-                    {r.duration_minutes} min
-                  </span>
-                </p>
-                <p className="text-sm font-semibold text-white">{r.courtName}</p>
-                <p className="text-xs text-brand-muted mt-0.5">
-                  {TYPE_LABELS[r.type] ?? r.type}
-                  {r.title ? ` · ${r.title}` : ""}
-                </p>
-                {r.players.length > 0 && (
-                  <p className="text-xs text-brand-muted/70 mt-1 truncate">
-                    {r.players.join(", ")}
+              <div key={r.id} className="relative">
+                <Link
+                  href={editHref}
+                  style={{ backgroundColor: color.bg, borderLeftColor: color.accent }}
+                  className="block rounded-xl p-4 pr-12 border-l-[3px]"
+                >
+                  <p className="text-sm font-bold mb-1" style={{ color: color.accent }}>
+                    {fmt(r.start_time)} – {endTime(r.start_time, r.duration_minutes)}
+                    <span className="text-xs font-normal text-brand-muted ml-2">
+                      {r.duration_minutes} min
+                    </span>
                   </p>
-                )}
-              </Link>
+                  <p className="text-sm font-semibold text-white">{r.courtName}</p>
+                  <p className="text-xs text-brand-muted mt-0.5">
+                    {TYPE_LABELS[r.type] ?? r.type}
+                    {r.title ? ` · ${r.title}` : ""}
+                  </p>
+                  {r.players.length > 0 && (
+                    <p className="text-xs text-brand-muted/70 mt-1 truncate">
+                      {r.players.join(", ")}
+                    </p>
+                  )}
+                </Link>
+
+                <div className="absolute top-3 right-3 z-10">
+                  <ActionMenu
+                    editHref={editHref}
+                    onCancel={() => onCancelClick(r)}
+                    size="md"
+                  />
+                </div>
+              </div>
             );
           })}
         </div>
@@ -281,10 +400,34 @@ export function WeekCalendar({
   nextWeekHref,
   todayStr,
   clubSlug,
+  clubId,
+  successMessage,
 }: WeekCalendarProps) {
+  const router = useRouter();
+
   // Mobile: track selected day (default = today if in this week, else Mon)
   const todayIdx = weekDays.findIndex((d) => d.date === todayStr);
   const [selectedDayIdx, setSelectedDayIdx] = useState(todayIdx >= 0 ? todayIdx : 0);
+
+  // Success banner
+  const [showBanner, setShowBanner] = useState(!!successMessage);
+
+  // Cancel modal
+  const [cancelTarget, setCancelTarget] = useState<CalendarReservation | null>(null);
+  const [cancelPending, startCancelTransition] = useTransition();
+
+  // Auto-dismiss banner + clean URL
+  useEffect(() => {
+    if (!successMessage) return;
+    const timer = setTimeout(() => setShowBanner(false), 4000);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("updated");
+    url.searchParams.delete("cancelled");
+    const clean = url.pathname + (url.searchParams.size > 0 ? `?${url.searchParams}` : "");
+    router.replace(clean, { scroll: false });
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Build court color map
   const courtColorMap = new Map<string, CourtColor>();
@@ -295,8 +438,40 @@ export function WeekCalendar({
   const byDate = groupByDate(reservations);
   const totalCount = reservations.length;
 
+  function handleCancelClick(r: CalendarReservation) {
+    setCancelTarget(r);
+  }
+
+  function handleConfirmCancel() {
+    if (!cancelTarget) return;
+    const target = cancelTarget;
+    startCancelTransition(async () => {
+      await cancelReservation(clubId, clubSlug, target.id);
+    });
+  }
+
   return (
     <div>
+      {/* ─── Success banner ──────────────────────────────────────────────── */}
+      {showBanner && successMessage && (
+        <div className="mb-5 flex items-center gap-3 px-4 py-3 rounded-xl bg-green-500/10 border border-green-500/20 text-sm text-green-400">
+          <Check className="w-4 h-4 shrink-0" />
+          <span>
+            {successMessage === "updated"
+              ? "Reserva actualizada correctamente."
+              : "Reserva cancelada correctamente."}
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowBanner(false)}
+            className="ml-auto text-green-400/50 hover:text-green-400 transition-colors"
+            aria-label="Cerrar"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* ─── Top bar ─────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
         {/* Week navigation */}
@@ -378,6 +553,7 @@ export function WeekCalendar({
                 courtColorMap={courtColorMap}
                 isToday={day.date === todayStr}
                 clubSlug={clubSlug}
+                onCancelClick={handleCancelClick}
               />
             ))}
           </div>
@@ -446,8 +622,49 @@ export function WeekCalendar({
           reservations={byDate[weekDays[selectedDayIdx]?.date ?? ""] ?? []}
           courtColorMap={courtColorMap}
           clubSlug={clubSlug}
+          onCancelClick={handleCancelClick}
         />
       </div>
+
+      {/* ─── Cancel confirmation modal ───────────────────────────────────── */}
+      {cancelTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)" }}
+        >
+          <div className="bg-[#082735] border border-white/15 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <h2 className="text-base font-bold text-white mb-1">¿Cancelar esta reserva?</h2>
+            <p className="text-sm font-medium text-brand-muted mb-0.5">
+              {cancelTarget.courtName}
+              {" · "}
+              {formatModalDate(cancelTarget.date)}
+              {" · "}
+              {fmt(cancelTarget.start_time)}
+            </p>
+            <p className="text-xs text-brand-muted/60 mb-6">
+              Esta acción liberará el horario de la cancha.
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setCancelTarget(null)}
+                disabled={cancelPending}
+                className="flex-1 h-10 rounded-xl border border-white/15 text-sm text-brand-muted hover:text-white hover:border-white/30 transition-colors disabled:opacity-40"
+              >
+                Volver
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCancel}
+                disabled={cancelPending}
+                className="flex-1 h-10 rounded-xl border border-red-500/30 bg-red-500/10 text-sm font-medium text-red-400 hover:bg-red-500/20 hover:border-red-500/50 transition-colors disabled:opacity-40"
+              >
+                {cancelPending ? "Cancelando…" : "Confirmar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
