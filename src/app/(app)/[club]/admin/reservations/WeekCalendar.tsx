@@ -67,6 +67,7 @@ interface WeekCalendarProps {
   clubSlug: string;
   clubId: string;
   successMessage?: string; // "updated" | "cancelled"
+  closedDays?: number[];  // day_of_week values (0=Sun…6=Sat) that are closed
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -101,6 +102,11 @@ function formatModalDate(dateStr: string): string {
   const [y, m, d] = dateStr.split("-").map(Number);
   const dt = new Date(y, m - 1, d);
   return `${MODAL_DAYS[dt.getDay()]} ${dt.getDate()} ${MODAL_MONTHS[dt.getMonth()]}`;
+}
+
+function getDayOfWeek(dateStr: string): number {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d).getDay();
 }
 
 // ─── ActionMenu (⋮ dropdown shared by desktop + mobile cards) ─────────────────
@@ -235,6 +241,7 @@ function DayColumn({
   reservations,
   courtColorMap,
   isToday,
+  isClosed,
   clubSlug,
   onCancelClick,
 }: {
@@ -242,6 +249,7 @@ function DayColumn({
   reservations: CalendarReservation[];
   courtColorMap: Map<string, CourtColor>;
   isToday: boolean;
+  isClosed: boolean;
   clubSlug: string;
   onCancelClick: (r: CalendarReservation) => void;
 }) {
@@ -293,14 +301,20 @@ function DayColumn({
         ))}
       </div>
 
-      {/* Quick-create button */}
-      <Link
-        href={`/${clubSlug}/admin/reservations/new?date=${day.date}`}
-        className="mt-2 flex items-center justify-center gap-1 h-7 rounded-lg border border-dashed border-white/10 text-[10px] font-medium text-brand-muted/40 hover:text-brand-muted hover:border-white/25 transition-colors"
-      >
-        <Plus className="w-3 h-3" />
-        Reserva
-      </Link>
+      {/* Quick-create button or closed indicator */}
+      {isClosed ? (
+        <div className="mt-2 flex items-center justify-center h-7">
+          <span className="text-[10px] font-medium text-brand-muted/30">Cerrado</span>
+        </div>
+      ) : (
+        <Link
+          href={`/${clubSlug}/admin/reservations/new?date=${day.date}`}
+          className="mt-2 flex items-center justify-center gap-1 h-7 rounded-lg border border-dashed border-white/10 text-[10px] font-medium text-brand-muted/40 hover:text-brand-muted hover:border-white/25 transition-colors"
+        >
+          <Plus className="w-3 h-3" />
+          Reserva
+        </Link>
+      )}
     </div>
   );
 }
@@ -311,12 +325,14 @@ function MobileDayList({
   day,
   reservations,
   courtColorMap,
+  isClosed,
   clubSlug,
   onCancelClick,
 }: {
   day: WeekDay;
   reservations: CalendarReservation[];
   courtColorMap: Map<string, CourtColor>;
+  isClosed: boolean;
   clubSlug: string;
   onCancelClick: (r: CalendarReservation) => void;
 }) {
@@ -330,18 +346,24 @@ function MobileDayList({
         <h2 className="text-sm font-semibold text-white capitalize">
           {day.dayName} {day.dayNum} {day.monthName}
         </h2>
-        <Link
-          href={`/${clubSlug}/admin/reservations/new?date=${day.date}`}
-          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-white/20 text-xs font-medium text-white hover:border-white/40 transition-colors"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Reserva
-        </Link>
+        {isClosed ? (
+          <span className="text-xs font-medium text-brand-muted/40">Club cerrado</span>
+        ) : (
+          <Link
+            href={`/${clubSlug}/admin/reservations/new?date=${day.date}`}
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-white/20 text-xs font-medium text-white hover:border-white/40 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Reserva
+          </Link>
+        )}
       </div>
 
       {sorted.length === 0 ? (
         <div className="py-10 text-center">
-          <p className="text-sm text-brand-muted">Sin reservas este día</p>
+          <p className="text-sm text-brand-muted">
+          {isClosed ? "Club cerrado este día" : "Sin reservas este día"}
+        </p>
         </div>
       ) : (
         <div className="flex flex-col gap-2">
@@ -402,6 +424,7 @@ export function WeekCalendar({
   clubSlug,
   clubId,
   successMessage,
+  closedDays,
 }: WeekCalendarProps) {
   const router = useRouter();
 
@@ -435,6 +458,7 @@ export function WeekCalendar({
     courtColorMap.set(c.id, COURT_PALETTE[c.colorIndex % COURT_PALETTE.length]);
   });
 
+  const closedDaySet = new Set(closedDays ?? []);
   const byDate = groupByDate(reservations);
   const totalCount = reservations.length;
 
@@ -552,6 +576,7 @@ export function WeekCalendar({
                 reservations={byDate[day.date] ?? []}
                 courtColorMap={courtColorMap}
                 isToday={day.date === todayStr}
+                isClosed={closedDaySet.has(getDayOfWeek(day.date))}
                 clubSlug={clubSlug}
                 onCancelClick={handleCancelClick}
               />
@@ -571,6 +596,7 @@ export function WeekCalendar({
             const isSelected = idx === selectedDayIdx;
             const isToday = day.date === todayStr;
             const hasReservations = (byDate[day.date]?.length ?? 0) > 0;
+            const isClosedDay = closedDaySet.has(getDayOfWeek(day.date));
 
             return (
               <button
@@ -581,7 +607,7 @@ export function WeekCalendar({
                   isSelected
                     ? "bg-brand-primary/12 border-brand-primary/30"
                     : "border-transparent hover:border-white/10"
-                }`}
+                } ${isClosedDay && !isSelected ? "opacity-40" : ""}`}
               >
                 <span
                   className={`text-[10px] font-semibold uppercase tracking-wide ${
@@ -621,6 +647,7 @@ export function WeekCalendar({
           day={weekDays[selectedDayIdx]}
           reservations={byDate[weekDays[selectedDayIdx]?.date ?? ""] ?? []}
           courtColorMap={courtColorMap}
+          isClosed={closedDaySet.has(getDayOfWeek(weekDays[selectedDayIdx]?.date ?? "1970-01-01"))}
           clubSlug={clubSlug}
           onCancelClick={handleCancelClick}
         />

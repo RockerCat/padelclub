@@ -179,12 +179,10 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
   const sundayStr     = toDateStr(addDays(weekMonday, 6));
   const thirtyDaysAgo = toDateStr(addDays(today, -30));
 
-  // Previous week: compare same number of days elapsed (Mon-today vs Mon-sameday last week)
-  const msPerDay           = 24 * 60 * 60 * 1000;
-  const daysElapsed        = Math.round((today.getTime() - weekMonday.getTime()) / msPerDay);
-  const prevWeekMonday     = addDays(weekMonday, -7);
-  const prevWeekMondayStr  = toDateStr(prevWeekMonday);
-  const prevWeekSameDayStr = toDateStr(addDays(prevWeekMonday, daysElapsed));
+  // Previous week: full Mon–Sun (mirrors the current week Mon–Sun range)
+  const prevWeekMonday    = addDays(weekMonday, -7);
+  const prevWeekMondayStr = toDateStr(prevWeekMonday);
+  const prevWeekSundayStr = toDateStr(addDays(prevWeekMonday, 6));
 
   // ─── Round 1: all independent fetches in parallel ────────────────────────────
   const [
@@ -244,14 +242,14 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
       .order("created_at", { ascending: false })
       .limit(10),
 
-    // Week comparison — confirmed count in prev week (same days elapsed for fair comparison)
+    // Week comparison — confirmed count in prev full week (Mon–Sun, mirrors current week)
     supabase
       .from("reservations")
       .select("id", { count: "exact", head: true })
       .eq("club_id", club.id)
       .eq("status", "confirmed")
       .gte("date", prevWeekMondayStr)
-      .lte("date", prevWeekSameDayStr),
+      .lte("date", prevWeekSundayStr),
   ]);
 
   const weekCount     = weekCountRes.count ?? 0;

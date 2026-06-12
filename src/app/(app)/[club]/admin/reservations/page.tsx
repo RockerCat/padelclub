@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { WeekCalendar } from "./WeekCalendar";
 import type { CalendarReservation, CalendarCourt, WeekDay } from "./WeekCalendar";
+import { DEFAULT_OPERATING_HOURS } from "@/lib/operatingHours";
 
 interface AdminReservationsPageProps {
   params: Promise<{ club: string }>;
@@ -86,7 +87,7 @@ export default async function AdminReservationsPage({
     reservation_players: Array<{ profiles: { full_name: string | null } | null }>;
   };
 
-  const [courtsRes, reservationsRes] = await Promise.all([
+  const [courtsRes, reservationsRes, operatingHoursRes] = await Promise.all([
     supabase
       .from("courts")
       .select("id, name, sort_order")
@@ -104,10 +105,23 @@ export default async function AdminReservationsPage({
       .eq("status", "confirmed")
       .gte("date", mondayStr)
       .lte("date", sundayStr),
+    supabase
+      .from("club_operating_hours")
+      .select("day_of_week, is_open")
+      .eq("club_id", club.id),
   ]);
 
   const rawCourts = courtsRes.data ?? [];
   const rawRows = (reservationsRes.data ?? []) as unknown as RawRow[];
+
+  // Compute closed days from effective operating hours (DB overrides defaults)
+  const dbHours = operatingHoursRes.data ?? [];
+  const closedDays = DEFAULT_OPERATING_HOURS.map((def) => {
+    const found = dbHours.find((h) => h.day_of_week === def.day_of_week);
+    return found ?? def;
+  })
+    .filter((h) => !h.is_open)
+    .map((h) => h.day_of_week);
 
   // ─── Transform to calendar types ─────────────────────────────────────────────
   const courts: CalendarCourt[] = rawCourts.map((c, i) => ({
@@ -159,6 +173,7 @@ export default async function AdminReservationsPage({
         clubSlug={slug}
         clubId={club.id}
         successMessage={successMessage}
+        closedDays={closedDays}
       />
     </div>
   );
