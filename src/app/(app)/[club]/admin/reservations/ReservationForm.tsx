@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui";
 import type { ReservationFormState } from "./actions";
@@ -27,6 +27,9 @@ interface ReservationFormProps {
   initialValues?: InitialValues;
   submitLabel?: string;
   cancelHref: string;
+  onSuccess?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
+  inModal?: boolean;
 }
 
 const inputClass =
@@ -58,10 +61,24 @@ export function ReservationForm({
   initialValues,
   submitLabel = "Crear reserva",
   cancelHref,
+  onSuccess,
+  onDirtyChange,
+  inModal,
 }: ReservationFormProps) {
   const [state, formAction, pending] = useActionState(action, {});
 
+  useEffect(() => {
+    if (state?.success) onSuccess?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state?.success]);
+
   // ─── Controlled field state ── all values live here, never in DOM ───────────
+  // Compute local today (uses local time, not UTC) for min-date constraint
+  const localToday = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
+
   const [courtId, setCourtId] = useState(initialValues?.court_id ?? "");
   const [date, setDate] = useState(initialValues?.date ?? defaultDate);
   const [startTime, setStartTime] = useState(
@@ -77,7 +94,10 @@ export function ReservationForm({
     () => new Set(initialValues?.player_ids ?? [])
   );
 
+  function markDirty() { onDirtyChange?.(true); }
+
   function togglePlayer(id: string) {
+    markDirty();
     setCheckedPlayers((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -95,7 +115,7 @@ export function ReservationForm({
           name="court_id"
           required
           value={courtId}
-          onChange={(e) => setCourtId(e.target.value)}
+          onChange={(e) => { setCourtId(e.target.value); markDirty(); }}
           className={selectClass}
         >
           <option value="" disabled>
@@ -117,8 +137,9 @@ export function ReservationForm({
             type="date"
             name="date"
             required
+            min={localToday}
             value={date}
-            onChange={(e) => setDate(e.target.value)}
+            onChange={(e) => { setDate(e.target.value); markDirty(); }}
             className={inputClass}
           />
         </div>
@@ -129,8 +150,12 @@ export function ReservationForm({
             name="start_time"
             required
             step={900}
+            min={date === localToday ? (() => {
+              const n = new Date();
+              return `${String(n.getHours()).padStart(2, "0")}:${String(n.getMinutes()).padStart(2, "0")}`;
+            })() : undefined}
             value={startTime}
-            onChange={(e) => setStartTime(e.target.value)}
+            onChange={(e) => { setStartTime(e.target.value); markDirty(); }}
             className={inputClass}
           />
         </div>
@@ -144,7 +169,7 @@ export function ReservationForm({
             name="duration_minutes"
             required
             value={duration}
-            onChange={(e) => setDuration(e.target.value)}
+            onChange={(e) => { setDuration(e.target.value); markDirty(); }}
             className={selectClass}
           >
             {DURATION_OPTIONS.map((o) => (
@@ -160,7 +185,7 @@ export function ReservationForm({
             name="type"
             required
             value={type}
-            onChange={(e) => setType(e.target.value)}
+            onChange={(e) => { setType(e.target.value); markDirty(); }}
             className={selectClass}
           >
             {TYPE_OPTIONS.map((o) => (
@@ -185,7 +210,7 @@ export function ReservationForm({
           name="title"
           required={type === "block"}
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          onChange={(e) => { setTitle(e.target.value); markDirty(); }}
           placeholder={type === "block" ? "Ej: Mantenimiento" : "Ej: Liga de verano"}
           className={inputClass}
         />
@@ -200,7 +225,7 @@ export function ReservationForm({
           name="notes"
           rows={2}
           value={notes}
-          onChange={(e) => setNotes(e.target.value)}
+          onChange={(e) => { setNotes(e.target.value); markDirty(); }}
           placeholder="Información adicional..."
           className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-brand-muted/60 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20 resize-none"
         />
@@ -245,12 +270,14 @@ export function ReservationForm({
         <Button type="submit" loading={pending} className="flex-1">
           {pending ? "Guardando..." : submitLabel}
         </Button>
-        <Link
-          href={cancelHref}
-          className="h-10 px-5 rounded-xl border border-white/20 text-sm font-medium text-brand-muted hover:text-white hover:border-white/40 transition-colors flex items-center"
-        >
-          Cancelar
-        </Link>
+        {!inModal && (
+          <Link
+            href={cancelHref}
+            className="h-10 px-5 rounded-xl border border-white/20 text-sm font-medium text-brand-muted hover:text-white hover:border-white/40 transition-colors flex items-center"
+          >
+            Cancelar
+          </Link>
+        )}
       </div>
     </form>
   );

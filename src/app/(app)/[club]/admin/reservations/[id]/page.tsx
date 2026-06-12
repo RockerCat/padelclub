@@ -104,7 +104,7 @@ export default async function EditReservationPage({
   }));
 
   const today = new Date().toISOString().split("T")[0];
-  const updateAction = updateReservation.bind(null, club.id, club.slug, reservationId);
+  const updateAction = updateReservation.bind(null, club.id, club.slug, reservationId, false);
   const cancelAction = cancelReservation.bind(null, club.id, club.slug, reservationId);
 
   const existingPlayers = reservation.reservation_players.map((rp) => rp.profile_id);

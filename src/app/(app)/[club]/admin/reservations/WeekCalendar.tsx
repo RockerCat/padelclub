@@ -15,6 +15,8 @@ import {
   X,
 } from "lucide-react";
 import { cancelReservation } from "./actions";
+import { ReservationModal } from "./ReservationModal";
+import type { ModalState } from "./ReservationModal";
 
 // ─── Court color palette (dark-theme safe) ────────────────────────────────────
 
@@ -61,13 +63,14 @@ interface WeekCalendarProps {
   weekLabel: string;
   reservations: CalendarReservation[];
   courts: CalendarCourt[];
+  members: Array<{ profile_id: string; full_name: string | null }>;
   prevWeekHref: string;
   nextWeekHref: string;
   todayStr: string;
   clubSlug: string;
   clubId: string;
   successMessage?: string; // "updated" | "cancelled"
-  closedDays?: number[];  // day_of_week values (0=Sun…6=Sat) that are closed
+  closedDays?: number[];   // day_of_week values (0=Sun…6=Sat) that are closed
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -112,11 +115,11 @@ function getDayOfWeek(dateStr: string): number {
 // ─── ActionMenu (⋮ dropdown shared by desktop + mobile cards) ─────────────────
 
 function ActionMenu({
-  editHref,
+  onEditClick,
   onCancel,
   size = "sm",
 }: {
-  editHref: string;
+  onEditClick: () => void;
   onCancel: () => void;
   size?: "sm" | "md";
 }) {
@@ -156,14 +159,18 @@ function ActionMenu({
 
       {open && (
         <div className="absolute right-0 top-full mt-0.5 bg-[#0e3347] border border-white/20 rounded-xl shadow-xl overflow-hidden min-w-[104px] z-[200]">
-          <Link
-            href={editHref}
-            className="flex items-center gap-2 px-3 py-2.5 text-xs text-white hover:bg-white/5 transition-colors"
-            onClick={() => setOpen(false)}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(false);
+              onEditClick();
+            }}
+            className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-white hover:bg-white/5 transition-colors"
           >
             <Pencil className="w-3 h-3 shrink-0" />
             Editar
-          </Link>
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -186,12 +193,12 @@ function ActionMenu({
 function ReservationBlock({
   r,
   color,
-  clubSlug,
+  onEditClick,
   onCancelClick,
 }: {
   r: CalendarReservation;
   color: CourtColor;
-  clubSlug: string;
+  onEditClick: () => void;
   onCancelClick: () => void;
 }) {
   const playerSummary =
@@ -201,14 +208,13 @@ function ReservationBlock({
       ? r.players.join(", ")
       : `${r.players[0]}, +${r.players.length - 1}`;
 
-  const editHref = `/${clubSlug}/admin/reservations/${r.id}`;
-
   return (
     <div className="relative">
-      <Link
-        href={editHref}
+      <button
+        type="button"
+        onClick={onEditClick}
         style={{ backgroundColor: color.bg, borderLeftColor: color.accent }}
-        className="block rounded-lg px-2.5 py-2 pr-7 border-l-[3px] hover:brightness-125 active:brightness-90 transition-all cursor-pointer"
+        className="w-full text-left rounded-lg px-2.5 py-2 pr-7 border-l-[3px] hover:brightness-125 active:brightness-90 transition-all cursor-pointer"
       >
         <p className="text-[11px] font-bold leading-tight mb-0.5" style={{ color: color.accent }}>
           {fmt(r.start_time)}–{endTime(r.start_time, r.duration_minutes)}
@@ -225,10 +231,10 @@ function ReservationBlock({
             {playerSummary}
           </p>
         )}
-      </Link>
+      </button>
 
       <div className="absolute top-1 right-1 z-10">
-        <ActionMenu editHref={editHref} onCancel={onCancelClick} size="sm" />
+        <ActionMenu onEditClick={onEditClick} onCancel={onCancelClick} size="sm" />
       </div>
     </div>
   );
@@ -241,17 +247,21 @@ function DayColumn({
   reservations,
   courtColorMap,
   isToday,
+  isPast,
   isClosed,
-  clubSlug,
+  onEditClick,
   onCancelClick,
+  onNewClick,
 }: {
   day: WeekDay;
   reservations: CalendarReservation[];
   courtColorMap: Map<string, CourtColor>;
   isToday: boolean;
+  isPast: boolean;
   isClosed: boolean;
-  clubSlug: string;
+  onEditClick: (r: CalendarReservation) => void;
   onCancelClick: (r: CalendarReservation) => void;
+  onNewClick: (date: string) => void;
 }) {
   const sorted = [...reservations].sort((a, b) =>
     a.start_time.localeCompare(b.start_time)
@@ -261,59 +271,69 @@ function DayColumn({
     <div className="flex flex-col">
       {/* Day header */}
       <div
-        className={`rounded-xl text-center py-2.5 px-1 mb-2 ${
-          isToday ? "bg-brand-primary/10" : "bg-white/[0.03]"
+        className={`rounded-xl text-center py-2.5 px-1 mb-2 border ${
+          isToday
+            ? "bg-brand-primary/10 border-brand-primary/30"
+            : isPast
+            ? "bg-white/[0.02] border-transparent"
+            : "bg-white/[0.03] border-transparent"
         }`}
       >
+        {isToday && (
+          <p className="text-[9px] font-bold text-brand-primary uppercase tracking-widest leading-none mb-0.5">
+            Hoy
+          </p>
+        )}
         <p
           className={`text-[10px] font-semibold uppercase tracking-wide ${
-            isToday ? "text-brand-primary" : "text-brand-muted"
+            isToday ? "text-brand-primary" : isPast ? "text-brand-muted/40" : "text-brand-muted"
           }`}
         >
           {day.dayName}
         </p>
         <p
           className={`text-xl font-bold leading-snug ${
-            isToday ? "text-brand-primary" : "text-white"
+            isToday ? "text-brand-primary" : isPast ? "text-white/25" : "text-white"
           }`}
         >
           {day.dayNum}
         </p>
         <p
           className={`text-[10px] ${
-            isToday ? "text-brand-primary/60" : "text-brand-muted/50"
+            isToday ? "text-brand-primary/60" : isPast ? "text-brand-muted/30" : "text-brand-muted/50"
           }`}
         >
           {day.monthName}
         </p>
       </div>
 
-      {/* Reservation cards */}
-      <div className="flex flex-col gap-1.5 flex-1 min-h-[80px]">
+      {/* Reservation cards — dim completed reservations in past days */}
+      <div className={`flex flex-col gap-1.5 flex-1 min-h-[80px] ${isPast ? "opacity-50" : ""}`}>
         {sorted.map((r) => (
           <ReservationBlock
             key={r.id}
             r={r}
             color={courtColorMap.get(r.court_id) ?? COURT_PALETTE[0]}
-            clubSlug={clubSlug}
+            onEditClick={() => onEditClick(r)}
             onCancelClick={() => onCancelClick(r)}
           />
         ))}
       </div>
 
-      {/* Quick-create button or closed indicator */}
+      {/* Quick-create button, closed indicator, or nothing for past days */}
       {isClosed ? (
         <div className="mt-2 flex items-center justify-center h-7">
           <span className="text-[10px] font-medium text-brand-muted/30">Cerrado</span>
         </div>
-      ) : (
-        <Link
-          href={`/${clubSlug}/admin/reservations/new?date=${day.date}`}
+      ) : isPast ? null : (
+        <button
+          type="button"
+          onClick={() => onNewClick(day.date)}
           className="mt-2 flex items-center justify-center gap-1 h-7 rounded-lg border border-dashed border-white/10 text-[10px] font-medium text-brand-muted/40 hover:text-brand-muted hover:border-white/25 transition-colors"
         >
           <Plus className="w-3 h-3" />
           Reserva
-        </Link>
+        </button>
       )}
     </div>
   );
@@ -326,15 +346,19 @@ function MobileDayList({
   reservations,
   courtColorMap,
   isClosed,
-  clubSlug,
+  isPast,
+  onEditClick,
   onCancelClick,
+  onNewClick,
 }: {
   day: WeekDay;
   reservations: CalendarReservation[];
   courtColorMap: Map<string, CourtColor>;
   isClosed: boolean;
-  clubSlug: string;
+  isPast: boolean;
+  onEditClick: (r: CalendarReservation) => void;
   onCancelClick: (r: CalendarReservation) => void;
+  onNewClick: (date: string) => void;
 }) {
   const sorted = [...reservations].sort((a, b) =>
     a.start_time.localeCompare(b.start_time)
@@ -348,34 +372,37 @@ function MobileDayList({
         </h2>
         {isClosed ? (
           <span className="text-xs font-medium text-brand-muted/40">Club cerrado</span>
+        ) : isPast ? (
+          <span className="text-xs font-medium text-brand-muted/40">Pasado</span>
         ) : (
-          <Link
-            href={`/${clubSlug}/admin/reservations/new?date=${day.date}`}
+          <button
+            type="button"
+            onClick={() => onNewClick(day.date)}
             className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-white/20 text-xs font-medium text-white hover:border-white/40 transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
             Reserva
-          </Link>
+          </button>
         )}
       </div>
 
       {sorted.length === 0 ? (
         <div className="py-10 text-center">
           <p className="text-sm text-brand-muted">
-          {isClosed ? "Club cerrado este día" : "Sin reservas este día"}
-        </p>
+            {isClosed ? "Club cerrado este día" : isPast ? "Sin reservas registradas" : "Sin reservas este día"}
+          </p>
         </div>
       ) : (
         <div className="flex flex-col gap-2">
           {sorted.map((r) => {
             const color = courtColorMap.get(r.court_id) ?? COURT_PALETTE[0];
-            const editHref = `/${clubSlug}/admin/reservations/${r.id}`;
             return (
               <div key={r.id} className="relative">
-                <Link
-                  href={editHref}
+                <button
+                  type="button"
+                  onClick={() => onEditClick(r)}
                   style={{ backgroundColor: color.bg, borderLeftColor: color.accent }}
-                  className="block rounded-xl p-4 pr-12 border-l-[3px]"
+                  className="w-full text-left rounded-xl p-4 pr-12 border-l-[3px] hover:brightness-110 transition-all"
                 >
                   <p className="text-sm font-bold mb-1" style={{ color: color.accent }}>
                     {fmt(r.start_time)} – {endTime(r.start_time, r.duration_minutes)}
@@ -393,11 +420,11 @@ function MobileDayList({
                       {r.players.join(", ")}
                     </p>
                   )}
-                </Link>
+                </button>
 
                 <div className="absolute top-3 right-3 z-10">
                   <ActionMenu
-                    editHref={editHref}
+                    onEditClick={() => onEditClick(r)}
                     onCancel={() => onCancelClick(r)}
                     size="md"
                   />
@@ -418,6 +445,7 @@ export function WeekCalendar({
   weekLabel,
   reservations,
   courts,
+  members,
   prevWeekHref,
   nextWeekHref,
   todayStr,
@@ -432,14 +460,18 @@ export function WeekCalendar({
   const todayIdx = weekDays.findIndex((d) => d.date === todayStr);
   const [selectedDayIdx, setSelectedDayIdx] = useState(todayIdx >= 0 ? todayIdx : 0);
 
-  // Success banner
+  // Success banner — from URL param (cancel) or modal success
   const [showBanner, setShowBanner] = useState(!!successMessage);
+  const [modalBannerMsg, setModalBannerMsg] = useState<string | null>(null);
 
-  // Cancel modal
+  // Cancel confirmation modal
   const [cancelTarget, setCancelTarget] = useState<CalendarReservation | null>(null);
   const [cancelPending, startCancelTransition] = useTransition();
 
-  // Auto-dismiss banner + clean URL
+  // Reservation create/edit modal
+  const [modalState, setModalState] = useState<ModalState | null>(null);
+
+  // Auto-dismiss URL-param banner + clean URL
   useEffect(() => {
     if (!successMessage) return;
     const timer = setTimeout(() => setShowBanner(false), 4000);
@@ -462,6 +494,27 @@ export function WeekCalendar({
   const byDate = groupByDate(reservations);
   const totalCount = reservations.length;
 
+  // ─── Modal handlers ─────────────────────────────────────────────────────────
+
+  function openNewModal(date?: string) {
+    setModalState({ mode: "create", initialDate: date });
+  }
+
+  function openEditModal(r: CalendarReservation) {
+    setModalState({ mode: "edit", reservationId: r.id });
+  }
+
+  function handleModalSuccess(mode: "create" | "edit") {
+    setModalState(null);
+    setModalBannerMsg(
+      mode === "create" ? "Reserva creada correctamente." : "Reserva actualizada correctamente."
+    );
+    router.refresh();
+    setTimeout(() => setModalBannerMsg(null), 4000);
+  }
+
+  // ─── Cancel handlers ─────────────────────────────────────────────────────────
+
   function handleCancelClick(r: CalendarReservation) {
     setCancelTarget(r);
   }
@@ -474,20 +527,26 @@ export function WeekCalendar({
     });
   }
 
+  // ─── Render ──────────────────────────────────────────────────────────────────
+
+  // Court list for modal form (CalendarCourt has id + name, that's all we need)
+  const formCourts = courts.map((c) => ({ id: c.id, name: c.name }));
+
   return (
     <div>
-      {/* ─── Success banner ──────────────────────────────────────────────── */}
-      {showBanner && successMessage && (
+      {/* ─── Success banners ─────────────────────────────────────────────── */}
+      {(showBanner || modalBannerMsg) && (
         <div className="mb-5 flex items-center gap-3 px-4 py-3 rounded-xl bg-green-500/10 border border-green-500/20 text-sm text-green-400">
           <Check className="w-4 h-4 shrink-0" />
           <span>
-            {successMessage === "updated"
-              ? "Reserva actualizada correctamente."
-              : "Reserva cancelada correctamente."}
+            {modalBannerMsg ??
+              (successMessage === "updated"
+                ? "Reserva actualizada correctamente."
+                : "Reserva cancelada correctamente.")}
           </span>
           <button
             type="button"
-            onClick={() => setShowBanner(false)}
+            onClick={() => { setShowBanner(false); setModalBannerMsg(null); }}
             className="ml-auto text-green-400/50 hover:text-green-400 transition-colors"
             aria-label="Cerrar"
           >
@@ -526,13 +585,14 @@ export function WeekCalendar({
         </div>
 
         {/* Nueva reserva */}
-        <Link
-          href={`/${clubSlug}/admin/reservations/new`}
+        <button
+          type="button"
+          onClick={() => openNewModal()}
           className="inline-flex items-center gap-2 h-9 px-4 rounded-xl bg-brand-primary text-brand-bg text-sm font-semibold hover:brightness-110 transition-all"
         >
           <Plus className="w-4 h-4" />
           Nueva reserva
-        </Link>
+        </button>
       </div>
 
       {/* ─── Court legend ────────────────────────────────────────────────── */}
@@ -559,12 +619,13 @@ export function WeekCalendar({
           <div className="mb-4 flex items-center justify-center gap-3 py-3 rounded-xl border border-dashed border-white/10 text-sm text-brand-muted">
             <CalendarDays className="w-4 h-4 shrink-0" />
             No hay reservas esta semana —{" "}
-            <Link
-              href={`/${clubSlug}/admin/reservations/new`}
-              className="text-brand-primary hover:underline font-medium"
+            <button
+              type="button"
+              onClick={() => openNewModal()}
+              className="text-brand-primary hover:underline font-medium bg-transparent border-none p-0 cursor-pointer"
             >
               Crear primera reserva
-            </Link>
+            </button>
           </div>
         )}
         <div className="overflow-x-auto">
@@ -576,9 +637,11 @@ export function WeekCalendar({
                 reservations={byDate[day.date] ?? []}
                 courtColorMap={courtColorMap}
                 isToday={day.date === todayStr}
+                isPast={day.date < todayStr}
                 isClosed={closedDaySet.has(getDayOfWeek(day.date))}
-                clubSlug={clubSlug}
+                onEditClick={openEditModal}
                 onCancelClick={handleCancelClick}
+                onNewClick={openNewModal}
               />
             ))}
           </div>
@@ -597,6 +660,7 @@ export function WeekCalendar({
             const isToday = day.date === todayStr;
             const hasReservations = (byDate[day.date]?.length ?? 0) > 0;
             const isClosedDay = closedDaySet.has(getDayOfWeek(day.date));
+            const isPastDay = day.date < todayStr;
 
             return (
               <button
@@ -606,8 +670,10 @@ export function WeekCalendar({
                 className={`flex flex-col items-center shrink-0 w-12 py-2 rounded-xl border transition-colors ${
                   isSelected
                     ? "bg-brand-primary/12 border-brand-primary/30"
+                    : isToday
+                    ? "border-brand-primary/20"
                     : "border-transparent hover:border-white/10"
-                } ${isClosedDay && !isSelected ? "opacity-40" : ""}`}
+                } ${(isClosedDay || isPastDay) && !isSelected ? "opacity-40" : ""}`}
               >
                 <span
                   className={`text-[10px] font-semibold uppercase tracking-wide ${
@@ -648,15 +714,17 @@ export function WeekCalendar({
           reservations={byDate[weekDays[selectedDayIdx]?.date ?? ""] ?? []}
           courtColorMap={courtColorMap}
           isClosed={closedDaySet.has(getDayOfWeek(weekDays[selectedDayIdx]?.date ?? "1970-01-01"))}
-          clubSlug={clubSlug}
+          isPast={(weekDays[selectedDayIdx]?.date ?? "") < todayStr}
+          onEditClick={openEditModal}
           onCancelClick={handleCancelClick}
+          onNewClick={openNewModal}
         />
       </div>
 
       {/* ─── Cancel confirmation modal ───────────────────────────────────── */}
       {cancelTarget && (
         <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+          className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center p-4"
           style={{ backgroundColor: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)" }}
         >
           <div className="bg-[#082735] border border-white/15 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
@@ -692,6 +760,17 @@ export function WeekCalendar({
           </div>
         </div>
       )}
+
+      {/* ─── Reservation create/edit modal ───────────────────────────────── */}
+      <ReservationModal
+        modalState={modalState}
+        clubId={clubId}
+        clubSlug={clubSlug}
+        courts={formCourts}
+        members={members}
+        onClose={() => setModalState(null)}
+        onSuccess={handleModalSuccess}
+      />
     </div>
   );
 }

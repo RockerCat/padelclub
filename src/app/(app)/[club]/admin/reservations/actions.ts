@@ -10,6 +10,7 @@ import {
 
 export type ReservationFormState = {
   error?: string;
+  success?: boolean;
 };
 
 const isDev = process.env.NODE_ENV === "development";
@@ -154,11 +155,22 @@ function validate(
   return null;
 }
 
+// Construct a local datetime from YYYY-MM-DD + HH:MM[:SS] and compare to now.
+// ISO 8601 without timezone offset is treated as local time in V8 (Node.js ≥ ES2015).
+function checkNotInPast(date: string, startTime: string): string | null {
+  const startDatetime = new Date(`${date}T${startTime.slice(0, 5)}`);
+  if (startDatetime.getTime() < Date.now()) {
+    return "La reserva no puede estar en el pasado.";
+  }
+  return null;
+}
+
 // ─── createReservation ────────────────────────────────────────────────────────
 
 export async function createReservation(
   clubId: string,
   clubSlug: string,
+  noRedirect: boolean,
   _prevState: ReservationFormState,
   formData: FormData
 ): Promise<ReservationFormState> {
@@ -184,6 +196,9 @@ export async function createReservation(
     console.log("[createReservation] validation failed:", validationError);
     return { error: validationError };
   }
+
+  const pastError = checkNotInPast(date, startTime);
+  if (pastError) return { error: pastError };
 
   // Verify court belongs to this club and is active
   const { data: court, error: courtError } = await supabase
@@ -267,6 +282,7 @@ export async function createReservation(
   }
 
   console.log("[createReservation] success — reservationId:", reservation.id);
+  if (noRedirect) return { success: true };
   redirect(`/${clubSlug}/admin/reservations`);
 }
 
@@ -276,6 +292,7 @@ export async function updateReservation(
   clubId: string,
   clubSlug: string,
   reservationId: string,
+  noRedirect: boolean,
   _prevState: ReservationFormState,
   formData: FormData
 ): Promise<ReservationFormState> {
@@ -300,6 +317,9 @@ export async function updateReservation(
 
   const validationError = validate(courtId, date, startTime, durationMinutes, type, title);
   if (validationError) return { error: validationError };
+
+  const pastError = checkNotInPast(date, startTime);
+  if (pastError) return { error: pastError };
 
   const { data: court, error: courtError } = await supabase
     .from("courts")
@@ -346,7 +366,53 @@ export async function updateReservation(
     if (playersError) console.error("[updateReservation] players insert failed:", playersError);
   }
 
+  if (noRedirect) return { success: true };
   redirect(`/${clubSlug}/admin/reservations?updated=1`);
+}
+
+// ─── getReservationForEdit ────────────────────────────────────────────────────
+
+export type ReservationEditData = {
+  court_id: string;
+  date: string;
+  start_time: string;
+  duration_minutes: number;
+  type: string;
+  title: string | null;
+  notes: string | null;
+  player_ids: string[];
+};
+
+export async function getReservationForEdit(
+  clubId: string,
+  reservationId: string
+): Promise<ReservationEditData | null> {
+  const { supabase, error: authError } = await requireAdminRole(clubId);
+  if (authError || !supabase) return null;
+
+  const { data } = await supabase
+    .from("reservations")
+    .select(
+      "court_id, date, start_time, duration_minutes, type, title, notes, status, reservation_players(profile_id)"
+    )
+    .eq("id", reservationId)
+    .eq("club_id", clubId)
+    .single();
+
+  if (!data || data.status === "cancelled") return null;
+
+  return {
+    court_id: data.court_id,
+    date: data.date,
+    start_time: data.start_time,
+    duration_minutes: data.duration_minutes,
+    type: data.type,
+    title: data.title ?? null,
+    notes: data.notes ?? null,
+    player_ids: (data.reservation_players as unknown as Array<{ profile_id: string }>).map(
+      (rp) => rp.profile_id
+    ),
+  };
 }
 
 // ─── cancelReservation ────────────────────────────────────────────────────────

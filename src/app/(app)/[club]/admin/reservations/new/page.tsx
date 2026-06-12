@@ -66,7 +66,7 @@ export default async function NewReservationPage({
 
   const today = new Date().toISOString().split("T")[0];
   const defaultDate = prefilledDate ?? today;
-  const action = createReservation.bind(null, club.id, club.slug);
+  const action = createReservation.bind(null, club.id, club.slug, false);
 
   return (
     <div className="p-6 md:p-10">

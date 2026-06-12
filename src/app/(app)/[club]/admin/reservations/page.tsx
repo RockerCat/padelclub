@@ -87,7 +87,7 @@ export default async function AdminReservationsPage({
     reservation_players: Array<{ profiles: { full_name: string | null } | null }>;
   };
 
-  const [courtsRes, reservationsRes, operatingHoursRes] = await Promise.all([
+  const [courtsRes, reservationsRes, operatingHoursRes, membersRes] = await Promise.all([
     supabase
       .from("courts")
       .select("id, name, sort_order")
@@ -109,10 +109,19 @@ export default async function AdminReservationsPage({
       .from("club_operating_hours")
       .select("day_of_week, is_open")
       .eq("club_id", club.id),
+    supabase
+      .from("club_members")
+      .select("profile_id, profiles!inner(full_name)")
+      .eq("club_id", club.id)
+      .eq("is_active", true),
   ]);
 
   const rawCourts = courtsRes.data ?? [];
   const rawRows = (reservationsRes.data ?? []) as unknown as RawRow[];
+  const members = (membersRes.data ?? []).map((m) => ({
+    profile_id: m.profile_id,
+    full_name: (m.profiles as { full_name: string | null } | null)?.full_name ?? null,
+  }));
 
   // Compute closed days from effective operating hours (DB overrides defaults)
   const dbHours = operatingHoursRes.data ?? [];
@@ -167,6 +176,7 @@ export default async function AdminReservationsPage({
         weekLabel={weekLabel}
         reservations={reservations}
         courts={courts}
+        members={members}
         prevWeekHref={`/${slug}/admin/reservations?week=${toDateStr(addDays(weekMonday, -7))}`}
         nextWeekHref={`/${slug}/admin/reservations?week=${toDateStr(addDays(weekMonday, 7))}`}
         todayStr={todayStr}
