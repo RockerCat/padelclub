@@ -134,3 +134,189 @@ Owners should always know:
 Visibility drives adoption.
 
 The platform should help owners understand what is happening inside their club without depending on verbal updates from administrators.
+
+## Product Scope Prioritization
+
+The current MVP focuses on operational workflows.
+
+Highest priority:
+
+1. Reservations
+2. Courts
+3. Players
+4. Club administration
+5. Operational analytics
+
+Features such as:
+
+- Tournaments
+- Rankings
+- Ladders
+- Community
+- Payments
+- Mobile applications
+
+should not be prioritized over operational workflows unless explicitly requested.
+
+When there is uncertainty:
+
+**Prioritize reservations and owner value.**
+
+---
+
+## Multi-Tenant Principles
+
+PadelClub is a multi-tenant platform.
+
+Every feature must respect club boundaries.
+
+All data must be scoped to a club.
+
+Users may belong to multiple clubs simultaneously.
+
+Users may have different roles in different clubs.
+
+Avoid assumptions that a user belongs to only one club.
+
+Always evaluate new features from a multi-club perspective.
+
+Club isolation is a core platform requirement.
+
+---
+
+## Role Philosophy
+
+### OWNER
+
+The owner is the primary customer.
+
+Owners care about:
+
+- Occupancy
+- Visibility
+- Revenue opportunities
+- Administrative efficiency
+- Club growth
+
+When prioritizing functionality:
+
+**Owner value takes precedence.**
+
+### ADMIN
+
+Administrators focus on daily operations.
+
+Their primary workflows include:
+
+- Reservation management
+- Court management
+- Player administration
+
+Administrators are operators, not business owners.
+
+Do not assume administrators need access to owner-level insights or configuration.
+
+### PLAYER
+
+Players are secondary users.
+
+Players primarily care about:
+
+- Finding available courts
+- Making reservations
+- Participating in club activities
+
+Players do not need access to most operational information.
+
+Player experiences should focus on action and convenience rather than administration.
+
+---
+
+## Privacy Principles
+
+Players do not need visibility into all club activity.
+
+When designing player-facing experiences:
+
+- Avoid exposing personal information unnecessarily.
+- Avoid exposing reservation details that do not help the player take action.
+- Avoid exposing administrative data.
+- Prefer availability views over administrative views.
+- Show only the information required to complete a workflow.
+
+Reservation visibility should be evaluated carefully.
+
+A player typically wants to know:
+
+- Whether a court is available.
+- Whether a reservation can be requested.
+
+A player usually does not need to know:
+
+- Who is playing.
+- Internal reservation notes.
+- Administrative activity.
+
+---
+
+## Operational UX Principles
+
+PadelClub is operational software.
+
+Operational users repeat the same actions frequently.
+
+Favor:
+
+- Fewer clicks
+- Fewer page transitions
+- Inline workflows
+- Modal workflows
+- Context preservation
+- Fast access to frequent actions
+
+Avoid:
+
+- Placeholder screens
+- Pages with a single action button
+- Navigation that interrupts operational flow
+- Unnecessary confirmation screens
+
+Users should remain in context whenever possible.
+
+The platform should feel efficient during daily repetitive usage.
+
+---
+
+## MVP Decision Framework
+
+When evaluating new features, ask:
+
+1. Does this help club owners operate their club?
+2. Does this reduce manual work?
+3. Does this reduce WhatsApp dependency?
+4. Does this increase court occupancy?
+5. Does this improve operational visibility?
+6. Does this simplify an existing workflow?
+
+If the answer is "no" to most of these questions, reconsider the feature.
+
+Prefer solving real operational problems before adding new feature categories.
+
+---
+
+## Current Product Phase
+
+PadelClub is currently in MVP validation mode.
+
+The current objective is not feature expansion.
+
+The current objective is:
+
+- Validate operational workflows.
+- Remove friction.
+- Improve usability.
+- Verify role permissions.
+- Improve reservation management.
+- Validate real-world club usage.
+
+Before introducing major new modules, ensure the core reservation and club management experience is solid and operationally reliable.

@@ -2,6 +2,9 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { timeToMinutes, type OperatingHour } from "@/lib/operatingHours";
+import { DURATION_CATALOG } from "@/lib/durations";
+
+export type UpdateAllowedDurationsState = { success?: boolean; error?: string };
 
 export type UpdateClubState = {
   success?: boolean;
@@ -112,6 +115,52 @@ export async function updateClub(
 
   if (updateError) {
     return { error: "Error al guardar los cambios. Por favor, intenta de nuevo." };
+  }
+
+  return { success: true };
+}
+
+const VALID_DURATION_MINUTES = DURATION_CATALOG.map((d) => d.minutes) as number[];
+
+export async function updateAllowedDurations(
+  clubId: string,
+  _prevState: UpdateAllowedDurationsState,
+  formData: FormData
+): Promise<UpdateAllowedDurationsState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !user) return { error: "No autenticado." };
+
+  const { data: membership } = await supabase
+    .from("club_members")
+    .select("role")
+    .eq("club_id", clubId)
+    .eq("profile_id", user.id)
+    .eq("is_active", true)
+    .single();
+
+  if (!membership || membership.role !== "OWNER") {
+    return { error: "Solo el propietario puede modificar la configuración." };
+  }
+
+  const raw = formData.getAll("durations").map((v) => parseInt(v as string, 10));
+  const durations = raw.filter((d) => VALID_DURATION_MINUTES.includes(d));
+
+  if (durations.length === 0) {
+    return { error: "Selecciona al menos una duración." };
+  }
+
+  const { error: updateError } = await supabase
+    .from("clubs")
+    .update({ allowed_reservation_durations: durations.sort((a, b) => a - b) })
+    .eq("id", clubId);
+
+  if (updateError) {
+    console.error("[updateAllowedDurations]", updateError);
+    return { error: "Error al guardar. Intenta de nuevo." };
   }
 
   return { success: true };

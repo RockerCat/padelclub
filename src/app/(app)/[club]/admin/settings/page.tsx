@@ -2,8 +2,10 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SettingsForm } from "./SettingsForm";
 import { OperatingHoursForm } from "./OperatingHoursForm";
+import { AllowedDurationsForm } from "./AllowedDurationsForm";
 import type { Club } from "@/types/database";
 import { DEFAULT_OPERATING_HOURS, type OperatingHour } from "@/lib/operatingHours";
+import { getClubDurations } from "@/lib/durations";
 
 interface SettingsPageProps {
   params: Promise<{ club: string }>;
@@ -60,6 +62,8 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     };
   });
 
+  const allowedDurations = getClubDurations((club as Club).allowed_reservation_durations);
+
   return (
     <div className="p-6 md:p-10">
       <div className="mb-8">
@@ -72,6 +76,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
       <div className="flex flex-col gap-6 max-w-2xl">
         <SettingsForm club={club as Club} />
         <OperatingHoursForm clubId={club.id} initialHours={mergedHours} />
+        <AllowedDurationsForm clubId={club.id} initialDurations={allowedDurations} />
       </div>
     </div>
   );

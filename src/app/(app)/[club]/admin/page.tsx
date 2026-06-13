@@ -6,5 +6,5 @@ interface AdminPageProps {
 
 export default async function AdminPage({ params }: AdminPageProps) {
   const { club: slug } = await params;
-  redirect(`/${slug}/admin/settings`);
+  redirect(`/${slug}/admin/reservations`);
 }

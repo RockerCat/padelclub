@@ -69,6 +69,7 @@ interface WeekCalendarProps {
   todayStr: string;
   clubSlug: string;
   clubId: string;
+  allowedDurations: number[];
   successMessage?: string; // "updated" | "cancelled"
   closedDays?: number[];   // day_of_week values (0=Sun…6=Sat) that are closed
 }
@@ -451,6 +452,7 @@ export function WeekCalendar({
   todayStr,
   clubSlug,
   clubId,
+  allowedDurations,
   successMessage,
   closedDays,
 }: WeekCalendarProps) {
@@ -768,6 +770,7 @@ export function WeekCalendar({
         clubSlug={clubSlug}
         courts={formCourts}
         members={members}
+        allowedDurations={allowedDurations}
         onClose={() => setModalState(null)}
         onSuccess={handleModalSuccess}
       />

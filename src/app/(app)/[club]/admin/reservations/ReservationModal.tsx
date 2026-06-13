@@ -27,6 +27,7 @@ interface ReservationModalProps {
   clubSlug: string;
   courts: Court[];
   members: Member[];
+  allowedDurations: number[];
   onClose: () => void;
   onSuccess: (mode: "create" | "edit") => void;
 }
@@ -37,6 +38,7 @@ export function ReservationModal({
   clubSlug,
   courts,
   members,
+  allowedDurations,
   onClose,
   onSuccess,
 }: ReservationModalProps) {
@@ -182,6 +184,7 @@ export function ReservationModal({
                 members={members}
                 defaultDate={modalState.initialDate ?? today}
                 clubId={clubId}
+                allowedDurations={allowedDurations}
                 initialValues={initialValues}
                 submitLabel={isCreate ? "Crear reserva" : "Guardar cambios"}
                 cancelHref={`/${clubSlug}/admin/reservations`}
@@ -189,6 +192,7 @@ export function ReservationModal({
                 onDirtyChange={setIsDirty}
                 inModal
                 editingReservationId={isCreate ? undefined : modalState.reservationId}
+                clubSlug={clubSlug}
               />
             ) : null}
           </div>

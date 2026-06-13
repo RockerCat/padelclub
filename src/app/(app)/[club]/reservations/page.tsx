@@ -1,74 +1,160 @@
 import { notFound, redirect } from "next/navigation";
-import { CalendarDays, Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getEffectiveHour, timeToMinutes } from "@/lib/operatingHours";
+import type { OperatingHour } from "@/lib/operatingHours";
+import { PlayerAvailabilityCalendar } from "./PlayerAvailabilityCalendar";
+import { getClubDurations } from "@/lib/durations";
 
 interface PlayerReservationsPageProps {
   params: Promise<{ club: string }>;
+  searchParams: Promise<{ week?: string }>;
 }
 
-type ReservationRow = {
+// ─── Date helpers ─────────────────────────────────────────────────────────────
+
+function getWeekMonday(d: Date): Date {
+  const r = new Date(d);
+  r.setHours(0, 0, 0, 0);
+  const day = r.getDay();
+  r.setDate(r.getDate() - (day === 0 ? 6 : day - 1));
+  return r;
+}
+
+function addDays(d: Date, n: number): Date {
+  const r = new Date(d);
+  r.setDate(d.getDate() + n);
+  return r;
+}
+
+function toDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function minsToTime(m: number): string {
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+}
+
+const WEEKDAY = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"];
+const MONTH = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+// ─── Availability computation ─────────────────────────────────────────────────
+
+type RawReservation = {
+  court_id: string;
+  date: string;
+  start_time: string;
+  duration_minutes: number;
+};
+
+export type MyReservation = {
   id: string;
   date: string;
   start_time: string;
   duration_minutes: number;
-  type: "match" | "class" | "block";
-  title: string | null;
-  courts: { name: string } | null;
-  reservation_players: Array<{
-    profiles: { full_name: string | null } | null;
-  }>;
+  status: "pending" | "confirmed" | "cancelled";
+  court_id: string;
+  courtName: string;
 };
 
-function formatDate(dateStr: string) {
-  const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("es-MX", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
+// Blocked windows per date per court: [startMins, endMins][]
+type BlockedByDate = Record<string, Record<string, Array<[number, number]>>>;
+
+function computeAvailability(
+  courts: Array<{ id: string }>,
+  weekDates: string[],
+  opHours: OperatingHour[],
+  reservations: RawReservation[],
+  todayStr: string,
+  nowMins: number,
+  minDuration: number, // smallest allowed duration → base slot filter
+): {
+  availability: Record<string, Record<string, string[]>>;
+  closedDates: string[];
+  closingMinsByDate: Record<string, number>;
+  blockedByDate: BlockedByDate;
+} {
+  const availability: Record<string, Record<string, string[]>> = {};
+  const closedDates: string[] = [];
+  const closingMinsByDate: Record<string, number> = {};
+  const blockedByDate: BlockedByDate = {};
+
+  for (const date of weekDates) {
+    const dayOfWeek = new Date(date + "T00:00:00").getDay();
+    const hours = getEffectiveHour(opHours, dayOfWeek);
+    availability[date] = {};
+    blockedByDate[date] = {};
+
+    if (!hours.is_open || !hours.opens_at || !hours.closes_at) {
+      closedDates.push(date);
+      for (const court of courts) {
+        availability[date][court.id] = [];
+        blockedByDate[date][court.id] = [];
+      }
+      continue;
+    }
+
+    const openMins = timeToMinutes(hours.opens_at);
+    const closeMins = timeToMinutes(hours.closes_at);
+    closingMinsByDate[date] = closeMins;
+
+    // Base slots: 30-min aligned, fit the minimum allowed duration before close
+    const baseSlots: string[] = [];
+    for (let t = openMins; t + minDuration <= closeMins; t += 30) {
+      baseSlots.push(minsToTime(t));
+    }
+
+    const futureSlots =
+      date === todayStr
+        ? baseSlots.filter((s) => timeToMinutes(s) > nowMins)
+        : baseSlots;
+
+    for (const court of courts) {
+      const courtRes = reservations.filter(
+        (r) => r.court_id === court.id && r.date === date,
+      );
+
+      // Store blocked windows for client-side duration filtering
+      blockedByDate[date][court.id] = courtRes.map((r) => {
+        const rStart = timeToMinutes(r.start_time);
+        return [rStart, rStart + r.duration_minutes] as [number, number];
+      });
+
+      // Default available slots (blocked if start falls inside any reservation)
+      availability[date][court.id] = futureSlots.filter((slot) => {
+        const slotMins = timeToMinutes(slot);
+        return !courtRes.some((r) => {
+          const rStart = timeToMinutes(r.start_time);
+          const rEnd = rStart + r.duration_minutes;
+          return slotMins >= rStart && slotMins < rEnd;
+        });
+      });
+    }
+  }
+
+  return { availability, closedDates, closingMinsByDate, blockedByDate };
 }
 
-function formatTime(t: string) {
-  return t.slice(0, 5);
-}
-
-function endTime(startTime: string, durationMinutes: number) {
-  const [h, m] = startTime.split(":").map(Number);
-  const total = h * 60 + m + durationMinutes;
-  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
-}
-
-const TYPE_LABELS: Record<string, string> = {
-  match: "Partido",
-  class: "Clase",
-  block: "Bloqueo",
-};
-
-const TYPE_COLORS: Record<string, string> = {
-  match: "text-brand-primary bg-brand-primary/10 border-brand-primary/20",
-  class: "text-brand-secondary bg-brand-secondary/10 border-brand-secondary/20",
-  block: "text-brand-muted bg-white/5 border-white/10",
-};
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function PlayerReservationsPage({
   params,
+  searchParams,
 }: PlayerReservationsPageProps) {
   const { club: slug } = await params;
+  const { week: weekParam } = await searchParams;
 
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
   if (!user) redirect("/auth/login");
 
   const { data: club } = await supabase
     .from("clubs")
-    .select("id, name, slug")
+    .select("id, name, slug, allowed_reservation_durations")
     .eq("slug", slug)
     .eq("is_active", true)
     .single();
-
   if (!club) notFound();
 
   const { data: membership } = await supabase
@@ -78,118 +164,144 @@ export default async function PlayerReservationsPage({
     .eq("profile_id", user.id)
     .eq("is_active", true)
     .single();
-
   if (!membership) redirect("/unauthorized");
 
-  const today = new Date().toISOString().split("T")[0];
+  // ─── Week range ─────────────────────────────────────────────────────────────
+  const baseDate = weekParam ? new Date(`${weekParam}T00:00:00`) : new Date();
+  const weekMonday = getWeekMonday(baseDate);
+  const weekSunday = addDays(weekMonday, 6);
+  const mondayStr = toDateStr(weekMonday);
+  const sundayStr = toDateStr(weekSunday);
 
-  const { data: reservations } = await supabase
-    .from("reservations")
-    .select(
-      `
-      id, date, start_time, duration_minutes, type, title,
-      courts(name),
-      reservation_players(profiles(full_name))
-    `
-    )
-    .eq("club_id", club.id)
-    .gte("date", today)
-    .eq("status", "confirmed")
-    .order("date", { ascending: true })
-    .order("start_time", { ascending: true });
+  // ─── Week metadata (needed for queries below) ────────────────────────────────
+  const now = new Date();
+  const todayStr = toDateStr(now);
+  const nowMins = now.getHours() * 60 + now.getMinutes();
 
-  const rows = (reservations ?? []) as unknown as ReservationRow[];
+  // ─── Fetch data in parallel ───────────────────────────────────────────────────
+  // Privacy-safe: no player names, titles, notes in any of these queries.
+  // Blocking query includes CONFIRMED + PENDING so occupied slots are hidden correctly.
+  const [courtsRes, reservationsRes, opHoursRes, myReservationsRes] = await Promise.all([
+    supabase
+      .from("courts")
+      .select("id, name")
+      .eq("club_id", club.id)
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true }),
+    supabase
+      .from("reservations")
+      .select("court_id, date, start_time, duration_minutes")
+      .eq("club_id", club.id)
+      .in("status", ["confirmed", "pending"])
+      .gte("date", mondayStr)
+      .lte("date", sundayStr),
+    supabase
+      .from("club_operating_hours")
+      .select("day_of_week, is_open, opens_at, closes_at")
+      .eq("club_id", club.id),
+    supabase
+      .from("reservations")
+      .select("id, date, start_time, duration_minutes, status, court_id, courts(name)")
+      .eq("club_id", club.id)
+      .eq("created_by", user.id)
+      .gte("date", todayStr)
+      .order("date", { ascending: true })
+      .order("start_time", { ascending: true })
+      .limit(30),
+  ]);
 
-  // Group reservations by date
-  const grouped = rows.reduce<Record<string, ReservationRow[]>>((acc, r) => {
-    if (!acc[r.date]) acc[r.date] = [];
-    acc[r.date].push(r);
-    return acc;
-  }, {});
+  const courts = courtsRes.data ?? [];
+  const reservations = (reservationsRes.data ?? []) as RawReservation[];
+  const opHours = (opHoursRes.data ?? []) as OperatingHour[];
 
-  const dates = Object.keys(grouped).sort();
+  type RawMyRow = {
+    id: string;
+    date: string;
+    start_time: string;
+    duration_minutes: number;
+    status: string;
+    court_id: string;
+    courts: { name: string } | null;
+  };
+  const myReservations: MyReservation[] = ((myReservationsRes.data ?? []) as unknown as RawMyRow[]).map(
+    (r) => ({
+      id: r.id,
+      date: r.date,
+      start_time: r.start_time,
+      duration_minutes: r.duration_minutes,
+      status: r.status as MyReservation["status"],
+      court_id: r.court_id,
+      courtName: r.courts?.name ?? "—",
+    })
+  );
+
+  // ─── Week metadata ────────────────────────────────────────────────────────────
+  const weekDates = Array.from({ length: 7 }, (_, i) =>
+    toDateStr(addDays(weekMonday, i)),
+  );
+
+  const weekDays = weekDates.map((date, i) => {
+    const d = addDays(weekMonday, i);
+    return {
+      date,
+      dayName: WEEKDAY[i],
+      dayNum: d.getDate(),
+      monthName: MONTH[d.getMonth()],
+      isPast: date < todayStr,
+    };
+  });
+
+  const weekLabel = `${weekMonday.getDate()} ${MONTH[weekMonday.getMonth()]} – ${weekSunday.getDate()} ${MONTH[weekSunday.getMonth()]}`;
+
+  const allowedDurations = getClubDurations(
+    (club as typeof club & { allowed_reservation_durations?: number[] })?.allowed_reservation_durations
+  );
+  const minDuration = Math.min(...allowedDurations);
+
+  // ─── Compute availability ─────────────────────────────────────────────────────
+  const { availability, closedDates, closingMinsByDate, blockedByDate } = computeAvailability(
+    courts,
+    weekDates,
+    opHours,
+    reservations,
+    todayStr,
+    nowMins,
+    minDuration,
+  );
+
+  const defaultSelectedDate = weekDays.some((d) => d.date === todayStr)
+    ? todayStr
+    : weekDays[0].date;
 
   return (
     <div className="p-6 md:p-10 max-w-2xl">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white">Reservaciones</h1>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-white">Disponibilidad</h1>
         <p className="text-sm text-brand-muted mt-1">{club.name}</p>
       </div>
 
-      {dates.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
-          <div
-            className="w-14 h-14 rounded-2xl flex items-center justify-center"
-            style={{
-              backgroundColor: "color-mix(in srgb, var(--club-primary) 12%, transparent)",
-              color: "var(--club-primary)",
-            }}
-          >
-            <CalendarDays className="w-7 h-7" />
-          </div>
-          <div>
-            <p className="text-white font-semibold mb-1">Sin reservas próximas</p>
-            <p className="text-sm text-brand-muted">
-              Cuando haya reservas confirmadas aparecerán aquí.
-            </p>
-          </div>
-        </div>
+      {courts.length === 0 ? (
+        <p className="text-sm text-brand-muted">
+          El club aún no tiene canchas configuradas.
+        </p>
       ) : (
-        <div className="flex flex-col gap-8">
-          {dates.map((date) => (
-            <div key={date}>
-              <p className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-3 capitalize">
-                {formatDate(date)}
-              </p>
-              <div className="flex flex-col gap-2">
-                {grouped[date].map((r) => {
-                  const players = r.reservation_players
-                    .map((rp) => rp.profiles?.full_name)
-                    .filter(Boolean) as string[];
-
-                  return (
-                    <div
-                      key={r.id}
-                      className="bg-brand-surface border border-white/10 rounded-2xl p-4"
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <span
-                              className={`inline-flex items-center text-[11px] font-semibold px-2 py-0.5 rounded-md border ${TYPE_COLORS[r.type]}`}
-                            >
-                              {TYPE_LABELS[r.type]}
-                            </span>
-                            <span className="text-sm font-semibold text-white">
-                              {r.courts?.name ?? "—"}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-sm text-brand-muted">
-                            <Clock className="w-3.5 h-3.5 shrink-0" />
-                            <span>
-                              {formatTime(r.start_time)} –{" "}
-                              {endTime(r.start_time, r.duration_minutes)}
-                            </span>
-                          </div>
-                          {r.title && (
-                            <p className="text-xs text-brand-muted mt-1 truncate">
-                              {r.title}
-                            </p>
-                          )}
-                          {players.length > 0 && (
-                            <p className="text-xs text-brand-muted mt-1 truncate">
-                              {players.join(", ")}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
+        <PlayerAvailabilityCalendar
+          weekDays={weekDays}
+          courts={courts}
+          availability={availability}
+          closedDates={closedDates}
+          todayStr={todayStr}
+          weekLabel={weekLabel}
+          prevWeekHref={`/${slug}/reservations?week=${toDateStr(addDays(weekMonday, -7))}`}
+          nextWeekHref={`/${slug}/reservations?week=${toDateStr(addDays(weekMonday, 7))}`}
+          todayHref={`/${slug}/reservations`}
+          clubId={club.id}
+          defaultSelectedDate={defaultSelectedDate}
+          allowedDurations={allowedDurations}
+          closingMinsByDate={closingMinsByDate}
+          blockedByDate={blockedByDate}
+          myReservations={myReservations}
+        />
       )}
     </div>
   );

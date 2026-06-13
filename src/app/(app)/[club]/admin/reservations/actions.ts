@@ -7,6 +7,7 @@ import {
   validateAgainstOperatingHours,
   timeToMinutes as sharedTimeToMinutes,
 } from "@/lib/operatingHours";
+import { getClubDurations } from "@/lib/durations";
 
 export type ReservationFormState = {
   error?: string;
@@ -138,18 +139,32 @@ function parseFormData(formData: FormData) {
   return { courtId, date, startTime, durationMinutes, type, title, notes, playerIds };
 }
 
+async function getClubAllowedDurations(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  clubId: string
+): Promise<number[]> {
+  const { data } = await supabase
+    .from("clubs")
+    .select("allowed_reservation_durations")
+    .eq("id", clubId)
+    .single();
+  return getClubDurations(data?.allowed_reservation_durations);
+}
+
 function validate(
   courtId: string,
   date: string,
   startTime: string,
   durationMinutes: number,
   type: string,
-  title: string | null
+  title: string | null,
+  allowedDurations: number[]
 ): string | null {
   if (!courtId) return "Selecciona una cancha.";
   if (!date) return "Selecciona una fecha.";
   if (!startTime || startTime === ":00") return "Selecciona una hora de inicio.";
-  if (![30, 60, 90, 120].includes(durationMinutes)) return "Duración inválida.";
+  if (!allowedDurations.includes(durationMinutes)) return "Esta duración no está permitida para este club.";
   if (!["match", "class", "block"].includes(type)) return "Tipo inválido.";
   if (type === "block" && !title) return "El título es obligatorio para bloqueos.";
   return null;
@@ -191,7 +206,8 @@ export async function createReservation(
     players: playerIds,
   });
 
-  const validationError = validate(courtId, date, startTime, durationMinutes, type, title);
+  const allowedDurations = await getClubAllowedDurations(supabase, clubId);
+  const validationError = validate(courtId, date, startTime, durationMinutes, type, title, allowedDurations);
   if (validationError) {
     console.log("[createReservation] validation failed:", validationError);
     return { error: validationError };
@@ -315,7 +331,8 @@ export async function updateReservation(
 
   console.log("[updateReservation] parsed input:", { reservationId, clubId, courtId, date, startTime, duration: durationMinutes, type, title, players: playerIds });
 
-  const validationError = validate(courtId, date, startTime, durationMinutes, type, title);
+  const allowedDurations = await getClubAllowedDurations(supabase, clubId);
+  const validationError = validate(courtId, date, startTime, durationMinutes, type, title, allowedDurations);
   if (validationError) return { error: validationError };
 
   const pastError = checkNotInPast(date, startTime);
@@ -380,6 +397,7 @@ export async function getAvailableSlots(
   clubId: string,
   courtId: string,
   date: string,
+  durationMinutes: number,
   excludeReservationId?: string
 ): Promise<{ slots: string[]; closed: boolean }> {
   const supabase = await createClient();
@@ -410,11 +428,12 @@ export async function getAvailableSlots(
     return { slots: [], closed: true };
   }
 
-  // Base 30-min slots within operating hours
   const openMins = sharedTimeToMinutes(hours.opens_at);
   const closeMins = sharedTimeToMinutes(hours.closes_at);
+
+  // Base 30-min aligned slots; slot is valid only if full duration fits before close
   const baseSlots: string[] = [];
-  for (let t = openMins; t + 30 <= closeMins; t += 30) {
+  for (let t = openMins; t + durationMinutes <= closeMins; t += 30) {
     baseSlots.push(minsToTime(t));
   }
 
@@ -439,13 +458,14 @@ export async function getAvailableSlots(
 
   const { data: existing } = await resQuery;
 
-  // Slot T is blocked if T falls inside any existing reservation window [resStart, resEnd)
+  // Slot is blocked if the full window [slotStart, slotStart+duration) overlaps any existing reservation
   const available = futureSlots.filter((slot) => {
-    const slotMins = sharedTimeToMinutes(slot);
+    const slotStart = sharedTimeToMinutes(slot);
+    const slotEnd = slotStart + durationMinutes;
     return !(existing ?? []).some((r) => {
       const rStart = sharedTimeToMinutes(r.start_time);
       const rEnd = rStart + r.duration_minutes;
-      return slotMins >= rStart && slotMins < rEnd;
+      return slotStart < rEnd && slotEnd > rStart;
     });
   });
 
@@ -464,6 +484,114 @@ export type ReservationEditData = {
   notes: string | null;
   player_ids: string[];
 };
+
+// ─── Pending reservation approval / rejection ─────────────────────────────────
+
+export type PendingActionResult = { success?: boolean; error?: string };
+
+export async function approvePendingReservation(
+  clubId: string,
+  reservationId: string
+): Promise<PendingActionResult> {
+  const { supabase, error: authError } = await requireAdminRole(clubId);
+  if (authError || !supabase) return { error: authError ?? "Sin permiso." };
+
+  // Fetch the reservation (must be pending + belong to this club)
+  const { data: res } = await supabase
+    .from("reservations")
+    .select("id, court_id, date, start_time, duration_minutes, status")
+    .eq("id", reservationId)
+    .eq("club_id", clubId)
+    .single();
+
+  if (!res) return { error: "Solicitud no encontrada." };
+  if (res.status !== "pending") return { error: "La solicitud ya fue procesada." };
+
+  // Validate duration against club config
+  const allowedDurations = await getClubAllowedDurations(supabase, clubId);
+  if (!allowedDurations.includes(res.duration_minutes)) {
+    return { error: "Duración no permitida por el club." };
+  }
+
+  // Validate court still active
+  const { data: court } = await supabase
+    .from("courts")
+    .select("id")
+    .eq("id", res.court_id)
+    .eq("club_id", clubId)
+    .eq("is_active", true)
+    .single();
+  if (!court) return { error: "La cancha ya no está disponible." };
+
+  // Validate operating hours
+  const hoursError = await checkOperatingHours(
+    supabase,
+    clubId,
+    res.date,
+    res.start_time,
+    res.duration_minutes
+  );
+  if (hoursError) return { error: hoursError };
+
+  // Check overlap with CONFIRMED reservations (exclude self so PENDING doesn't block itself)
+  const hasOverlap = await checkOverlap(
+    supabase,
+    res.court_id,
+    res.date,
+    res.start_time,
+    res.duration_minutes,
+    reservationId
+  );
+  if (hasOverlap) return { error: "El horario fue confirmado para otra reserva." };
+
+  const { error: updateErr } = await supabase
+    .from("reservations")
+    .update({ status: "confirmed" })
+    .eq("id", reservationId)
+    .eq("club_id", clubId);
+
+  if (updateErr) {
+    console.error("[approvePendingReservation]", updateErr);
+    return { error: "Error al confirmar la reserva. Intenta nuevamente." };
+  }
+
+  return { success: true };
+}
+
+export async function rejectPendingReservation(
+  clubId: string,
+  reservationId: string
+): Promise<PendingActionResult> {
+  const { supabase, user, error: authError } = await requireAdminRole(clubId);
+  if (authError || !supabase || !user) return { error: authError ?? "Sin permiso." };
+
+  const { data: res } = await supabase
+    .from("reservations")
+    .select("id, status")
+    .eq("id", reservationId)
+    .eq("club_id", clubId)
+    .single();
+
+  if (!res) return { error: "Solicitud no encontrada." };
+  if (res.status !== "pending") return { error: "La solicitud ya fue procesada." };
+
+  const { error: updateErr } = await supabase
+    .from("reservations")
+    .update({
+      status: "cancelled",
+      cancelled_by: user.id,
+      cancelled_at: new Date().toISOString(),
+    })
+    .eq("id", reservationId)
+    .eq("club_id", clubId);
+
+  if (updateErr) {
+    console.error("[rejectPendingReservation]", updateErr);
+    return { error: "Error al rechazar la solicitud. Intenta nuevamente." };
+  }
+
+  return { success: true };
+}
 
 export async function getReservationForEdit(
   clubId: string,

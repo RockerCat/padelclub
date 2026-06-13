@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui";
 import { getAvailableSlots } from "./actions";
 import type { ReservationFormState } from "./actions";
+import { durationOptions } from "@/lib/durations";
 
 type Court = { id: string; name: string };
 type Member = { profile_id: string; full_name: string | null };
@@ -26,6 +27,7 @@ interface ReservationFormProps {
   members: Member[];
   defaultDate: string;
   clubId: string;
+  allowedDurations: number[];
   initialValues?: InitialValues;
   submitLabel?: string;
   cancelHref: string;
@@ -33,6 +35,7 @@ interface ReservationFormProps {
   onDirtyChange?: (dirty: boolean) => void;
   inModal?: boolean;
   editingReservationId?: string;
+  clubSlug?: string;
 }
 
 const inputClass =
@@ -42,13 +45,6 @@ const selectClass =
   "h-10 w-full rounded-xl border border-white/10 bg-brand-surface px-3 text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20 appearance-none cursor-pointer";
 
 const labelClass = "text-sm font-medium text-white/80";
-
-const DURATION_OPTIONS = [
-  { value: "30", label: "30 min" },
-  { value: "60", label: "1 hora" },
-  { value: "90", label: "1 h 30 min" },
-  { value: "120", label: "2 horas" },
-];
 
 const TYPE_OPTIONS = [
   { value: "match", label: "Partido" },
@@ -129,6 +125,7 @@ export function ReservationForm({
   members,
   defaultDate,
   clubId,
+  allowedDurations,
   initialValues,
   submitLabel = "Crear reserva",
   cancelHref,
@@ -136,8 +133,10 @@ export function ReservationForm({
   onDirtyChange,
   inModal,
   editingReservationId,
+  clubSlug,
 }: ReservationFormProps) {
   const [state, formAction, pending] = useActionState(action, {});
+  const durations = durationOptions(allowedDurations);
 
   useEffect(() => {
     if (state?.success) onSuccess?.();
@@ -150,14 +149,19 @@ export function ReservationForm({
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   })();
 
+  // Default duration: use initial value if allowed, otherwise first allowed duration
+  const defaultDuration = (() => {
+    const initial = initialValues?.duration_minutes;
+    if (initial && allowedDurations.includes(initial)) return String(initial);
+    return String(allowedDurations[0] ?? 60);
+  })();
+
   const [courtId, setCourtId] = useState(initialValues?.court_id ?? "");
   const [date, setDate] = useState(initialValues?.date ?? defaultDate);
   const [startTime, setStartTime] = useState(
     initialValues?.start_time?.slice(0, 5) ?? ""
   );
-  const [duration, setDuration] = useState(
-    String(initialValues?.duration_minutes ?? 60)
-  );
+  const [duration, setDuration] = useState(defaultDuration);
   const [type, setType] = useState(initialValues?.type ?? "match");
   const [title, setTitle] = useState(initialValues?.title ?? "");
   const [notes, setNotes] = useState(initialValues?.notes ?? "");
@@ -172,7 +176,7 @@ export function ReservationForm({
   );
   const [slotsClosed, setSlotsClosed] = useState(false);
 
-  // Refetch slots whenever court or date changes
+  // Refetch slots whenever court, date, or duration changes
   useEffect(() => {
     if (!courtId || !date) {
       setSlots([]);
@@ -182,7 +186,7 @@ export function ReservationForm({
     }
     setSlotsLoading(true);
     let cancelled = false;
-    getAvailableSlots(clubId, courtId, date, editingReservationId).then(
+    getAvailableSlots(clubId, courtId, date, Number(duration), editingReservationId).then(
       ({ slots: s, closed }) => {
         if (cancelled) return;
         setSlots(s);
@@ -193,7 +197,7 @@ export function ReservationForm({
       }
     );
     return () => { cancelled = true; };
-  }, [courtId, date, clubId, editingReservationId]);
+  }, [courtId, date, duration, clubId, editingReservationId]);
 
   function markDirty() { onDirtyChange?.(true); }
 
@@ -273,8 +277,8 @@ export function ReservationForm({
             onChange={(e) => { setDuration(e.target.value); markDirty(); }}
             className={selectClass}
           >
-            {DURATION_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
+            {durations.map((o) => (
+              <option key={o.minutes} value={String(o.minutes)}>
                 {o.label}
               </option>
             ))}
@@ -333,31 +337,51 @@ export function ReservationForm({
       </div>
 
       {/* Jugadores */}
-      {type !== "block" && members.length > 0 && (
+      {type !== "block" && (
         <div className="flex flex-col gap-2">
           <label className={labelClass}>
             Jugadores <span className="text-brand-muted font-normal">(opcional)</span>
           </label>
-          <div className="rounded-xl border border-white/10 bg-white/5 divide-y divide-white/5 max-h-48 overflow-y-auto">
-            {members.map((m) => (
-              <label
-                key={m.profile_id}
-                className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-white/5 transition-colors"
-              >
-                <input
-                  type="checkbox"
-                  name="players"
-                  value={m.profile_id}
-                  checked={checkedPlayers.has(m.profile_id)}
-                  onChange={() => togglePlayer(m.profile_id)}
-                  className="w-4 h-4 rounded accent-brand-primary cursor-pointer"
-                />
-                <span className="text-sm text-white">
-                  {m.full_name ?? "Sin nombre"}
-                </span>
-              </label>
-            ))}
-          </div>
+          {members.length === 0 ? (
+            <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-4">
+              <p className="text-sm text-brand-muted">
+                No hay jugadores registrados todavía.
+              </p>
+              {clubSlug && (
+                <p className="text-sm text-brand-muted/60 mt-1">
+                  Puedes invitar jugadores desde la sección{" "}
+                  <a
+                    href={`/${clubSlug}/admin/players`}
+                    className="text-brand-primary hover:underline"
+                  >
+                    Jugadores
+                  </a>
+                  .
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-white/10 bg-white/5 divide-y divide-white/5 max-h-48 overflow-y-auto">
+              {members.map((m) => (
+                <label
+                  key={m.profile_id}
+                  className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-white/5 transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    name="players"
+                    value={m.profile_id}
+                    checked={checkedPlayers.has(m.profile_id)}
+                    onChange={() => togglePlayer(m.profile_id)}
+                    className="w-4 h-4 rounded accent-brand-primary cursor-pointer"
+                  />
+                  <span className="text-sm text-white">
+                    {m.full_name ?? "Sin nombre"}
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

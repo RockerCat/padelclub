@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { updateReservation, cancelReservation } from "../actions";
 import { ReservationForm } from "../ReservationForm";
 import { CancelButton } from "./CancelButton";
+import { getClubDurations } from "@/lib/durations";
 
 interface EditReservationPageProps {
   params: Promise<{ club: string; id: string }>;
@@ -42,7 +43,7 @@ export default async function EditReservationPage({
 
   const { data: club } = await supabase
     .from("clubs")
-    .select("id, name, slug")
+    .select("id, name, slug, allowed_reservation_durations")
     .eq("slug", slug)
     .eq("is_active", true)
     .single();
@@ -94,14 +95,21 @@ export default async function EditReservationPage({
       .from("club_members")
       .select("profile_id, profiles!inner(full_name)")
       .eq("club_id", club.id)
+      .eq("role", "PLAYER")
       .eq("is_active", true),
   ]);
 
   const courts = (courtsResult.data ?? []) as { id: string; name: string }[];
-  const members = (membersResult.data ?? []).map((m) => ({
-    profile_id: m.profile_id,
-    full_name: (m.profiles as { full_name: string | null } | null)?.full_name ?? null,
-  }));
+  const members = (membersResult.data ?? [])
+    .map((m) => ({
+      profile_id: m.profile_id,
+      full_name: (m.profiles as { full_name: string | null } | null)?.full_name ?? null,
+    }))
+    .sort((a, b) => (a.full_name ?? "").localeCompare(b.full_name ?? "", "es"));
+
+  const allowedDurations = getClubDurations(
+    (club as typeof club & { allowed_reservation_durations?: number[] })?.allowed_reservation_durations
+  );
 
   const today = new Date().toISOString().split("T")[0];
   const updateAction = updateReservation.bind(null, club.id, club.slug, reservationId, false);
@@ -125,6 +133,8 @@ export default async function EditReservationPage({
         members={members}
         defaultDate={today}
         clubId={club.id}
+        clubSlug={slug}
+        allowedDurations={allowedDurations}
         editingReservationId={reservationId}
         initialValues={{
           court_id: reservation.court_id,

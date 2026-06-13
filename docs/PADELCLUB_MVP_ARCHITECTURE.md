@@ -1,7 +1,7 @@
 # PadelClub — MVP Architecture
 
 > Source of truth for technical decisions during MVP development.
-> Last updated: 2026-06-11 (rev 4 — Sprint 2.6: multi-club ownership, onboarding guard, auth-aware CTA)
+> Last updated: 2026-06-13 (rev 5 — Sprint 3.3 complete, Dashboard 1.1, Operating Hours, Reservation UX, Validation Gate 1.0)
 
 ---
 
@@ -36,78 +36,42 @@ PadelClub is a **multi-tenant SaaS platform** for amateur padel clubs. Each club
 
 ## 3. Current Repository State
 
-As of Sprint 2.5 (2026-06-11):
+As of Sprint 3.3 (2026-06-13):
 
-```
-src/
-  app/
-    (marketing)/              ← public landing page ✅
-      layout.tsx              ← Navbar (with Login button) + Footer
-      page.tsx                ← / route
-    (app)/
-      [club]/                 ← authenticated tenant shell ✅
-        layout.tsx            ← auth guard, AppNav, UpdateLastClub
-        page.tsx              ← player portal home (stub)
-        dashboard/page.tsx    ← OWNER dashboard (metrics stub)
-        admin/
-          layout.tsx          ← requires ADMIN or OWNER
-          courts/             ← Courts CRUD ✅ (Sprint 2A)
-          players/            ← Members + Invitations ✅ (Sprint 2B)
-          settings/           ← Club branding + config ✅ (Sprint 1)
-    auth/
-      login/                  ← LoginForm with 0/1/many club routing ✅
-      signup/                 ← SignupForm with invite token support ✅
-      callback/               ← Supabase OAuth callback ✅
-    clubs/page.tsx            ← Club selector (multi-club users) ✅ (Sprint 2.5)
-    invite/[token]/           ← Public invite landing + claim flow ✅ (Sprint 2B)
-    onboarding/               ← New club creation wizard ✅ (Sprint 1)
-    unauthorized/             ← 403 page ✅
-  components/
-    features/
-      marketing/              ← Hero, PainPoints, Features, Audience
-    layout/
-      Navbar.tsx              ← Marketing navbar with Login button
-      AppNav.tsx              ← Authenticated sidebar (club-scoped)
-      ClubHeader.tsx          ← Club logo + role in sidebar header
-      UpdateLastClub.tsx      ← Invisible client component, fires last_club_id update
-  lib/
-    supabase/
-      client.ts               ← createBrowserClient (@supabase/ssr) ✅
-      server.ts               ← createServerClient (@supabase/ssr) ✅
-    utils/
-      cn.ts                   ← clsx + tailwind-merge ✅
-      navigation.ts           ← getClubEntryPath(slug, role) ✅
-    actions/
-      profile.ts              ← updateLastClub server action ✅
-  types/
-    database.ts               ← Manual types (profiles, clubs, club_members,
-                                  invitation_links, courts) ✅
-public/
-  branding/                   ← logo-primary.png, logo-icon.png
-supabase/
-  migrations/
-    20260610000001_sprint1_core_schema.sql
-    20260610000002_fix_onboarding_rls.sql
-    20260610000003_fix_missing_profiles.sql
-    20260610000004_fix_ambiguous_id.sql
-    20260611000001_sprint2a_courts.sql
-    20260611000002_sprint2b_invite_claim.sql
-    20260611000003_sprint2_5_last_club.sql
-docs/
-  PADELCLUB_MVP_ARCHITECTURE.md    ← this file
-  DATABASE_SCHEMA.md
-  ROUTES_AND_NAVIGATION.md
-  DEVELOPMENT_ROADMAP.md
-```
+### Implemented
 
-**DB tables implemented:** `profiles`, `clubs`, `club_members`, `invitation_links`, `courts`
-**DB functions implemented:** `club_role`, `is_club_member`, `create_club_with_owner`, `get_invitation_preview`, `claim_invitation`
+- Multi-club ownership
+- Courts management
+- Players & invitations
+- Operating hours
+- Reservation management
+- Owner dashboard
+- Dashboard analytics
+- Smart slot picker
+- Modal-based reservation workflows
+- Role-specific navigation
+
+### Current Phase
+
+Validation Gate 1.0
+
+### Operational Status
+
+OWNER: operational
+ADMIN: operational
+PLAYER: functional, pending availability-first redesign
 
 ---
 
 ## 4. Proposed Folder Structure
 
 ```
+Note:
+
+The folder structure represents the target MVP architecture.
+
+Some modules shown below (rankings, tournaments, clinics) are intentionally deferred and may not yet exist in the repository.
+
 src/
   app/
     (marketing)/                    # public landing
@@ -115,7 +79,7 @@ src/
       layout.tsx                    # auth guard, redirects unauthenticated to /auth/login
       [club]/                       # tenant scope — resolved by slug
         layout.tsx                  # club context provider, club branding
-        page.tsx                    # player portal home (activity feed, quick links)
+        page.tsx                    # role-aware entry route (redirects by role)
         dashboard/
           page.tsx                  # owner dashboard (requires OWNER role)
         admin/
@@ -195,6 +159,12 @@ padelclub.co/padel-duitama/rankings
 
 Subdomain routing (`platino.padelclub.co`) is architecturally possible via Next.js middleware rewriting to `[club]` paths but is **deferred to Phase 2**. The DB schema supports it with no changes.
 
+Note:
+
+This section describes the intended architecture and responsibilities.
+
+Implementation details may evolve as the codebase matures.
+
 ### Middleware responsibilities
 
 `src/middleware.ts` runs on every `/(app)/[club]/` request and must:
@@ -232,6 +202,34 @@ export async function middleware(request: NextRequest) {
   return response;
 }
 ```
+
+## Operating Hours Architecture
+
+Operating hours are configured at the club level.
+
+Current implementation:
+
+- Per-day opening hours
+- Per-day closing hours
+- Closed day support
+- Club-wide configuration
+
+Data source:
+
+club_operating_hours
+
+Used by:
+
+- Reservation validation
+- Slot generation
+- Availability calculations
+- Occupancy metrics
+
+Single source of truth:
+
+src/lib/operatingHours.ts
+
+No court-specific operating hours exist in the MVP.
 
 ---
 
@@ -372,7 +370,7 @@ This ensures rankings are never stale regardless of which interface registers th
 
 ## 11. Architecture Review & Recommendations
 
-# MVP Refinements (Post Sprint Review)
+### MVP Refinements (Post Sprint Review)
 
 ## Authentication & Club Access
 
@@ -387,9 +385,9 @@ This ensures rankings are never stale regardless of which interface registers th
 
 If the user belongs to exactly one club:
 
-OWNER → redirect to owner experience
-ADMIN → redirect to admin experience
-PLAYER → redirect to player experience (to be defined)
+OWNER  → /{slug}/dashboard
+ADMIN  → /{slug}/admin/reservations
+PLAYER → /{slug}/reservations
 
 #### Multiple Club Memberships
 
@@ -407,7 +405,7 @@ The platform must support three experiences:
 - PLAYER
 
 The current dashboard is considered an OWNER dashboard.
-A dedicated PLAYER experience will be designed before Reservations.
+A dedicated availability-first PLAYER experience is planned after Validation Gate 1.0.
 
 #### Club Selection Priority
 
@@ -461,47 +459,85 @@ $$;
 ### R11 — Ranking formula must be decided before implementation
 **Risk:** HIGH for trust. The automatic ranking trigger cannot be written until the points formula is agreed upon with a real club owner. A ranking that assigns wrong points — or changes after players have competed — destroys credibility. This decision must happen before Sprint 5 begins. Hardcoded constants are acceptable for MVP. A `ranking_rules` table is a Phase 2 option if clubs need per-club customization.
 
-### Role Experience Architecture
+## Role Experience Architecture
 
-Three distinct experiences exist in the platform. Each role has a dedicated entry path and scope.
+Three distinct experiences exist in the platform.
 
-#### OWNER
-- Entry: `/{slug}/admin/settings`
-- Scope: full platform control
-- Features: dashboard (metrics), courts, players, invitations, club settings, all admin features
-- Cannot be deactivated or have role changed via UI
+### OWNER
 
-#### ADMIN
-- Entry: `/{slug}/admin/courts`
-- Scope: daily operations
-- Features: courts management, players list, invitations (PLAYER role only)
-- Cannot access club settings (branding, critical config)
-- Cannot promote members to OWNER
+Entry:
 
-#### PLAYER
-- Entry: `/{slug}` (player portal — future)
-- Scope: club participation
-- Features (future): reservations, rankings view, tournament registration, clinic registration, own profile
-- Cannot access `/admin/` routes
-- Experience will be designed before Sprint 3 Reservations
+`/{slug}/dashboard`
 
-#### Post-Login Routing Logic
+Primary workflows:
 
-```
+- Dashboard
+- Reservations
+- Players
+- Courts
+- Club configuration
+- Multi-club management
+
+The owner is the primary customer.
+
+### ADMIN
+
+Entry:
+
+`/{slug}/admin/reservations`
+
+Primary workflows:
+
+- Reservation management
+- Player management
+- Court management
+
+Restrictions:
+
+- No dashboard access
+- No configuration access
+
+Administrators focus on daily operations.
+
+### PLAYER
+
+Entry:
+
+`/{slug}/reservations`
+
+Current focus:
+
+- Reservation visibility
+
+Validation in progress:
+
+- Availability-first experience
+- Reservation request workflow
+
+Future focus:
+
+- Tournament registration
+- Ranking visibility
+
+Players are secondary users.
+
+Player experiences should prioritize action over administration.
+
+## Post-Login Routing Logic
+
+```text
 login success
   │
   ├── ?next= param present → follow next
   │
-  ├── 0 active clubs → /onboarding
+  ├── 0 clubs → /onboarding
   │
-  ├── 1 active club → getClubEntryPath(slug, role)
-  │     OWNER  → /{slug}/admin/settings
-  │     ADMIN  → /{slug}/admin/courts
-  │     PLAYER → /{slug}
+  ├── 1 club → getClubEntryPath(slug, role)
+  │     OWNER  → /{slug}/dashboard
+  │     ADMIN  → /{slug}/admin/reservations
+  │     PLAYER → /{slug}/reservations
   │
-  └── 2+ active clubs → /clubs (selector)
-        └── sorted: last_club_id first, then alphabetical
-              └── click "Entrar" → getClubEntryPath(slug, role)
+  └── 2+ clubs → /clubs
 ```
 
 #### `getClubEntryPath(slug, role)` — Canonical navigation utility
@@ -513,30 +549,71 @@ Defined in `src/lib/utils/navigation.ts`. Must be used in:
 
 Do not hardcode role-based paths anywhere else.
 
-### R12 — Reservations are the Core Domain
+## Reservations Architecture
 
-Reservations are the central entity of the platform.
+Reservations are the core operational entity of PadelClub.
 
-Before implementing Sprint 3, the reservation model must be reviewed and validated:
+### Creation
 
-**Questions that must be answered before implementation:**
+OWNER and ADMIN can create reservations.
 
-| Question | Why it matters |
-|---|---|
-| Who creates reservations? | Determines the UI entry point and permission model |
-| Can players create reservations? | Defines whether the PLAYER portal is needed first |
-| Can reservations have missing players? | Affects schema (nullable `player_ids` vs open slots) |
-| What is the minimum reservation unit? | 1 court · 1 time slot · N players |
-| How do open matches interact with reservations? | Open match = reservation with fewer than 4 players? |
-| How do rankings consume reservation data? | Do rankings trigger on reservation completion or on explicit result entry? |
-| How do tournaments consume reservation data? | Does a tournament round auto-create reservations? |
-| What are the club's operating hours? | Needed for availability calendar |
-| What is the minimum/maximum duration? | Business rule — e.g. 60 or 90 minutes |
-| Can the same court be double-booked? | Overlap prevention is a hard constraint |
+PLAYER reservation requests are currently under evaluation during Validation Gate.
 
-**Decision:** The reservation workflow must be reviewed with a real club owner before Sprint 3 begins. A 30-minute discovery session covers all 10 questions above.
+### Validation Rules
 
----
+Reservations must:
+
+- Belong to an active court
+- Respect operating hours
+- Respect closed days
+- Not overlap existing reservations
+- Not exist in the past
+
+All validation occurs server-side.
+
+### Scheduling
+
+Available slots are generated dynamically using:
+
+- Operating hours
+- Existing reservations
+- Reservation duration
+
+### Editing
+
+Reservations support:
+
+- Update
+- Reschedule
+- Cancellation
+
+### Privacy
+
+Player-facing reservation experiences should prioritize availability over exposing reservation details.
+
+## Reservation UX Architecture
+
+PadelClub is operational software.
+
+Operational users repeat the same actions frequently.
+
+Current reservation UX is modal-first.
+
+Goals:
+
+- Preserve calendar context
+- Reduce page transitions
+- Minimize friction
+- Accelerate repetitive workflows
+
+Current implementation:
+
+- Create reservation modal
+- Edit reservation modal
+- Cancel reservation modal
+- Smart slot picker
+
+Users should remain inside the calendar whenever possible.
 
 ## 12. Multi-Club Ownership
 
@@ -584,7 +661,7 @@ auth.users (1) ──→ (N) club_members ──→ (N) clubs
 
 #### `/clubs/create`
 - Not authenticated → `/auth/login?next=/clubs/create`
-- Authenticated → show form (creates club + OWNER membership, then → `/{slug}/admin/settings`)
+- Authenticated → show form (creates club + OWNER membership, then → /{slug}/dashboard)
 
 #### Post-login routing
 ```
@@ -620,3 +697,69 @@ The check runs client-side via `supabase.auth.getSession()` in a `useEffect`. De
 ### Invitation Rules
 
 Invitation links are scoped to a single club. Accepting an invitation does not affect the user's membership in other clubs. If the invited user already belongs to the club, `claim_invitation` returns an error.
+
+## Analytics Architecture
+
+Dashboard 1.1 is implemented.
+
+Current metrics:
+
+- Reservations this week
+- Reserved hours
+- Weekly occupancy
+- Active players
+- Court occupancy
+- Peak reservation hour
+- Cancellation rate
+- Previous week comparison
+
+Analytics are operational.
+
+The objective is helping owners understand utilization and activity inside the club.
+
+## MVP Scope Guardrails
+
+Current MVP priorities:
+
+1. Reservations
+2. Courts
+3. Players
+4. Club administration
+5. Operational analytics
+
+The following modules are intentionally deferred:
+
+- Rankings
+- Tournaments
+- Clinics
+- Payments
+- Mobile applications
+- Community features
+
+When prioritization conflicts arise:
+
+Reservations and owner value take precedence.
+
+## Validation Gate 1.0
+
+Current objective:
+
+- Validate operational workflows
+- Remove friction
+- Verify permissions
+- Improve usability
+- Test real-world club usage
+
+Recent findings already corrected:
+
+- OWNER incorrect landing page
+- ADMIN placeholder landing page
+- PLAYER placeholder landing page
+- Staff appearing as selectable players
+- Past reservations allowed
+
+Before Sprint 4:
+
+- Complete role validation
+- Refine player experience
+- Validate availability workflows

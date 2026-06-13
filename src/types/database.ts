@@ -38,6 +38,7 @@ export interface Database {
           instagram: string | null;
           youtube: string | null;
           is_active: boolean;
+          allowed_reservation_durations: number[];
           created_at: string;
           updated_at: string;
         };
@@ -56,6 +57,7 @@ export interface Database {
           instagram?: string | null;
           youtube?: string | null;
           is_active?: boolean;
+          allowed_reservation_durations?: number[];
           created_at?: string;
           updated_at?: string;
         };
@@ -74,6 +76,7 @@ export interface Database {
           instagram?: string | null;
           youtube?: string | null;
           is_active?: boolean;
+          allowed_reservation_durations?: number[];
           updated_at?: string;
         };
         Relationships: [];
@@ -208,7 +211,7 @@ export interface Database {
           type: "match" | "class" | "block";
           title: string | null;
           notes: string | null;
-          status: "confirmed" | "cancelled";
+          status: "confirmed" | "cancelled" | "pending";
           cancelled_at: string | null;
           cancelled_by: string | null;
           created_at: string;
@@ -225,7 +228,7 @@ export interface Database {
           type?: "match" | "class" | "block";
           title?: string | null;
           notes?: string | null;
-          status?: "confirmed" | "cancelled";
+          status?: "confirmed" | "cancelled" | "pending";
           cancelled_at?: string | null;
           cancelled_by?: string | null;
           created_at?: string;
@@ -239,7 +242,7 @@ export interface Database {
           type?: "match" | "class" | "block";
           title?: string | null;
           notes?: string | null;
-          status?: "confirmed" | "cancelled";
+          status?: "confirmed" | "cancelled" | "pending";
           cancelled_at?: string | null;
           cancelled_by?: string | null;
           updated_at?: string;

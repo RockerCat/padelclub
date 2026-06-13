@@ -85,9 +85,9 @@ function getNavItems(slug: string, role: AppNavProps["role"]): NavItem[] {
   } else if (role === "ADMIN") {
     base.push(
       {
-        label: "Dashboard",
-        href: `/${slug}/dashboard`,
-        icon: LayoutDashboard,
+        label: "Reservaciones",
+        href: `/${slug}/admin/reservations`,
+        icon: CalendarDays,
         color: "secondary" as const,
       },
       {
@@ -96,37 +96,19 @@ function getNavItems(slug: string, role: AppNavProps["role"]): NavItem[] {
         icon: Home,
       },
       {
-        label: "Reservaciones",
-        href: `/${slug}/admin/reservations`,
-        icon: CalendarDays,
-        color: "secondary" as const,
-      },
-      {
         label: "Jugadores",
         href: `/${slug}/admin/players`,
         icon: Users,
         color: "secondary" as const,
-      },
-      {
-        label: "Configuración",
-        href: `/${slug}/admin/settings`,
-        icon: Settings,
       }
     );
   } else {
     // PLAYER
-    base.push(
-      {
-        label: "Inicio",
-        href: `/${slug}`,
-        icon: Home,
-      },
-      {
-        label: "Reservaciones",
-        href: `/${slug}/reservations`,
-        icon: CalendarDays,
-      }
-    );
+    base.push({
+      label: "Reservaciones",
+      href: `/${slug}/reservations`,
+      icon: CalendarDays,
+    });
   }
 
   return base;

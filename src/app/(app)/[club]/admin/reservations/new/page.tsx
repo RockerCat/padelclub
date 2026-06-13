@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createReservation } from "../actions";
 import { ReservationForm } from "../ReservationForm";
+import { getClubDurations } from "@/lib/durations";
 
 interface NewReservationPageProps {
   params: Promise<{ club: string }>;
@@ -24,7 +25,7 @@ export default async function NewReservationPage({
 
   const { data: club } = await supabase
     .from("clubs")
-    .select("id, name, slug")
+    .select("id, name, slug, allowed_reservation_durations")
     .eq("slug", slug)
     .eq("is_active", true)
     .single();
@@ -55,14 +56,21 @@ export default async function NewReservationPage({
       .from("club_members")
       .select("profile_id, profiles!inner(full_name)")
       .eq("club_id", club.id)
+      .eq("role", "PLAYER")
       .eq("is_active", true),
   ]);
 
   const courts = (courtsResult.data ?? []) as { id: string; name: string }[];
-  const members = (membersResult.data ?? []).map((m) => ({
-    profile_id: m.profile_id,
-    full_name: (m.profiles as { full_name: string | null } | null)?.full_name ?? null,
-  }));
+  const members = (membersResult.data ?? [])
+    .map((m) => ({
+      profile_id: m.profile_id,
+      full_name: (m.profiles as { full_name: string | null } | null)?.full_name ?? null,
+    }))
+    .sort((a, b) => (a.full_name ?? "").localeCompare(b.full_name ?? "", "es"));
+
+  const allowedDurations = getClubDurations(
+    (club as typeof club & { allowed_reservation_durations?: number[] })?.allowed_reservation_durations
+  );
 
   const today = new Date().toISOString().split("T")[0];
   const defaultDate = prefilledDate ?? today;
@@ -93,6 +101,8 @@ export default async function NewReservationPage({
           members={members}
           defaultDate={defaultDate}
           clubId={club.id}
+          clubSlug={slug}
+          allowedDurations={allowedDurations}
           cancelHref={`/${slug}/admin/reservations`}
         />
       )}

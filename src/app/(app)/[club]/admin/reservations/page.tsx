@@ -2,7 +2,10 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { WeekCalendar } from "./WeekCalendar";
 import type { CalendarReservation, CalendarCourt, WeekDay } from "./WeekCalendar";
+import { PendingRequestsSection } from "./PendingRequestsSection";
+import type { PendingRequest } from "./PendingRequestsSection";
 import { DEFAULT_OPERATING_HOURS } from "@/lib/operatingHours";
+import { getClubDurations } from "@/lib/durations";
 
 interface AdminReservationsPageProps {
   params: Promise<{ club: string }>;
@@ -50,7 +53,7 @@ export default async function AdminReservationsPage({
 
   const { data: club } = await supabase
     .from("clubs")
-    .select("id, name, slug")
+    .select("id, name, slug, allowed_reservation_durations")
     .eq("slug", slug)
     .eq("is_active", true)
     .single();
@@ -73,6 +76,7 @@ export default async function AdminReservationsPage({
   const weekSunday = addDays(weekMonday, 6);
   const mondayStr = toDateStr(weekMonday);
   const sundayStr = toDateStr(weekSunday);
+  const todayStr = toDateStr(new Date());
 
   // ─── Fetch courts + reservations in parallel ─────────────────────────────────
   type RawRow = {
@@ -87,7 +91,7 @@ export default async function AdminReservationsPage({
     reservation_players: Array<{ profiles: { full_name: string | null } | null }>;
   };
 
-  const [courtsRes, reservationsRes, operatingHoursRes, membersRes] = await Promise.all([
+  const [courtsRes, reservationsRes, operatingHoursRes, membersRes, pendingRes] = await Promise.all([
     supabase
       .from("courts")
       .select("id, name, sort_order")
@@ -113,15 +117,54 @@ export default async function AdminReservationsPage({
       .from("club_members")
       .select("profile_id, profiles!inner(full_name)")
       .eq("club_id", club.id)
+      .eq("role", "PLAYER")
       .eq("is_active", true),
+    supabase
+      .from("reservations")
+      .select("id, date, start_time, duration_minutes, court_id, created_by, courts(name)")
+      .eq("club_id", club.id)
+      .eq("status", "pending")
+      .gte("date", todayStr)
+      .order("date", { ascending: true })
+      .order("start_time", { ascending: true }),
   ]);
+
+  // ─── Pending requests: resolve player names ───────────────────────────────────
+  type RawPending = {
+    id: string;
+    date: string;
+    start_time: string;
+    duration_minutes: number;
+    court_id: string;
+    created_by: string;
+    courts: { name: string } | null;
+  };
+  const rawPending = (pendingRes.data ?? []) as unknown as RawPending[];
+  const creatorIds = [...new Set(rawPending.map((r) => r.created_by))];
+  const profilesData =
+    creatorIds.length > 0
+      ? (await supabase.from("profiles").select("id, full_name").in("id", creatorIds)).data ?? []
+      : [];
+  const profileMap = new Map(
+    (profilesData as Array<{ id: string; full_name: string | null }>).map((p) => [p.id, p.full_name])
+  );
+  const pendingRequests: PendingRequest[] = rawPending.map((r) => ({
+    id: r.id,
+    date: r.date,
+    start_time: r.start_time,
+    duration_minutes: r.duration_minutes,
+    courtName: r.courts?.name ?? "—",
+    playerName: profileMap.get(r.created_by) ?? null,
+  }));
 
   const rawCourts = courtsRes.data ?? [];
   const rawRows = (reservationsRes.data ?? []) as unknown as RawRow[];
-  const members = (membersRes.data ?? []).map((m) => ({
-    profile_id: m.profile_id,
-    full_name: (m.profiles as { full_name: string | null } | null)?.full_name ?? null,
-  }));
+  const members = (membersRes.data ?? [])
+    .map((m) => ({
+      profile_id: m.profile_id,
+      full_name: (m.profiles as { full_name: string | null } | null)?.full_name ?? null,
+    }))
+    .sort((a, b) => (a.full_name ?? "").localeCompare(b.full_name ?? "", "es"));
 
   // Compute closed days from effective operating hours (DB overrides defaults)
   const dbHours = operatingHoursRes.data ?? [];
@@ -133,6 +176,10 @@ export default async function AdminReservationsPage({
     .map((h) => h.day_of_week);
 
   // ─── Transform to calendar types ─────────────────────────────────────────────
+  const allowedDurations = getClubDurations(
+    (club as typeof club & { allowed_reservation_durations?: number[] })?.allowed_reservation_durations
+  );
+
   const courts: CalendarCourt[] = rawCourts.map((c, i) => ({
     id: c.id,
     name: c.name,
@@ -166,11 +213,10 @@ export default async function AdminReservationsPage({
 
   const weekLabel = `${weekMonday.getDate()} ${MONTH[weekMonday.getMonth()]} – ${weekSunday.getDate()} ${MONTH[weekSunday.getMonth()]}`;
 
-  const todayStr = toDateStr(new Date());
-
   return (
     <div className="p-6 md:p-10">
       <h1 className="text-2xl font-bold text-white mb-6">Reservaciones</h1>
+      <PendingRequestsSection requests={pendingRequests} clubId={club.id} />
       <WeekCalendar
         weekDays={weekDays}
         weekLabel={weekLabel}
@@ -182,6 +228,7 @@ export default async function AdminReservationsPage({
         todayStr={todayStr}
         clubSlug={slug}
         clubId={club.id}
+        allowedDurations={allowedDurations}
         successMessage={successMessage}
         closedDays={closedDays}
       />

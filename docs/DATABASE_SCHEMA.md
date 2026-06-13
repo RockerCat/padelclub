@@ -2,7 +2,7 @@
 
 > PostgreSQL via Supabase. All timestamps are `timestamptz` (UTC).
 > Multi-tenant boundary: `club_id` present on every tenant-scoped table.
-> Last updated: 2026-06-10 (rev 2 — player model, pairs note, reservation_players future note, ranking_rules recommendation)
+> Last updated: 2026-06-13 (rev 3 — reservations, operating hours, player privacy, dashboard analytics notes)
 
 ---
 
@@ -36,6 +36,26 @@ When an admin views the "players" screen, they are querying `club_members JOIN p
 3. **Helper functions** (`auth.club_role`) avoid N+1 in RLS policies.
 4. **`club_id` is denormalized** into child tables (e.g., `ranking_entries`) so RLS never needs a JOIN to enforce tenancy.
 5. **`auth.users` is Supabase-managed.** `profiles` extends it via 1:1 relationship triggered on signup.
+
+
+---
+
+## Reservation Model Principles
+
+Reservations are the core operational entity of the MVP.
+
+The reservation model supports three distinct workflows:
+
+1. **OWNER / ADMIN operational reservations** — staff can create, edit, confirm and cancel reservations.
+2. **PLAYER reservation requests** — players can request available time slots, normally as `PENDING` reservations.
+3. **Availability discovery** — player-facing screens should focus on available slots, not on exposing private details of existing reservations.
+
+Important privacy rule:
+
+- OWNER and ADMIN may see operational reservation details.
+- PLAYER should not see other players' names, internal notes, reservation titles or staff activity unless a specific product decision requires it.
+- Player-facing availability should use only the fields required to compute whether a court is available: `court_id`, `date`, `start_time`, `end_time`, `status` and reservation type where needed.
+
 
 ---
 
@@ -263,56 +283,188 @@ CREATE POLICY "courts_update_admin"
 
 ---
 
+### `club_operating_hours`
+
+Operating hours are configured at the **club level**, not per court.
+
+For MVP, all active courts in a club share the same operating schedule. Per-court schedules are explicitly deferred until a real club requires them.
+
+```sql
+CREATE TABLE club_operating_hours (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  club_id     uuid NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+  day_of_week smallint NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),
+              -- 0 = Sunday, 1 = Monday, ... 6 = Saturday
+  is_open     boolean NOT NULL DEFAULT true,
+  opens_at    time,
+  closes_at   time,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (club_id, day_of_week),
+  CONSTRAINT valid_operating_hours
+    CHECK (
+      is_open = false
+      OR (opens_at IS NOT NULL AND closes_at IS NOT NULL AND closes_at > opens_at)
+    )
+);
+
+CREATE INDEX idx_club_operating_hours_club
+  ON club_operating_hours (club_id, day_of_week);
+
+ALTER TABLE club_operating_hours ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "operating_hours_select_member"
+  ON club_operating_hours FOR SELECT
+  USING (auth.is_club_member(club_id));
+
+CREATE POLICY "operating_hours_manage_owner"
+  ON club_operating_hours FOR ALL
+  USING (auth.club_role(club_id) = 'OWNER')
+  WITH CHECK (auth.club_role(club_id) = 'OWNER');
+```
+
+### Default Operating Hours
+
+If a club has no row for a given day, the application applies a centralized fallback from `src/lib/operatingHours.ts`:
+
+| Day | Default |
+|---|---|
+| Monday–Friday | 06:00–22:00 |
+| Saturday | 08:00–18:00 |
+| Sunday | Closed |
+
+The fallback exists only to keep old clubs functional. All new business logic should use `getEffectiveOperatingHours()` or the equivalent centralized helper instead of duplicating default values.
+
+---
+
 ### `reservations`
 
 A time block on a court.
 
+Reservations support confirmed staff-created bookings, player requests and cancellations.
+
 ```sql
 CREATE TABLE reservations (
-  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  club_id     uuid NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
-  court_id    uuid NOT NULL REFERENCES courts(id),
-  created_by  uuid NOT NULL REFERENCES profiles(id),
-  date        date NOT NULL,
-  start_time  time NOT NULL,
-  end_time    time NOT NULL,
-  status      text NOT NULL DEFAULT 'CONFIRMED'
-              CHECK (status IN ('PENDING', 'CONFIRMED', 'CANCELLED')),
-  notes       text,
-  created_at  timestamptz NOT NULL DEFAULT now(),
-  updated_at  timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT end_after_start CHECK (end_time > start_time)
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  club_id          uuid NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+  court_id         uuid NOT NULL REFERENCES courts(id),
+  created_by       uuid NOT NULL REFERENCES profiles(id),
+  date             date NOT NULL,
+  start_time       time NOT NULL,
+  end_time         time NOT NULL,
+  duration_minutes integer NOT NULL,
+  type             text NOT NULL DEFAULT 'MATCH'
+                   CHECK (type IN ('MATCH', 'CLASS', 'BLOCK')),
+  status           text NOT NULL DEFAULT 'CONFIRMED'
+                   CHECK (status IN ('PENDING', 'CONFIRMED', 'CANCELLED')),
+  title            text,
+  notes            text,
+  cancelled_by     uuid REFERENCES profiles(id),
+  cancelled_at     timestamptz,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT end_after_start CHECK (end_time > start_time),
+  CONSTRAINT positive_duration CHECK (duration_minutes > 0)
 );
 
 CREATE INDEX idx_reservations_club        ON reservations (club_id, date);
 CREATE INDEX idx_reservations_court_date  ON reservations (court_id, date);
+CREATE INDEX idx_reservations_status      ON reservations (club_id, status, date);
+CREATE INDEX idx_reservations_created_by  ON reservations (created_by);
 
--- Note: enforce no-overlap via application logic or a trigger.
--- A GiST exclusion constraint requires btree_gist extension:
+-- Note: enforce no-overlap via server action for MVP.
+-- Future DB-level option: GiST exclusion constraint with btree_gist.
+--
 -- ALTER TABLE reservations ADD CONSTRAINT no_overlap
---   EXCLUDE USING gist (court_id WITH =, daterange(date, date, '[]') WITH &&,
---                       tsrange(date + start_time, date + end_time) WITH &&)
+--   EXCLUDE USING gist (
+--     court_id WITH =,
+--     daterange(date, date, '[]') WITH &&,
+--     tsrange(date + start_time, date + end_time) WITH &&
+--   )
 --   WHERE (status != 'CANCELLED');
 
 ALTER TABLE reservations ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "reservations_select_member"
-  ON reservations FOR SELECT USING (auth.is_club_member(club_id));
+  ON reservations FOR SELECT
+  USING (auth.is_club_member(club_id));
 
 CREATE POLICY "reservations_insert_admin"
-  ON reservations FOR INSERT WITH CHECK (auth.club_role(club_id) IN ('OWNER', 'ADMIN'));
+  ON reservations FOR INSERT
+  WITH CHECK (auth.club_role(club_id) IN ('OWNER', 'ADMIN'));
 
 CREATE POLICY "reservations_update_admin"
-  ON reservations FOR UPDATE USING (auth.club_role(club_id) IN ('OWNER', 'ADMIN'));
+  ON reservations FOR UPDATE
+  USING (auth.club_role(club_id) IN ('OWNER', 'ADMIN'));
+
+-- Optional / current player-request behavior:
+-- Players may create PENDING reservations only for their own club.
+-- They must not create CONFIRMED reservations directly.
+CREATE POLICY "reservations_insert_player_pending"
+  ON reservations FOR INSERT
+  WITH CHECK (
+    auth.club_role(club_id) = 'PLAYER'
+    AND created_by = auth.uid()
+    AND status = 'PENDING'
+  );
 ```
+
+### Reservation Status Lifecycle
+
+```text
+PENDING      → player requested a reservation; waiting for staff approval
+CONFIRMED    → active reservation / confirmed booking
+CANCELLED    → reservation cancelled; kept for history and analytics
+```
+
+### Reservation Type Semantics
+
+| Type | Meaning | Typical visibility |
+|---|---|---|
+| `MATCH` | Normal player match | Public availability only for players; details for staff |
+| `CLASS` | Lesson, clinic, training or academy slot | Details for staff; limited player display |
+| `BLOCK` | Operational block, maintenance, private use or unavailable time | Availability only; no player details |
+
+### Reservation Business Rules
+
+These are enforced server-side and should not rely only on client UI:
+
+1. Reservation start cannot be in the past.
+2. Reservation must be inside club operating hours.
+3. Reservation cannot be created on a closed day.
+4. Reservation cannot overlap another non-cancelled reservation for the same court.
+5. Reservation court must belong to the same club and be active.
+6. Staff-created reservations may be `CONFIRMED`; player-created reservations should be `PENDING` unless the product explicitly changes this rule.
+
+### Availability Rules
+
+Player-facing availability should be computed from:
+
+- `club_operating_hours`
+- active `courts`
+- non-cancelled `reservations`
+- current date/time
+
+Slots are generated in 30-minute increments.
+
+A slot should be considered unavailable if it overlaps a non-cancelled reservation for the same court and date.
+
+Player-facing screens should not query or display private reservation details such as:
+
+- `title`
+- `notes`
+- `reservation_players`
+- related player names
 
 ---
 
 ### `reservation_players`
 
-Players assigned to a reservation (up to 4 in padel).
+Players assigned to a reservation.
 
-> **Future consideration:** This table may eventually need a `participant_type` or `player_role` field to distinguish between registered club members and guests (e.g., a non-member playing as a guest). Do not add this field now. It is only needed if guest reservations become a product requirement.
+For padel, a normal match can have up to 4 registered players, but the system should not rely on this table to expose public reservation details to other players.
+
+> **Future consideration:** This table may eventually need a `participant_type` or `player_role` field to distinguish between registered club members and guests. Do not add this field now. It is only needed if guest reservations become a product requirement.
 
 ```sql
 CREATE TABLE reservation_players (
@@ -327,17 +479,44 @@ CREATE INDEX idx_reservation_players_profile ON reservation_players (profile_id)
 
 ALTER TABLE reservation_players ENABLE ROW LEVEL SECURITY;
 
--- Read: anyone who can read the reservation can read its players
--- Use RLS join via reservation's club_id
-CREATE POLICY "reservation_players_select"
+-- Staff can read reservation participants for club operations.
+CREATE POLICY "reservation_players_select_staff"
   ON reservation_players FOR SELECT
   USING (
     EXISTS (
       SELECT 1 FROM reservations r
-      WHERE r.id = reservation_id AND auth.is_club_member(r.club_id)
+      WHERE r.id = reservation_id
+        AND auth.club_role(r.club_id) IN ('OWNER', 'ADMIN')
+    )
+  );
+
+-- Players may read only their own participation rows.
+-- They should not be able to browse who is playing in other reservations.
+CREATE POLICY "reservation_players_select_own"
+  ON reservation_players FOR SELECT
+  USING (profile_id = auth.uid());
+
+CREATE POLICY "reservation_players_manage_staff"
+  ON reservation_players FOR ALL
+  USING (
+    EXISTS (
+      SELECT 1 FROM reservations r
+      WHERE r.id = reservation_id
+        AND auth.club_role(r.club_id) IN ('OWNER', 'ADMIN')
     )
   );
 ```
+
+### Player Selection Rule
+
+When staff assign players to a reservation, the selectable list must include only active club members with:
+
+```sql
+club_members.role = 'PLAYER'
+club_members.is_active = true
+```
+
+Do not include OWNER or ADMIN users in the player picker.
 
 ---
 
@@ -762,6 +941,8 @@ profiles ◄────────────────── club_members 
                                                               │
                                                    reservation_players
 
+clubs ──► club_operating_hours
+
 clubs ──► tournaments ──► matches ──► match_players (profile)
                │              │
           tournament_      match_results ──► [TRIGGER] ──► ranking_entries
@@ -776,6 +957,25 @@ clubs ──► announcements
 
 ---
 
+## Operational Analytics Notes
+
+Dashboard analytics currently derive from reservation data.
+
+Important computed metrics:
+
+| Metric | Source |
+|---|---|
+| Reservations this week | `reservations` where `status = 'CONFIRMED'` and `date` is in current week |
+| Reserved hours | Sum of `duration_minutes` for confirmed reservations |
+| Weekly occupancy | Reserved minutes / (`weekly operating minutes` × active courts) |
+| Occupancy by court | Reserved minutes per court / weekly operating minutes per court |
+| Active players | Unique `reservation_players.profile_id` in confirmed reservations over last 30 days |
+| Cancellation rate | Cancelled reservations / (`CONFIRMED` + `CANCELLED`) over last 30 days |
+
+Cancellation analytics should be interpreted carefully because operational `BLOCK` reservations can distort player cancellation rates. If the owner-facing metric is intended to measure player cancellations, exclude `type = 'BLOCK'`.
+
+---
+
 ## Future Tables (Phase 2+)
 
 | Table | Purpose |
@@ -785,6 +985,7 @@ clubs ──► announcements
 | `memberships` | Paid club memberships with tiers |
 | `membership_plans` | Plan definitions (monthly, annual, etc.) |
 | `payments` | Payment records (Stripe/MercadoPago) |
+| `reservation_rules` | Club-level reservation settings such as allowed durations, request rules and booking windows |
 | `notifications` | In-app notification queue |
 | `push_tokens` | FCM/APNS tokens for mobile push |
 | `player_connections` | Social graph (friends/contacts within platform) |
