@@ -118,13 +118,91 @@ function StatusBadge({ status }: { status: MyReservation["status"] }) {
   );
 }
 
+// ─── Next Reservation Card ────────────────────────────────────────────────────
+
+const NEXT_CARD_STATUS = {
+  confirmed: {
+    title: "Tu próxima reserva",
+    cardClass: "bg-brand-primary/5 border-brand-primary/20",
+    titleClass: "text-brand-primary",
+  },
+  pending: {
+    title: "Solicitud en revisión",
+    cardClass: "bg-amber-400/5 border-amber-400/20",
+    titleClass: "text-amber-400",
+  },
+} as const;
+
+function NextReservationCard({
+  reservation,
+  showHistoryLink,
+}: {
+  reservation: MyReservation | null;
+  showHistoryLink: boolean;
+}) {
+  function scrollToHistory() {
+    document.getElementById("mis-solicitudes")?.scrollIntoView({ behavior: "smooth" });
+  }
+
+  if (!reservation) {
+    return (
+      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+        <p className="text-sm font-medium text-white">No tienes reservas próximas</p>
+        <p className="text-sm text-brand-muted mt-1">
+          Elige un horario disponible para solicitar una reserva.
+        </p>
+        {showHistoryLink && (
+          <button
+            onClick={scrollToHistory}
+            className="mt-3 text-xs text-brand-muted hover:text-white transition-colors"
+          >
+            Ver mis solicitudes →
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  const cfg = NEXT_CARD_STATUS[reservation.status as keyof typeof NEXT_CARD_STATUS];
+  const start = reservation.start_time.slice(0, 5);
+  const end = addMinutes(start, reservation.duration_minutes);
+
+  return (
+    <div className={`rounded-xl border p-4 ${cfg.cardClass}`}>
+      <div className="flex items-start justify-between gap-2 mb-3">
+        <p className={`text-sm font-semibold ${cfg.titleClass}`}>{cfg.title}</p>
+        <StatusBadge status={reservation.status} />
+      </div>
+      <p className="text-sm text-white font-medium capitalize">
+        {formatCardDate(reservation.date)}
+      </p>
+      <p className="text-sm text-brand-muted mt-1">
+        {start} – {end} · {reservation.courtName} · {durationLabel(reservation.duration_minutes)}
+      </p>
+      {reservation.status === "pending" && (
+        <p className="text-xs text-amber-400/70 mt-2">
+          El administrador la confirmará pronto.
+        </p>
+      )}
+      {showHistoryLink && (
+        <button
+          onClick={scrollToHistory}
+          className="mt-3 text-xs text-brand-muted hover:text-white transition-colors"
+        >
+          Ver mis solicitudes →
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ─── My Reservations Section ──────────────────────────────────────────────────
 
 function MyReservationsSection({ reservations }: { reservations: MyReservation[] }) {
   const grouped = groupByDate(reservations);
 
   return (
-    <div className="mt-8 pt-6 border-t border-white/10">
+    <div id="mis-solicitudes" className="mt-8 pt-6 border-t border-white/10">
       <h2 className="text-sm font-semibold text-white mb-4">Mis solicitudes</h2>
 
       {grouped.length === 0 ? (
@@ -337,6 +415,9 @@ export function PlayerAvailabilityCalendar({
   const [modalSlot, setModalSlot] = useState<ModalSlot | null>(null);
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
   const durations = durationOptions(allowedDurations);
+  const nextReservation =
+    myReservations.find((r) => r.status === "pending" || r.status === "confirmed") ?? null;
+  const showHistoryLink = myReservations.length > 0;
 
   useEffect(() => {
     if (!successBanner) return;
@@ -371,6 +452,9 @@ export function PlayerAvailabilityCalendar({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Next reservation card */}
+      <NextReservationCard reservation={nextReservation} showHistoryLink={showHistoryLink} />
+
       {/* Success banner */}
       {successBanner && (
         <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-brand-primary/10 border border-brand-primary/30 text-brand-primary text-sm">

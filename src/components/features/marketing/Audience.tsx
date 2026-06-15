@@ -1,4 +1,5 @@
-import { LayoutDashboard, ClipboardList, Check } from "lucide-react";
+import Link from "next/link";
+import { LayoutDashboard, ClipboardList, Search, Check } from "lucide-react";
 
 const WA_URL =
   "https://wa.me/573173672033?text=Hola%2C%20quiero%20conocer%20m%C3%A1s%20sobre%20PadelClub%20para%20mi%20club%20de%20p%C3%A1del.";
@@ -25,12 +26,27 @@ const profiles = [
     role: "Administrador",
     description: "Gestiona la operación diaria desde una única plataforma.",
     benefits: [
-      "Reservas",
-      "Canchas",
-      "Jugadores",
-      "Torneos",
-      "Clínicas",
-      "Resultados y rankings",
+      "Reservas y canchas",
+      "Jugadores y clínicas",
+      "Torneos y resultados",
+      "Rankings automáticos",
+      "Historial completo",
+      "Flujo sin WhatsApp",
+    ],
+    prominent: false,
+  },
+  {
+    icon: Search,
+    iconColor: "secondary" as const,
+    role: "Jugador",
+    description: "Descubre dónde jugar y reserva canchas sin llamar a nadie.",
+    benefits: [
+      "Explorar clubes disponibles",
+      "Reservar canchas en línea",
+      "Ver disponibilidad en tiempo real",
+      "Solicitar reservas al instante",
+      "Participar en torneos",
+      "Seguir el ranking del club",
     ],
     prominent: false,
   },
@@ -99,15 +115,15 @@ export default function Audience() {
             </span>
           </div>
           <h2 className="mb-4 text-4xl font-bold tracking-tight text-white sm:text-5xl">
-            Diseñado para dueños y administradores de clubes.
+            Para clubs y jugadores de pádel.
           </h2>
           <p className="text-lg leading-relaxed text-brand-muted">
-            PadelClub conecta la visión estratégica del dueño con la operación diaria del administrador.
+            Tanto si gestionas un club como si buscas dónde jugar, PadelClub tiene lo que necesitas.
           </p>
         </div>
 
         {/* Profile cards */}
-        <div className="mb-14 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="mb-14 grid grid-cols-1 gap-6 lg:grid-cols-3">
           {profiles.map((p) => (
             <ProfileCard key={p.role} {...p} />
           ))}
@@ -123,18 +139,32 @@ export default function Audience() {
 
           <div className="relative">
             <h3 className="mb-4 text-3xl font-bold tracking-tight text-white sm:text-4xl lg:text-5xl">
-              Todo tu club en una sola plataforma.
+              Empieza hoy. Sin complicaciones.
             </h3>
             <p className="mx-auto mb-10 max-w-xl text-lg leading-relaxed text-brand-muted">
-              Desde la administración diaria hasta la visibilidad estratégica, PadelClub ayuda a clubes de pádel a organizar su operación y fortalecer su comunidad.
+              Crea tu club y empieza a gestionar desde el primer día — o regístrate como jugador y descubre los clubes disponibles.
             </p>
+            <div className="flex flex-wrap items-center justify-center gap-3 mb-5">
+              <Link
+                href="/clubs/create"
+                className="inline-flex items-center rounded-xl bg-brand-primary px-7 py-3.5 text-base font-semibold text-brand-bg shadow-lg shadow-brand-primary/20 transition-colors hover:bg-brand-primary/90"
+              >
+                Crear mi club
+              </Link>
+              <Link
+                href="/clubs"
+                className="inline-flex items-center rounded-xl border border-white/20 px-7 py-3.5 text-base font-semibold text-white transition-colors hover:bg-white/5"
+              >
+                Explorar clubes →
+              </Link>
+            </div>
             <a
               href={WA_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center rounded-xl bg-brand-primary px-8 py-4 text-base font-semibold text-brand-bg shadow-lg shadow-brand-primary/20 transition-colors hover:bg-brand-primary/90"
+              className="text-sm text-brand-muted hover:text-white transition-colors"
             >
-              Hablar por WhatsApp
+              ¿Tienes preguntas? Hablar por WhatsApp →
             </a>
           </div>
         </div>

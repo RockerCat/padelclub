@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Calendar, BarChart2, Trophy, Users } from "lucide-react";
+import { Calendar, BarChart2, Trophy, Users, MapPin } from "lucide-react";
 
 // ─── Mockup cards ────────────────────────────────────────────────────────────
 
@@ -146,12 +146,15 @@ function ProductMockup() {
   );
 }
 
+const WA_URL =
+  "https://wa.me/573173672033?text=Hola%2C%20quiero%20conocer%20m%C3%A1s%20sobre%20PadelClub%20para%20mi%20club%20de%20p%C3%A1del.";
+
 // ─── Feature highlights ───────────────────────────────────────────────────────
 
 const highlights = [
   { icon: Calendar, label: "Reservas", sub: "Gestiona tus canchas" },
+  { icon: MapPin, label: "Directorio", sub: "Descubre dónde jugar" },
   { icon: BarChart2, label: "Rankings", sub: "Motiva tu comunidad" },
-  { icon: Trophy, label: "Torneos", sub: "Organiza competencias" },
 ];
 
 // ─── Hero ─────────────────────────────────────────────────────────────────────
@@ -182,7 +185,7 @@ export default function Hero() {
             <div className="inline-flex items-center gap-2 rounded-full border border-brand-primary/30 bg-brand-primary/10 px-4 py-1.5 mb-8">
               <span className="h-1.5 w-1.5 rounded-full bg-brand-primary" />
               <span className="text-xs font-medium text-brand-primary tracking-widest uppercase">
-                Para dueños y administradores de clubes de pádel
+                Para clubs y jugadores de pádel
               </span>
             </div>
 
@@ -190,32 +193,53 @@ export default function Hero() {
             <h1 className="text-5xl sm:text-6xl lg:text-[3.5rem] font-bold leading-[1.06] tracking-tight text-white">
               Más pádel.
               <br />
-              <span className="text-brand-primary">Menos administración.</span>
+              <span className="text-brand-primary">Para clubs y jugadores.</span>
             </h1>
 
             {/* Subheadline */}
             <p className="mt-6 text-lg text-brand-muted leading-relaxed max-w-[420px]">
-              Gestiona reservas, rankings, torneos y jugadores desde una sola
-              plataforma diseñada para clubes de pádel.
+              Gestiona reservas, jugadores y rankings si administras un club —
+              o descubre dónde jugar y reserva canchas si eres jugador.
             </p>
 
-            {/* CTAs */}
-            <div className="mt-10 flex flex-wrap gap-3">
+            {/* Dual CTAs */}
+            <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-[420px]">
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-medium text-brand-muted">
+                  ¿Administras un club?
+                </p>
+                <Link
+                  href="/clubs/create"
+                  className="rounded-xl bg-brand-primary px-5 py-3.5 text-base font-semibold text-brand-bg text-center hover:bg-brand-primary/90 transition-colors shadow-lg shadow-brand-primary/20"
+                >
+                  Crear mi club
+                </Link>
+              </div>
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-medium text-brand-muted">
+                  ¿Buscas dónde jugar?
+                </p>
+                <Link
+                  href="/clubs"
+                  className="rounded-xl border border-white/20 px-5 py-3.5 text-base font-semibold text-white text-center hover:bg-white/5 transition-colors"
+                >
+                  Explorar clubes →
+                </Link>
+              </div>
+            </div>
+
+            {/* WhatsApp — secondary, sales only */}
+            <p className="mt-4 text-sm text-brand-muted">
+              ¿Tienes preguntas?{" "}
               <a
-                href="https://wa.me/573173672033?text=Hola%2C%20quiero%20conocer%20m%C3%A1s%20sobre%20PadelClub%20para%20mi%20club%20de%20p%C3%A1del."
+                href={WA_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded-xl bg-brand-primary px-7 py-3.5 text-base font-semibold text-brand-bg hover:bg-brand-primary/90 transition-colors shadow-lg shadow-brand-primary/20"
+                className="text-white hover:text-brand-primary transition-colors"
               >
-                Hablar por WhatsApp
+                Hablar por WhatsApp →
               </a>
-              <Link
-                href="#features"
-                className="rounded-xl border border-white/20 px-7 py-3.5 text-base font-semibold text-white hover:bg-white/5 transition-colors"
-              >
-                Ver características →
-              </Link>
-            </div>
+            </p>
 
             {/* Feature highlights */}
             <div className="mt-12 pt-8 border-t border-white/8 grid grid-cols-3 gap-5">

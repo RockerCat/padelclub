@@ -86,6 +86,10 @@ export async function updateClub(
 
   const name = (formData.get("name") as string | null)?.trim() ?? "";
   const description = (formData.get("description") as string | null)?.trim() || null;
+  const city = (formData.get("city") as string | null)?.trim() || null;
+  const state = (formData.get("state") as string | null)?.trim() || null;
+  const country = (formData.get("country") as string | null)?.trim() || null;
+  const address = (formData.get("address") as string | null)?.trim() || null;
   const whatsapp = (formData.get("whatsapp") as string | null)?.trim() || null;
   const facebook = (formData.get("facebook") as string | null)?.trim() || null;
   const instagram = (formData.get("instagram") as string | null)?.trim() || null;
@@ -103,6 +107,10 @@ export async function updateClub(
     .update({
       name,
       description,
+      city,
+      state,
+      country,
+      address,
       whatsapp,
       facebook,
       instagram,

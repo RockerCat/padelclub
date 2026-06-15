@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 const navLinks = [
   { label: "Características", href: "#features" },
   { label: "Cómo funciona", href: "#como-funciona" },
+  { label: "Explorar clubes", href: "/clubs" },
   { label: "Contacto", href: "#contacto" },
 ];
 
@@ -70,18 +71,10 @@ export default function Navbar() {
             </Link>
             <Link
               href={createClubHref}
-              className="rounded-lg border border-brand-primary/30 bg-brand-primary/10 px-4 py-2 text-sm font-semibold text-brand-primary hover:bg-brand-primary/20 transition-colors"
+              className="rounded-lg bg-brand-primary px-4 py-2 text-sm font-semibold text-brand-bg hover:bg-brand-primary/90 transition-colors"
             >
               Crear mi club
             </Link>
-            <a
-              href="https://wa.me/573173672033?text=Hola%2C%20quiero%20conocer%20m%C3%A1s%20sobre%20PadelClub%20para%20mi%20club%20de%20p%C3%A1del."
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-lg bg-brand-primary px-4 py-2 text-sm font-semibold text-brand-bg hover:bg-brand-primary/90 transition-colors"
-            >
-              Hablar por WhatsApp
-            </a>
           </div>
 
           <button
@@ -116,20 +109,11 @@ export default function Navbar() {
             </Link>
             <Link
               href={createClubHref}
-              className="rounded-lg border border-brand-primary/30 bg-brand-primary/10 px-4 py-2.5 text-sm font-semibold text-brand-primary text-center hover:bg-brand-primary/20 transition-colors"
+              className="rounded-lg bg-brand-primary px-4 py-2.5 text-sm font-semibold text-brand-bg text-center hover:bg-brand-primary/90 transition-colors"
               onClick={() => setMobileOpen(false)}
             >
               Crear mi club
             </Link>
-            <a
-              href="https://wa.me/573173672033?text=Hola%2C%20quiero%20conocer%20m%C3%A1s%20sobre%20PadelClub%20para%20mi%20club%20de%20p%C3%A1del."
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-lg bg-brand-primary px-4 py-2.5 text-sm font-semibold text-brand-bg text-center"
-              onClick={() => setMobileOpen(false)}
-            >
-              Hablar por WhatsApp
-            </a>
           </div>
         </div>
       )}

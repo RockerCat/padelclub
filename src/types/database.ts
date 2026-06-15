@@ -33,6 +33,10 @@ export interface Database {
           secondary_color: string;
           bg_color: string;
           visibility: string;
+          city: string | null;
+          state: string | null;
+          country: string | null;
+          address: string | null;
           whatsapp: string | null;
           facebook: string | null;
           instagram: string | null;
@@ -52,6 +56,10 @@ export interface Database {
           secondary_color?: string;
           bg_color?: string;
           visibility?: string;
+          city?: string | null;
+          state?: string | null;
+          country?: string | null;
+          address?: string | null;
           whatsapp?: string | null;
           facebook?: string | null;
           instagram?: string | null;
@@ -71,6 +79,10 @@ export interface Database {
           secondary_color?: string;
           bg_color?: string;
           visibility?: string;
+          city?: string | null;
+          state?: string | null;
+          country?: string | null;
+          address?: string | null;
           whatsapp?: string | null;
           facebook?: string | null;
           instagram?: string | null;

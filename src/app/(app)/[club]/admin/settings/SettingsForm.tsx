@@ -83,6 +83,50 @@ export function SettingsForm({ club }: SettingsFormProps) {
         </CardContent>
       </Card>
 
+      {/* Location */}
+      <Card variant="default">
+        <CardHeader>
+          <h2 className="text-base font-semibold text-white">Ubicación</h2>
+          <p className="text-xs text-brand-muted mt-1">
+            Aparece en el directorio público de clubes.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                name="city"
+                label="Ciudad"
+                type="text"
+                defaultValue={club.city ?? ""}
+                placeholder="Tunja"
+              />
+              <Input
+                name="state"
+                label="Departamento / Estado"
+                type="text"
+                defaultValue={club.state ?? ""}
+                placeholder="Boyacá"
+              />
+            </div>
+            <Input
+              name="country"
+              label="País"
+              type="text"
+              defaultValue={club.country ?? "Colombia"}
+              placeholder="Colombia"
+            />
+            <Input
+              name="address"
+              label="Dirección"
+              type="text"
+              defaultValue={club.address ?? ""}
+              placeholder="Cra 1 # 2-3"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Branding */}
       <Card variant="default">
         <CardHeader>
