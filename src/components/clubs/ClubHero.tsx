@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
 import { MapPin, Lock } from "lucide-react";
+import { CoverUploadButton, LogoUploadButton } from "./ClubHeroUploadButtons";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type ClubHeroClub = {
+  id: string;
   name: string;
   slug: string;
   description: string | null;
@@ -24,6 +26,8 @@ interface ClubHeroProps {
    * "card" — cover + identity inside a rounded card (dashboard).
    */
   variant?: "page" | "card";
+  /** Show inline upload buttons for cover and logo. Only pass true for OWNER context. */
+  editable?: boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -39,7 +43,7 @@ function getInitials(name: string) {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function ClubHero({ club, actions, variant = "page" }: ClubHeroProps) {
+export function ClubHero({ club, actions, variant = "page", editable = false }: ClubHeroProps) {
   const p       = club.primary_color;
   const loc     = [club.city, club.state].filter(Boolean).join(", ");
   const isPrivate = club.visibility === "private";
@@ -64,26 +68,33 @@ export function ClubHero({ club, actions, variant = "page" }: ClubHeroProps) {
           className="absolute inset-0"
           style={{ background: "linear-gradient(to top, rgba(0,0,0,.45), rgba(0,0,0,.15), transparent)" }}
         />
+        {editable && <CoverUploadButton clubId={club.id} />}
       </div>
 
       {/* Identity — relative z-10 lifts this above the positioned cover div */}
       <div className={`relative z-10 ${variant === "card" ? "px-5 pb-5" : "max-w-5xl mx-auto px-5"}`}>
         <div className="flex flex-col lg:flex-row lg:items-end lg:gap-6 -mt-10 lg:-mt-12 pb-6">
 
-          {/* Logo — overlaps cover via negative margin */}
-          <div
-            className="relative z-10 w-24 h-24 lg:w-28 lg:h-28 rounded-2xl flex items-center justify-center text-xl lg:text-2xl font-bold shrink-0 overflow-hidden"
-            style={{
-              backgroundColor: `${p}25`,
-              color: p,
-              border: `4px solid #0a0a0a`,
-              boxShadow: `0 8px 28px ${p}35`,
-            }}
-          >
-            {club.logo_url
-              // eslint-disable-next-line @next/next/no-img-element
-              ? <img src={club.logo_url} alt="" className="w-full h-full object-cover" />
-              : getInitials(club.name)}
+          {/* Logo — overlaps cover via negative margin.
+              Outer wrapper: relative z-10 for stacking; no overflow-hidden so the
+              edit badge can peek beyond the logo's rounded corners.
+              Inner div: carries the visual styles + overflow-hidden for image clipping. */}
+          <div className="relative z-10 shrink-0 w-24 h-24 lg:w-28 lg:h-28">
+            <div
+              className="w-full h-full rounded-2xl flex items-center justify-center text-xl lg:text-2xl font-bold overflow-hidden"
+              style={{
+                backgroundColor: `${p}25`,
+                color: p,
+                border: `4px solid #0a0a0a`,
+                boxShadow: `0 8px 28px ${p}35`,
+              }}
+            >
+              {club.logo_url
+                // eslint-disable-next-line @next/next/no-img-element
+                ? <img src={club.logo_url} alt="" className="w-full h-full object-cover" />
+                : getInitials(club.name)}
+            </div>
+            {editable && <LogoUploadButton clubId={club.id} />}
           </div>
 
           {/* Name + info + actions */}

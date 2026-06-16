@@ -377,6 +377,7 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
       <ClubHero
         club={club}
         variant="card"
+        editable={membership.role === "OWNER"}
         actions={
           <div className="flex flex-col gap-2">
             <Link
