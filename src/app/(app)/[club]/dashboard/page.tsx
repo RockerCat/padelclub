@@ -12,6 +12,7 @@ import {
   Settings,
   Flame,
   XCircle,
+  ExternalLink,
   type LucideIcon,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
@@ -20,6 +21,8 @@ import {
   computeWeeklyAvailableMinutes,
   type OperatingHour,
 } from "@/lib/operatingHours";
+import { OnboardingChecklist } from "./OnboardingChecklist";
+import { ClubHero } from "@/components/clubs/ClubHero";
 
 interface DashboardPageProps {
   params: Promise<{ club: string }>;
@@ -153,7 +156,7 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
 
   const { data: club } = await supabase
     .from("clubs")
-    .select("id, name")
+    .select("id, slug, name, description, city, state, address, logo_url, cover_image_url, visibility, primary_color, secondary_color")
     .eq("slug", slug)
     .eq("is_active", true)
     .single();
@@ -193,6 +196,7 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
     operatingHoursRes,
     recentRes,
     prevWeekCountRes,
+    nonOwnerMembersRes,
   ] = await Promise.all([
     // KPI 1 — confirmed reservations this week
     supabase
@@ -250,6 +254,14 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
       .eq("status", "confirmed")
       .gte("date", prevWeekMondayStr)
       .lte("date", prevWeekSundayStr),
+
+    // Onboarding checklist: non-owner active members (players + admins)
+    supabase
+      .from("club_members")
+      .select("id", { count: "exact", head: true })
+      .eq("club_id", club.id)
+      .eq("is_active", true)
+      .neq("role", "OWNER"),
   ]);
 
   const weekCount     = weekCountRes.count ?? 0;
@@ -346,63 +358,105 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
 
   const isEmpty = recent.length === 0;
 
+  // ─── Onboarding checklist ─────────────────────────────────────────────────────
+  const hasCourts       = courts.length > 0;
+  const hasHours        = dbHours.some((h) => h.is_open);
+  const hasMembers      = (nonOwnerMembersRes.count ?? 0) > 0;
+  const hasReservations = !isEmpty;
+  const hasPublicPage   = !!(
+    club.description &&
+    (club.city || club.address) &&
+    (club.logo_url || club.cover_image_url)
+  );
+  const allChecklistDone = hasPublicPage && hasCourts && hasHours && hasMembers && hasReservations;
+
   return (
     <div className="p-6 md:p-10">
 
-      {/* ─── Hero ──────────────────────────────────────────────────────────── */}
-      <div className="relative overflow-hidden rounded-2xl bg-brand-surface border border-white/10 p-6 mb-8">
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background:
-              "linear-gradient(135deg, color-mix(in srgb, var(--club-primary) 8%, transparent), color-mix(in srgb, var(--club-secondary) 8%, transparent))",
-          }}
+      {/* ─── Club Hero ────────────────────────────────────────────────────── */}
+      <ClubHero
+        club={club}
+        variant="card"
+        actions={
+          <div className="flex flex-col gap-2">
+            <Link
+              href={`/clubs/${slug}`}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border border-white/10 text-brand-muted hover:text-white hover:border-white/25 transition-colors"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              Ver página pública
+            </Link>
+            <Link
+              href={`/${slug}/admin/settings`}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border border-white/10 text-brand-muted hover:text-white hover:border-white/25 transition-colors"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              Editar perfil
+            </Link>
+          </div>
+        }
+      />
+
+      {/* ─── Onboarding checklist ──────────────────────────────────────── */}
+      {!allChecklistDone && (
+        <OnboardingChecklist
+          clubId={club.id}
+          clubSlug={slug}
+          hasPublicPage={hasPublicPage}
+          hasCourts={hasCourts}
+          hasHours={hasHours}
+          hasMembers={hasMembers}
+          hasReservations={hasReservations}
         />
-        <div
-          className="absolute inset-x-0 top-0 h-0.5"
-          style={{
-            background: "linear-gradient(to right, var(--club-primary), var(--club-secondary))",
-          }}
-        />
-        <p className="text-sm text-brand-muted mb-0.5 relative">Panel del club</p>
-        <h1 className="text-2xl font-bold text-white mb-1 relative">{club.name}</h1>
-        <p className="text-sm text-brand-muted relative">
-          {courts.length === 0
-            ? "Sin canchas activas"
-            : courts.length === 1
-            ? "1 cancha activa"
-            : `${courts.length} canchas activas`}
-        </p>
-      </div>
+      )}
 
       {isEmpty ? (
         /* ─── Empty state ─────────────────────────────────────────────────── */
         <div className="flex flex-col items-center justify-center text-center py-16 px-6 bg-brand-surface border border-dashed border-white/10 rounded-2xl mb-8">
           <div
             className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6"
-            style={{
-              backgroundColor: "color-mix(in srgb, var(--club-primary) 12%, transparent)",
-            }}
+            style={{ backgroundColor: "color-mix(in srgb, var(--club-primary) 12%, transparent)" }}
           >
-            <CalendarDays className="w-8 h-8" style={{ color: "var(--club-primary)" }} />
+            {hasCourts
+              ? <CalendarDays className="w-8 h-8" style={{ color: "var(--club-primary)" }} />
+              : <Home        className="w-8 h-8" style={{ color: "var(--club-primary)" }} />}
           </div>
-          <h2 className="text-xl font-bold text-white mb-2">
-            Aún no tienes reservas registradas
-          </h2>
-          <p className="text-sm text-brand-muted mb-8 max-w-sm">
-            Registra la primera reserva de tu club para comenzar a ver métricas aquí.
-          </p>
-          <Link
-            href={`/${slug}/admin/reservations/new`}
-            className="inline-flex items-center gap-2 h-10 px-6 rounded-xl text-sm font-semibold transition-all hover:brightness-110"
-            style={{
-              backgroundColor: "var(--club-primary)",
-              color: "var(--club-bg, #001A24)",
-            }}
-          >
-            <Plus className="w-4 h-4" />
-            Crear primera reserva
-          </Link>
+
+          {hasCourts ? (
+            <>
+              <h2 className="text-xl font-bold text-white mb-2">
+                Aún no tienes reservas registradas
+              </h2>
+              <p className="text-sm text-brand-muted mb-8 max-w-sm">
+                Registra la primera reserva de tu club para comenzar a ver métricas aquí.
+              </p>
+              <Link
+                href={`/${slug}/admin/reservations/new`}
+                className="inline-flex items-center gap-2 h-10 px-6 rounded-xl text-sm font-semibold transition-all hover:brightness-110"
+                style={{ backgroundColor: "var(--club-primary)", color: "var(--club-bg, #001A24)" }}
+              >
+                <Plus className="w-4 h-4" />
+                Crear primera reserva
+              </Link>
+            </>
+          ) : (
+            <>
+              <h2 className="text-xl font-bold text-white mb-2">
+                Agrega tu primera cancha
+              </h2>
+              <p className="text-sm text-brand-muted mb-8 max-w-sm">
+                Antes de registrar reservas, necesitas crear al menos una cancha.
+              </p>
+              <Link
+                href={`/${slug}/admin/courts`}
+                className="inline-flex items-center gap-2 h-10 px-6 rounded-xl text-sm font-semibold transition-all hover:brightness-110"
+                style={{ backgroundColor: "var(--club-primary)", color: "var(--club-bg, #001A24)" }}
+              >
+                <Plus className="w-4 h-4" />
+                Agregar primera cancha
+              </Link>
+            </>
+          )}
         </div>
       ) : (
         <>
@@ -682,13 +736,19 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
           Acceso rápido
         </h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {(
-            [
-              { label: "Reservaciones", Icon: CalendarDays, href: `/${slug}/admin/reservations`, color: "var(--club-primary)" },
-              { label: "Canchas",       Icon: Home,         href: `/${slug}/admin/courts`,        color: "var(--club-secondary)" },
-              { label: "Jugadores",     Icon: Users,        href: `/${slug}/admin/players`,       color: "var(--club-primary)" },
-              { label: "Configuración", Icon: Settings,     href: `/${slug}/admin`,               color: "var(--club-secondary)" },
-            ] as const
+          {(hasCourts
+            ? [
+                { label: "Reservaciones", Icon: CalendarDays, href: `/${slug}/admin/reservations`, color: "var(--club-primary)" },
+                { label: "Canchas",       Icon: Home,         href: `/${slug}/admin/courts`,        color: "var(--club-secondary)" },
+                { label: "Jugadores",     Icon: Users,        href: `/${slug}/admin/players`,       color: "var(--club-primary)" },
+                { label: "Configuración", Icon: Settings,     href: `/${slug}/admin`,               color: "var(--club-secondary)" },
+              ]
+            : [
+                { label: "Canchas",       Icon: Home,         href: `/${slug}/admin/courts`,        color: "var(--club-primary)" },
+                { label: "Configuración", Icon: Settings,     href: `/${slug}/admin`,               color: "var(--club-secondary)" },
+                { label: "Jugadores",     Icon: Users,        href: `/${slug}/admin/players`,       color: "var(--club-primary)" },
+                { label: "Reservaciones", Icon: CalendarDays, href: `/${slug}/admin/reservations`,  color: "var(--club-secondary)" },
+              ]
           ).map(({ label, Icon, href, color }) => (
             <Link
               key={label}

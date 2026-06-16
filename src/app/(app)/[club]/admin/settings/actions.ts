@@ -86,6 +86,9 @@ export async function updateClub(
 
   const name = (formData.get("name") as string | null)?.trim() ?? "";
   const description = (formData.get("description") as string | null)?.trim() || null;
+  const cover_image_url = (formData.get("cover_image_url") as string | null)?.trim() || null;
+  const rawVisibility = formData.get("visibility") as string | null;
+  const visibility = rawVisibility === "private" ? "private" : "public";
   const city = (formData.get("city") as string | null)?.trim() || null;
   const state = (formData.get("state") as string | null)?.trim() || null;
   const country = (formData.get("country") as string | null)?.trim() || null;
@@ -107,6 +110,8 @@ export async function updateClub(
     .update({
       name,
       description,
+      cover_image_url,
+      visibility,
       city,
       state,
       country,

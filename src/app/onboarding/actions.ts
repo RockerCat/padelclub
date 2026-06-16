@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getClubEntryPath } from "@/lib/utils/navigation";
 
 const SLUG_REGEX = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/;
 
@@ -130,7 +131,26 @@ export async function createClub(
       };
     }
 
-    const target = `/${club.slug}/admin/settings`;
+    // Verify the club is readable via the user's session (catches RLS or is_active issues
+    // before redirecting to a URL that would show 404).
+    const { data: verifiedClub, error: verifyError } = await supabase
+      .from("clubs")
+      .select("id, slug")
+      .eq("slug", club.slug)
+      .single();
+
+    console.log("[createClub] step=verify_read", {
+      found: !!verifiedClub,
+      verifyError: verifyError ? { message: verifyError.message, code: verifyError.code } : null,
+    });
+
+    if (!verifiedClub) {
+      return {
+        error: "El club fue creado pero no se pudo acceder. Aplica la migración 20260615000005 en Supabase y vuelve a intentarlo.",
+      };
+    }
+
+    const target = `${getClubEntryPath(club.slug, "OWNER")}?new=1`;
     console.log("[createClub] step=redirect →", target);
     redirect(target);
   } catch (err: unknown) {

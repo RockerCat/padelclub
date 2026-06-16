@@ -3,7 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui";
 import { getClubEntryPath } from "@/lib/utils/navigation";
-import { LogOut, Plus } from "lucide-react";
+import { LogOut, Plus, Compass, CheckCircle2 } from "lucide-react";
 import { ExploreSection } from "./ExploreSection";
 import type { DirectoryClub, MemberInfo } from "./ExploreSection";
 
@@ -25,32 +25,20 @@ type MembershipRow = {
 };
 
 function getInitials(name: string) {
-  return name
-    .split(/\s+/)
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  return name.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
 }
 
-export default async function ClubsPage() {
+export default async function ClubsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ welcome?: string }>;
+}) {
+  const { welcome } = await searchParams;
+  const showWelcome = welcome === "1";
+
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  // Public clubs — readable by anon via clubs_select_active RLS policy
-  // Requires migration 005 (visibility column) to be applied
-  const { data: rawDirectory } = await supabase
-    .from("clubs")
-    .select("id, name, slug, description, logo_url, primary_color, secondary_color, whatsapp, city, state")
-    .eq("is_active", true)
-    .eq("visibility", "public")
-    .order("name", { ascending: true });
-  const directoryClubs = (rawDirectory ?? []) as unknown as DirectoryClub[];
-
-  // Memberships — only fetched for authenticated users
   let memberships: MembershipRow[] = [];
   let lastClubId: string | null = null;
 
@@ -72,26 +60,33 @@ export default async function ClubsPage() {
     lastClubId = profileResult.data?.last_club_id ?? null;
   }
 
-  // Sort: last used first, then alphabetical
+  const hasClubs      = memberships.length > 0;
+  const isOwner       = memberships.some((m) => m.role === "OWNER");
+  const isWelcomeMode = showWelcome && !!user && !hasClubs;
+
+  // Skip directory fetch when in welcome mode — not needed
+  const directoryClubs: DirectoryClub[] = isWelcomeMode ? [] : await supabase
+    .from("clubs")
+    .select("id, name, slug, visibility, description, logo_url, primary_color, secondary_color, whatsapp, city, state")
+    .eq("is_active", true)
+    .order("name", { ascending: true })
+    .then(({ data }) => (data ?? []) as unknown as DirectoryClub[]);
+
   const sorted = [...memberships].sort((a, b) => {
     if (a.clubs.id === lastClubId) return -1;
     if (b.clubs.id === lastClubId) return 1;
     return a.clubs.name.localeCompare(b.clubs.name, "es");
   });
 
-  // Build membership map: clubId → MemberInfo (used by ExploreSection to mark member clubs)
   const memberMap: Record<string, MemberInfo> = {};
   for (const { role, clubs: club } of memberships) {
     memberMap[club.id] = { slug: club.slug, role };
   }
 
-  const isOwner = memberships.some((m) => m.role === "OWNER");
-  const hasClubs = memberships.length > 0;
-  const createClubHref = hasClubs ? "/clubs/create" : "/onboarding";
-
   return (
     <div className="min-h-screen bg-brand-bg">
-      {/* Slim top bar */}
+
+      {/* ── Top bar ─────────────────────────────────────────────────────────── */}
       <div className="border-b border-white/10 bg-brand-bg/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
           <Link href="/">
@@ -104,9 +99,7 @@ export default async function ClubsPage() {
             <form
               action={async () => {
                 "use server";
-                const { createClient: createServerClient } = await import(
-                  "@/lib/supabase/server"
-                );
+                const { createClient: createServerClient } = await import("@/lib/supabase/server");
                 const sb = await createServerClient();
                 await sb.auth.signOut();
                 redirect("/");
@@ -139,143 +132,157 @@ export default async function ClubsPage() {
         </div>
       </div>
 
-      {/* Main content */}
-      <div className="max-w-3xl mx-auto px-4 py-8 md:py-12">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-white">Clubes</h1>
-          <p className="text-brand-muted text-sm mt-1">
-            Encuentra clubes de pádel o entra a los clubes donde ya estás registrado.
-          </p>
+      {/* ── Welcome mode: single-focus onboarding ───────────────────────────── */}
+      {isWelcomeMode ? (
+        <div className="max-w-sm mx-auto px-4 py-20 flex flex-col items-center text-center gap-8">
+          <div className="w-16 h-16 rounded-2xl bg-green-500/10 border border-green-500/20 flex items-center justify-center">
+            <CheckCircle2 className="w-8 h-8 text-green-400" />
+          </div>
+
+          <div>
+            <h1 className="text-2xl font-bold text-white mb-2">¡Cuenta creada!</h1>
+            <p className="text-sm text-brand-muted leading-relaxed">
+              Ahora crea tu primer club para comenzar a operar.
+            </p>
+          </div>
+
+          <Link
+            href="/clubs/create"
+            className="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl bg-brand-primary text-brand-bg text-sm font-semibold hover:bg-brand-primary/90 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Crear mi club
+          </Link>
         </div>
 
-        <div className="flex flex-col gap-10">
-          {/* ── Mis clubes (authenticated only) ── */}
-          {user && (
-            <section>
-              <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-3">
-                Mis clubes
-              </h2>
+      ) : (
 
-              {sorted.length > 0 ? (
-                <>
-                  <div className="flex flex-col gap-3">
-                    {sorted.map(({ role, clubs: club }) => {
-                      const entryPath = getClubEntryPath(club.slug, role);
-                      const initials = getInitials(club.name);
-                      const isLast = club.id === lastClubId;
+        /* ── Normal mode ────────────────────────────────────────────────────── */
+        <div className="max-w-3xl mx-auto px-4 py-8 md:py-12">
+          <div className="flex flex-col gap-10">
 
-                      return (
+            {/* ── Mis clubes (authenticated only) ─────────────────────────── */}
+            {user && (
+              <section>
+                <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-3">
+                  Mis clubes
+                </h2>
+
+                {hasClubs ? (
+                  <>
+                    <div className="flex flex-col gap-3">
+                      {sorted.map(({ role, clubs: club }) => {
+                        const entryPath = getClubEntryPath(club.slug, role);
+                        const initials  = getInitials(club.name);
+                        const isLast    = club.id === lastClubId;
+
+                        return (
+                          <Link
+                            key={club.id}
+                            href={entryPath}
+                            style={{ "--card-primary": club.primary_color } as React.CSSProperties}
+                            className="flex items-center gap-4 px-5 py-4 rounded-2xl bg-brand-surface border border-white/10 hover:border-[var(--card-primary)] hover:bg-[color-mix(in_srgb,var(--card-primary)_6%,transparent)] transition-colors group"
+                          >
+                            <div
+                              className="w-11 h-11 rounded-xl flex items-center justify-center text-sm font-bold shrink-0 overflow-hidden"
+                              style={{ backgroundColor: `${club.primary_color}22`, color: club.primary_color }}
+                            >
+                              {club.logo_url
+                                // eslint-disable-next-line @next/next/no-img-element
+                                ? <img src={club.logo_url} alt={`Logo de ${club.name}`} className="w-full h-full object-cover" />
+                                : initials}
+                            </div>
+
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-sm font-semibold text-white truncate">{club.name}</span>
+                                {isLast && (
+                                  <span className="text-[10px] text-brand-muted bg-white/5 border border-white/10 px-1.5 py-0.5 rounded-md shrink-0">
+                                    Último usado
+                                  </span>
+                                )}
+                              </div>
+                              <div className="mt-0.5">
+                                <Badge
+                                  variant={role === "OWNER" ? "primary" : role === "ADMIN" ? "secondary" : "outline"}
+                                  size="sm"
+                                >
+                                  {ROLE_LABELS[role] ?? role}
+                                </Badge>
+                              </div>
+                            </div>
+
+                            <span className="text-xs font-semibold shrink-0 group-hover:underline" style={{ color: club.primary_color }}>
+                              Entrar →
+                            </span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+
+                    {isOwner && (
+                      <div className="mt-3">
                         <Link
-                          key={club.id}
-                          href={entryPath}
-                          style={
-                            { "--card-primary": club.primary_color } as React.CSSProperties
-                          }
-                          className="flex items-center gap-4 px-5 py-4 rounded-2xl bg-brand-surface border border-white/10 hover:border-[var(--card-primary)] hover:bg-[color-mix(in_srgb,var(--card-primary)_6%,transparent)] transition-colors group"
+                          href="/clubs/create"
+                          className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-2xl border border-white/10 text-sm font-medium text-brand-muted hover:text-white hover:border-white/20 hover:bg-white/5 transition-colors"
                         >
-                          {/* Logo */}
-                          <div
-                            className="w-11 h-11 rounded-xl flex items-center justify-center text-sm font-bold shrink-0 overflow-hidden"
-                            style={{
-                              backgroundColor: `${club.primary_color}22`,
-                              color: club.primary_color,
-                            }}
-                          >
-                            {club.logo_url ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={club.logo_url}
-                                alt={`Logo de ${club.name}`}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              initials
-                            )}
-                          </div>
-
-                          {/* Info */}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-sm font-semibold text-white truncate">
-                                {club.name}
-                              </span>
-                              {isLast && (
-                                <span className="text-[10px] text-brand-muted bg-white/5 border border-white/10 px-1.5 py-0.5 rounded-md shrink-0">
-                                  Último usado
-                                </span>
-                              )}
-                            </div>
-                            <div className="mt-0.5">
-                              <Badge
-                                variant={
-                                  role === "OWNER"
-                                    ? "primary"
-                                    : role === "ADMIN"
-                                    ? "secondary"
-                                    : "outline"
-                                }
-                                size="sm"
-                              >
-                                {ROLE_LABELS[role] ?? role}
-                              </Badge>
-                            </div>
-                          </div>
-
-                          {/* Entrar */}
-                          <span
-                            className="text-xs font-semibold shrink-0 group-hover:underline"
-                            style={{ color: club.primary_color }}
-                          >
-                            Entrar →
-                          </span>
+                          <Plus className="w-4 h-4" />
+                          Crear otro club
                         </Link>
-                      );
-                    })}
-                  </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  /* ── Empty state (no clubs, no welcome mode) ── */
+                  <div className="rounded-2xl border border-white/10 bg-brand-surface px-6 py-10 flex flex-col items-center text-center gap-6">
+                    <div className="w-14 h-14 rounded-2xl bg-white/4 border border-white/10 flex items-center justify-center">
+                      <Compass className="w-7 h-7 text-brand-muted/40" />
+                    </div>
 
-                  {/* Create another club — OWNER only */}
-                  {isOwner && (
-                    <div className="mt-3">
+                    <div>
+                      <p className="text-base font-semibold text-white mb-1.5">Bienvenido a PadelClub</p>
+                      <p className="text-sm text-brand-muted">Todavía no perteneces a ningún club.</p>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-3 w-full max-w-sm">
+                      <a
+                        href="#explorar"
+                        className="flex-1 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold border border-white/20 text-white hover:border-white/40 hover:bg-white/5 transition-colors"
+                      >
+                        <Compass className="w-4 h-4" />
+                        Explorar clubes
+                      </a>
                       <Link
                         href="/clubs/create"
-                        className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-2xl border border-white/10 text-sm font-medium text-brand-muted hover:text-white hover:border-white/20 hover:bg-white/5 transition-colors"
+                        className="flex-1 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold bg-brand-primary text-brand-bg hover:bg-brand-primary/90 transition-colors"
                       >
                         <Plus className="w-4 h-4" />
-                        Crear otro club
+                        Crear mi club
                       </Link>
                     </div>
-                  )}
-                </>
-              ) : (
-                /* Empty state */
-                <div className="rounded-2xl border border-white/10 bg-brand-surface px-5 py-8 text-center">
-                  <p className="text-sm font-medium text-white mb-1">
-                    Aún no perteneces a ningún club.
-                  </p>
-                  <p className="text-sm text-brand-muted mb-5">
-                    Explora clubes disponibles o crea tu propio club.
-                  </p>
-                  <Link
-                    href={createClubHref}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-brand-primary text-brand-bg hover:bg-brand-primary/90 transition-colors"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Crear mi club
-                  </Link>
-                </div>
-              )}
-            </section>
-          )}
 
-          {/* ── Explorar clubes ── */}
-          <ExploreSection
-            clubs={directoryClubs}
-            memberMap={memberMap}
-            isAuthenticated={!!user}
-          />
+                    <div className="text-xs text-brand-muted/50 leading-relaxed max-w-xs">
+                      <span className="text-brand-muted/70 font-medium">Explorar:</span> encuentra un club donde jugar pádel.{" "}
+                      <span className="text-brand-muted/70 font-medium">Crear:</span> registra y gestiona tu propio club.
+                    </div>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* ── Explorar clubes ────────────────────────────────────────────── */}
+            <div id="explorar">
+              <ExploreSection
+                clubs={directoryClubs}
+                memberMap={memberMap}
+                isAuthenticated={!!user}
+              />
+            </div>
+
+          </div>
         </div>
-      </div>
+      )}
+
     </div>
   );
 }

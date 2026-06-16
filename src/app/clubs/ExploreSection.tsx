@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { Search, Lock } from "lucide-react";
 import { getClubEntryPath } from "@/lib/utils/navigation";
 
 export type DirectoryClub = {
   id: string;
   name: string;
   slug: string;
+  visibility: string;
   city: string | null;
   state: string | null;
   description: string | null;
@@ -30,6 +31,25 @@ function getInitials(name: string): string {
     .slice(0, 2)
     .join("")
     .toUpperCase();
+}
+
+function VisibilityBadge({ visibility }: { visibility: string }) {
+  if (visibility === "public") {
+    return (
+      <div className="flex items-center gap-1.5 mt-1.5">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+        <span className="text-[11px] font-medium text-emerald-400">Público</span>
+        <span className="text-[11px] text-brand-muted/50">· Cualquier jugador puede unirse</span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1.5 mt-1.5">
+      <Lock className="w-3 h-3 text-amber-400/70 shrink-0" />
+      <span className="text-[11px] font-medium text-amber-400/80">Privado</span>
+      <span className="text-[11px] text-brand-muted/50">· Requiere aprobación</span>
+    </div>
+  );
 }
 
 function ClubDirectoryCard({
@@ -84,8 +104,9 @@ function ClubDirectoryCard({
           {location && (
             <p className="text-xs text-brand-muted mt-0.5">{location}</p>
           )}
+          <VisibilityBadge visibility={club.visibility} />
           {club.description && (
-            <p className="text-xs text-brand-muted/70 mt-1.5 line-clamp-2">
+            <p className="text-xs text-brand-muted/70 mt-2 line-clamp-2">
               {club.description}
             </p>
           )}
@@ -110,7 +131,7 @@ function ClubDirectoryCard({
           href={`/clubs/${club.slug}`}
           className="flex items-center justify-center py-2 rounded-xl text-sm font-medium border border-white/15 text-white hover:border-white/30 hover:bg-white/5 transition-colors"
         >
-          Ver club →
+          {club.visibility === "public" ? "Ver club →" : "Ver detalles →"}
         </Link>
       )}
     </div>
@@ -161,7 +182,7 @@ export function ExploreSection({ clubs, memberMap, isAuthenticated }: ExploreSec
       {/* Results */}
       {clubs.length === 0 ? (
         <div className="py-12 text-center">
-          <p className="text-sm text-brand-muted">No hay clubes públicos disponibles aún.</p>
+          <p className="text-sm text-brand-muted">No hay clubes disponibles aún.</p>
         </div>
       ) : filtered.length === 0 ? (
         <div className="py-8 text-center">

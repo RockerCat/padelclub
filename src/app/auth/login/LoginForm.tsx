@@ -69,9 +69,9 @@ export function LoginForm() {
         .eq("is_active", true)
         .order("joined_at", { ascending: true });
 
-      // 0 clubs → onboarding
+      // 0 clubs → home, let the user decide what to do
       if (!memberships || memberships.length === 0) {
-        router.push("/onboarding");
+        router.push("/clubs");
         return;
       }
 

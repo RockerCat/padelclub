@@ -83,6 +83,62 @@ export function SettingsForm({ club }: SettingsFormProps) {
         </CardContent>
       </Card>
 
+      {/* Public page */}
+      <Card variant="default">
+        <CardHeader>
+          <h2 className="text-base font-semibold text-white">Página pública del club</h2>
+          <p className="text-xs text-brand-muted mt-1">
+            Controla cómo aparece tu club en el directorio.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-4">
+            <Input
+              name="cover_image_url"
+              label="URL de portada"
+              type="url"
+              defaultValue={club.cover_image_url ?? ""}
+              placeholder="https://ejemplo.com/portada.jpg"
+              hint="Imagen de fondo que aparece en la cabecera de la página pública."
+            />
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-white/80">Visibilidad</label>
+              <p className="text-xs text-brand-muted">
+                Los clubes públicos aparecen en el directorio y permiten que cualquier jugador se una.
+              </p>
+              <div className="flex flex-col gap-2 mt-1">
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <input
+                    type="radio"
+                    name="visibility"
+                    value="public"
+                    defaultChecked={club.visibility !== "private"}
+                    className="accent-brand-primary w-4 h-4"
+                  />
+                  <div>
+                    <span className="text-sm text-white font-medium">Público</span>
+                    <span className="text-xs text-brand-muted ml-2">Cualquier jugador puede unirse</span>
+                  </div>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <input
+                    type="radio"
+                    name="visibility"
+                    value="private"
+                    defaultChecked={club.visibility === "private"}
+                    className="accent-brand-primary w-4 h-4"
+                  />
+                  <div>
+                    <span className="text-sm text-white font-medium">Privado</span>
+                    <span className="text-xs text-brand-muted ml-2">Solo con invitación o aprobación</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Location */}
       <Card variant="default">
         <CardHeader>

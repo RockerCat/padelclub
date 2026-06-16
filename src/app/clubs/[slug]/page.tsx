@@ -1,535 +1,421 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
+import type { LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getClubEntryPath } from "@/lib/utils/navigation";
 import {
   ArrowLeft, MapPin, MessageCircle, ExternalLink,
-  LayoutGrid, Clock, Check, Camera,
+  LayoutGrid, Clock, Camera, Trophy, CalendarDays,
 } from "lucide-react";
 import { RequestAccessButton } from "./RequestAccessButton";
+import { ClubHero } from "@/components/clubs/ClubHero";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface Props {
-  params: Promise<{ slug: string }>;
-}
+interface Props { params: Promise<{ slug: string }> }
 
 type Court = { id: string; name: string; is_indoor: boolean | null; surface: string | null };
 type Hour  = { day_of_week: number; is_open: boolean; opens_at: string | null; closes_at: string | null };
 
-// ─── Schedule helpers ─────────────────────────────────────────────────────────
+// ─── Schedule ─────────────────────────────────────────────────────────────────
 
-const DAY_NAMES_FULL = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
-const DAY_DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0]; // Mon → Sun
+const DAY_NAMES = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
 type ScheduleGroup = { label: string; timeRange: string };
 
 function buildSchedule(hours: Hour[]): ScheduleGroup[] {
   const open = hours
     .filter((h) => h.is_open && h.opens_at && h.closes_at)
-    .sort(
-      (a, b) =>
-        DAY_DISPLAY_ORDER.indexOf(a.day_of_week) -
-        DAY_DISPLAY_ORDER.indexOf(b.day_of_week)
-    );
+    .sort((a, b) => DAY_ORDER.indexOf(a.day_of_week) - DAY_ORDER.indexOf(b.day_of_week));
 
-  type Group = { startDay: number; endDay: number; opens: string; closes: string };
-  const groups: Group[] = [];
+  type G = { startDay: number; endDay: number; opens: string; closes: string };
+  const groups: G[] = [];
 
   for (const h of open) {
-    const last = groups[groups.length - 1];
-    const prevIdx = last != null ? DAY_DISPLAY_ORDER.indexOf(last.endDay) : -2;
-    const currIdx = DAY_DISPLAY_ORDER.indexOf(h.day_of_week);
-    if (
-      last &&
-      currIdx === prevIdx + 1 &&
-      last.opens === h.opens_at &&
-      last.closes === h.closes_at
-    ) {
+    const last  = groups[groups.length - 1];
+    const prevI = last != null ? DAY_ORDER.indexOf(last.endDay) : -2;
+    const currI = DAY_ORDER.indexOf(h.day_of_week);
+    if (last && currI === prevI + 1 && last.opens === h.opens_at && last.closes === h.closes_at) {
       last.endDay = h.day_of_week;
     } else {
-      groups.push({
-        startDay: h.day_of_week,
-        endDay: h.day_of_week,
-        opens: h.opens_at!,
-        closes: h.closes_at!,
-      });
+      groups.push({ startDay: h.day_of_week, endDay: h.day_of_week, opens: h.opens_at!, closes: h.closes_at! });
     }
   }
 
   return groups.map(({ startDay, endDay, opens, closes }) => ({
-    label:
-      startDay === endDay
-        ? DAY_NAMES_FULL[startDay]
-        : `${DAY_NAMES_FULL[startDay]} – ${DAY_NAMES_FULL[endDay]}`,
+    label: startDay === endDay ? DAY_NAMES[startDay] : `${DAY_NAMES[startDay]} – ${DAY_NAMES[endDay]}`,
     timeRange: `${opens.slice(0, 5)} – ${closes.slice(0, 5)}`,
   }));
 }
 
-// ─── Misc helpers ─────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getInitials(name: string) {
-  return name
-    .split(/\s+/)
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  return name.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
 }
 
-function StatCard({ value, label }: { value: string; label: string }) {
+function DashStat({ Icon, value, label, color, pending = false }: {
+  Icon: LucideIcon; value?: string; label: string; color: string; pending?: boolean;
+}) {
   return (
-    <div className="rounded-xl bg-brand-surface border border-white/10 px-4 py-3.5 flex flex-col gap-1 min-w-0">
-      <span className="text-lg font-bold text-white leading-none truncate">{value}</span>
-      <span className="text-xs text-brand-muted">{label}</span>
+    <div className={`rounded-xl px-4 py-3.5 flex items-center gap-3 ${pending ? "bg-white/3 border border-dashed border-white/8" : "bg-brand-surface border border-white/10"}`}>
+      <Icon className="w-5 h-5 shrink-0" style={{ color: pending ? "rgba(255,255,255,0.18)" : color }} />
+      <div className="min-w-0">
+        {pending ? (
+          <p className="text-xs text-brand-muted/35 font-medium">{label} · pronto</p>
+        ) : (
+          <>
+            <p className="text-base font-black text-white leading-none tabular-nums truncate">{value}</p>
+            <p className="text-[11px] text-brand-muted mt-0.5">{label}</p>
+          </>
+        )}
+      </div>
     </div>
   );
 }
 
-const BENEFITS = [
-  "Reserva canchas en línea — sin llamadas ni WhatsApp",
-  "Consulta disponibilidad en tiempo real",
-  "Organiza y gestiona tus partidos fácilmente",
-  "Participa en torneos y actividades del club",
-  "Accede desde cualquier dispositivo, cuando quieras",
-];
+function InfoRow({ Icon, label, value, badge, badgeAmber = false }: {
+  Icon: LucideIcon; label: string; value: string; badge?: string; badgeAmber?: boolean;
+}) {
+  return (
+    <div className="flex items-start gap-3 py-3">
+      <Icon className="w-4 h-4 text-brand-muted/60 shrink-0 mt-0.5" />
+      <div className="flex-1 min-w-0">
+        <p className="text-[11px] uppercase tracking-wider text-brand-muted/50 font-medium">{label}</p>
+        <p className="text-sm text-white mt-0.5 leading-snug">{value}</p>
+      </div>
+      {badge && (
+        <span className={`text-[10px] font-medium shrink-0 mt-1 px-1.5 py-0.5 rounded-md ${badgeAmber ? "text-amber-400/80 bg-amber-500/10" : "text-brand-muted/50 bg-white/5"}`}>
+          {badge}
+        </span>
+      )}
+    </div>
+  );
+}
 
 // ─── Metadata ─────────────────────────────────────────────────────────────────
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("clubs")
-    .select("name, description")
-    .eq("slug", slug)
-    .eq("is_active", true)
-    .eq("visibility", "public")
-    .single();
+  const supabase  = await createClient();
+  const { data }  = await supabase.from("clubs").select("name, description")
+    .eq("slug", slug).eq("is_active", true).single();
   if (!data) return { title: "Club no encontrado | PadelClub" };
-  return {
-    title: `${data.name} | PadelClub`,
-    description: data.description ?? `Conoce ${data.name} en PadelClub.`,
-  };
+  return { title: `${data.name} | PadelClub`, description: data.description ?? `Conoce ${data.name} en PadelClub.` };
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function PublicClubPage({ params }: Props) {
   const { slug } = await params;
-  const supabase = await createClient();
+  const supabase  = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const { data: club } = await supabase
+  const { data: clubData } = await supabase
     .from("clubs")
-    .select(
-      "id, name, slug, description, logo_url, primary_color, secondary_color, city, state, country, address, whatsapp, instagram, facebook, youtube"
-    )
-    .eq("slug", slug)
-    .eq("is_active", true)
-    .eq("visibility", "public")
-    .single();
+    .select("id, name, slug, description, logo_url, cover_image_url, primary_color, secondary_color, visibility, city, state, country, address, whatsapp, instagram, facebook, youtube")
+    .eq("slug", slug).eq("is_active", true).single();
 
-  if (!club) notFound();
+  if (!clubData) notFound();
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+  const club = clubData!;
 
   const [membershipResult, courtsResult, hoursResult] = await Promise.all([
     user
-      ? supabase
-          .from("club_members")
-          .select("role")
-          .eq("club_id", club.id)
-          .eq("profile_id", user.id)
-          .eq("is_active", true)
-          .single()
+      ? supabase.from("club_members").select("role").eq("club_id", club.id).eq("profile_id", user.id).eq("is_active", true).single()
       : Promise.resolve({ data: null }),
-    supabase
-      .from("courts")
-      .select("id, name, is_indoor, surface")
-      .eq("club_id", club.id)
-      .eq("is_active", true)
-      .order("sort_order", { ascending: true }),
-    supabase
-      .from("club_operating_hours")
-      .select("day_of_week, is_open, opens_at, closes_at")
-      .eq("club_id", club.id)
-      .order("day_of_week", { ascending: true }),
+    supabase.from("courts").select("id, name, is_indoor, surface").eq("club_id", club.id).eq("is_active", true).order("sort_order"),
+    supabase.from("club_operating_hours").select("day_of_week, is_open, opens_at, closes_at").eq("club_id", club.id).order("day_of_week"),
   ]);
 
-  const membership = membershipResult.data as { role: string } | null;
-  const courts    = (courtsResult.data ?? []) as Court[];
-  const rawHours  = (hoursResult.data  ?? []) as Hour[];
-  const schedule  = buildSchedule(rawHours);
+  const membership   = membershipResult.data as { role: string } | null;
+  const courts       = (courtsResult.data  ?? []) as Court[];
+  const rawHours     = (hoursResult.data   ?? []) as Hour[];
+  const schedule     = buildSchedule(rawHours);
 
-  // Derived
-  const p          = club.primary_color;
-  const loc        = [club.city, club.state, club.country].filter(Boolean).join(", ");
-  const isAdmin    = membership?.role === "OWNER" || membership?.role === "ADMIN";
-  const hasContact = club.whatsapp || club.instagram || club.facebook || club.youtube;
-  const hasLocation = club.address || club.city || club.state || club.country;
-
-  // Stats row — only non-empty values
+  const p            = club.primary_color;
+  const isPublic     = club.visibility === "public";
+  const locFull      = [club.city, club.state, club.country].filter(Boolean).join(", ");
+  const isAdmin      = membership?.role === "OWNER" || membership?.role === "ADMIN";
+  const hasContact   = club.whatsapp || club.instagram || club.facebook || club.youtube;
   const mainSchedule = schedule[0]?.timeRange ?? null;
-  const stats = [
-    courts.length > 0 ? { value: String(courts.length), label: courts.length === 1 ? "Cancha" : "Canchas" } : null,
-    mainSchedule       ? { value: mainSchedule,           label: "Horario principal" }                          : null,
-    club.city          ? { value: club.city,              label: "Ciudad" }                                     : null,
-  ].filter((s): s is { value: string; label: string } => s !== null);
+
+  // CTA buttons (reusable in two spots)
+  function CtaBlock({ compact = false }: { compact?: boolean }) {
+    if (membership) {
+      return (
+        <Link
+          href={getClubEntryPath(club.slug, membership.role)}
+          className={`inline-flex items-center justify-center rounded-xl text-sm font-semibold transition-colors ${compact ? "px-5 py-2.5" : "px-7 py-3"}`}
+          style={{ backgroundColor: `${p}22`, color: p, border: `1px solid ${p}44` }}
+        >
+          {isAdmin ? "Administrar club →" : "Entrar al club →"}
+        </Link>
+      );
+    }
+    if (!user) {
+      return (
+        <div className={`flex ${compact ? "flex-row gap-2" : "flex-col sm:flex-row gap-2.5"}`}>
+          <Link
+            href={`/auth/signup?next=/clubs/${club.slug}`}
+            className={`inline-flex items-center justify-center rounded-xl bg-brand-primary text-brand-bg text-sm font-semibold hover:bg-brand-primary/90 transition-colors ${compact ? "px-4 py-2.5" : "px-7 py-3"}`}
+          >
+            {isPublic ? "Unirme al club" : "Solicitar acceso"}
+          </Link>
+          <Link
+            href={`/auth/login?next=/clubs/${club.slug}`}
+            className={`inline-flex items-center justify-center rounded-xl border border-white/15 text-white text-sm font-medium hover:bg-white/5 transition-colors ${compact ? "px-4 py-2.5" : "px-7 py-3"}`}
+          >
+            Entrar
+          </Link>
+        </div>
+      );
+    }
+    return <RequestAccessButton whatsapp={club.whatsapp} isPublic={isPublic} className={compact ? "!px-4 !py-2.5" : "w-full sm:w-auto"} />;
+  }
 
   return (
     <div className="min-h-screen bg-brand-bg">
 
       {/* ── Top bar ─────────────────────────────────────────────────────────── */}
-      <div className="border-b border-white/10 bg-brand-bg/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
-          <Link
-            href="/clubs"
-            className="flex items-center gap-1.5 text-sm text-brand-muted hover:text-white transition-colors"
-          >
+      <div className="border-b border-white/8 bg-brand-bg/90 backdrop-blur-sm sticky top-0 z-20">
+        <div className="max-w-5xl mx-auto px-5 h-14 flex items-center justify-between">
+          <Link href="/clubs" className="flex items-center gap-1.5 text-sm text-brand-muted hover:text-white transition-colors">
             <ArrowLeft className="w-4 h-4" />
             Explorar clubes
           </Link>
           {!user && (
-            <div className="flex items-center gap-2">
-              <Link
-                href={`/auth/login?next=/clubs/${club.slug}`}
-                className="px-3 py-1.5 rounded-lg text-sm font-medium border border-white/15 text-white hover:border-white/30 hover:bg-white/5 transition-colors"
-              >
-                Iniciar sesión
-              </Link>
-              <Link
-                href={`/auth/signup?next=/clubs/${club.slug}`}
-                className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-brand-primary text-brand-bg hover:bg-brand-primary/90 transition-colors"
-              >
-                Registrarse
-              </Link>
-            </div>
+            <Link href={`/auth/login?next=/clubs/${club.slug}`} className="text-sm text-brand-muted hover:text-white transition-colors">
+              Iniciar sesión
+            </Link>
           )}
         </div>
       </div>
 
       {/* ── Hero ────────────────────────────────────────────────────────────── */}
-      <div
-        className="relative py-14 md:py-20 border-b border-white/5"
-        style={{ background: `linear-gradient(160deg, ${p}10 0%, transparent 55%)` }}
-      >
-        <div className="max-w-2xl mx-auto px-4 flex flex-col items-center text-center">
+      <ClubHero club={club} variant="page" actions={<CtaBlock compact />} />
 
-          {/* Logo */}
-          <div
-            className="w-24 h-24 rounded-2xl flex items-center justify-center text-2xl font-bold mb-6 overflow-hidden shrink-0"
-            style={{ backgroundColor: `${p}1a`, color: p, border: `1px solid ${p}33` }}
-          >
-            {club.logo_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={club.logo_url} alt={`Logo de ${club.name}`} className="w-full h-full object-cover" />
-            ) : (
-              getInitials(club.name)
-            )}
-          </div>
-
-          {/* Name */}
-          <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
-            {club.name}
-          </h1>
-
-          {/* Meta row: location, courts, schedule */}
-          <div className="mt-3 flex flex-col items-center gap-1.5">
-            {loc && (
-              <div className="flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 shrink-0" style={{ color: `${p}cc` }} />
-                <span className="text-sm text-brand-muted">{loc}</span>
-              </div>
-            )}
-            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
-              {courts.length > 0 && (
-                <div className="flex items-center gap-1.5">
-                  <LayoutGrid className="w-3.5 h-3.5 shrink-0" style={{ color: `${p}99` }} />
-                  <span className="text-sm text-brand-muted">
-                    {courts.length} {courts.length === 1 ? "cancha disponible" : "canchas disponibles"}
-                  </span>
-                </div>
-              )}
-              {mainSchedule && (
-                <div className="flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 shrink-0" style={{ color: `${p}99` }} />
-                  <span className="text-sm text-brand-muted">{mainSchedule}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Description */}
-          {club.description && (
-            <p className="mt-5 text-base text-brand-muted/90 leading-relaxed max-w-lg">
-              {club.description}
-            </p>
+      {/* ── Stats row ────────────────────────────────────────────────────────── */}
+      <div className="max-w-5xl mx-auto px-5 pb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {courts.length > 0 && (
+            <DashStat Icon={LayoutGrid} value={String(courts.length)} label={courts.length === 1 ? "Cancha activa" : "Canchas activas"} color={p} />
           )}
+          {mainSchedule && (
+            <DashStat Icon={Clock} value={mainSchedule} label="Horario principal" color={p} />
+          )}
+          {club.city && (
+            <DashStat Icon={MapPin} value={club.city} label="Ubicación" color={p} />
+          )}
+          <DashStat Icon={Trophy} label="Ranking" color={p} pending />
         </div>
       </div>
 
-      {/* ── Body ────────────────────────────────────────────────────────────── */}
-      <div className="max-w-2xl mx-auto px-4 py-8 flex flex-col gap-5">
+      {/* ── Two-column body ──────────────────────────────────────────────────── */}
+      <div className="max-w-5xl mx-auto px-5 pb-12">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 lg:items-start">
 
-        {/* ── Stats row ──────────────────────────────────────────────────── */}
-        {stats.length > 0 && (
-          <div
-            className={`grid gap-3 ${
-              stats.length === 1 ? "grid-cols-1" :
-              stats.length === 2 ? "grid-cols-2" :
-              "grid-cols-3"
-            }`}
-          >
-            {stats.map((s) => (
-              <StatCard key={s.label} value={s.value} label={s.label} />
-            ))}
-          </div>
-        )}
+          {/* ── Left column (3/5) — Gallery + About + Courts ─────────────── */}
+          <div className="lg:col-span-3 flex flex-col gap-6">
 
-        {/* ── Instalaciones ──────────────────────────────────────────────── */}
-        {courts.length > 0 && (
-          <section className="rounded-2xl bg-brand-surface border border-white/10 p-5">
-            <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-4">
-              Instalaciones
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {courts.map((court) => (
-                <div
-                  key={court.id}
-                  className="flex items-center gap-3 rounded-xl border border-white/8 bg-white/3 px-4 py-3"
-                >
-                  <div
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
-                    style={{ backgroundColor: `${p}18` }}
-                  >
-                    <LayoutGrid className="w-3.5 h-3.5" style={{ color: p }} />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-white truncate">{court.name}</p>
-                    {(court.is_indoor != null || court.surface) && (
-                      <p className="text-xs text-brand-muted mt-0.5">
-                        {court.is_indoor === true
-                          ? "Indoor"
-                          : court.is_indoor === false
-                          ? "Outdoor"
-                          : ""}
-                        {court.is_indoor != null && court.surface ? " · " : ""}
-                        {court.surface ?? ""}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* ── Horarios ───────────────────────────────────────────────────── */}
-        {schedule.length > 0 && (
-          <section className="rounded-2xl bg-brand-surface border border-white/10 p-5">
-            <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-4 flex items-center gap-2">
-              <Clock className="w-3.5 h-3.5" />
-              Horarios
-            </h2>
-            <div className="divide-y divide-white/5">
-              {schedule.map(({ label, timeRange }) => (
-                <div
-                  key={label}
-                  className="flex items-center justify-between py-2.5 first:pt-0 last:pb-0"
-                >
-                  <span className="text-sm text-white">{label}</span>
-                  <span className="text-sm font-medium tabular-nums" style={{ color: p }}>
-                    {timeRange}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* ── ¿Por qué jugar aquí? ───────────────────────────────────────── */}
-        <section className="rounded-2xl bg-brand-surface border border-white/10 p-5">
-          <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-4">
-            ¿Por qué jugar aquí?
-          </h2>
-          <ul className="flex flex-col gap-2.5">
-            {BENEFITS.map((b) => (
-              <li key={b} className="flex items-start gap-3">
-                <div
-                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full mt-0.5"
-                  style={{ backgroundColor: `${p}20` }}
-                >
-                  <Check className="w-3 h-3" style={{ color: p }} strokeWidth={3} />
-                </div>
-                <span className="text-sm text-white/80 leading-snug">{b}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        {/* ── Galería (placeholder) ──────────────────────────────────────── */}
-        <section className="rounded-2xl bg-brand-surface border border-white/10 overflow-hidden">
-          <div className="px-5 py-4 border-b border-white/5">
-            <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider">
-              Fotos del club
-            </h2>
-          </div>
-          <div className="px-5 py-10 flex flex-col items-center gap-2.5">
-            <div className="w-11 h-11 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
-              <Camera className="w-5 h-5 text-brand-muted/40" />
-            </div>
-            <p className="text-sm text-brand-muted font-medium">Próximamente</p>
-            <p className="text-xs text-brand-muted/50 text-center max-w-xs">
-              El club podrá compartir fotos de sus canchas e instalaciones.
-            </p>
-          </div>
-        </section>
-
-        {/* ── Ubicación ──────────────────────────────────────────────────── */}
-        {hasLocation && (
-          <section className="rounded-2xl bg-brand-surface border border-white/10 p-5">
-            <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-4">
-              Ubicación
-            </h2>
-            <div className="flex flex-col gap-2.5">
-              {club.address && (
-                <div className="flex items-start gap-3">
-                  <MapPin className="w-4 h-4 text-brand-muted shrink-0 mt-0.5" />
-                  <span className="text-sm text-white">{club.address}</span>
-                </div>
-              )}
-              {(club.city || club.state || club.country) && (
-                <div className="flex items-start gap-3">
-                  <MapPin className="w-4 h-4 text-brand-muted/40 shrink-0 mt-0.5" />
-                  <span className="text-sm text-brand-muted">
-                    {[club.city, club.state, club.country].filter(Boolean).join(", ")}
-                  </span>
-                </div>
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* ── Contacto ───────────────────────────────────────────────────── */}
-        {hasContact && (
-          <section className="rounded-2xl bg-brand-surface border border-white/10 p-5">
-            <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-4">
-              Contacto
-            </h2>
-            <div className="flex flex-col gap-3">
-              {club.whatsapp && (
-                <a
-                  href={`https://wa.me/${club.whatsapp.replace(/[^\d+]/g, "")}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 text-sm text-white hover:text-brand-primary transition-colors"
-                >
-                  <MessageCircle className="w-4 h-4 text-brand-muted shrink-0" />
-                  <span>{club.whatsapp}</span>
-                </a>
-              )}
-              {club.instagram && (
-                <a
-                  href={
-                    club.instagram.startsWith("http")
-                      ? club.instagram
-                      : `https://instagram.com/${club.instagram.replace(/^@/, "")}`
-                  }
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 text-sm text-white hover:text-brand-primary transition-colors"
-                >
-                  <ExternalLink className="w-4 h-4 text-brand-muted shrink-0" />
-                  <span>Instagram · {club.instagram}</span>
-                </a>
-              )}
-              {club.facebook && (
-                <a
-                  href={club.facebook}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 text-sm text-white hover:text-brand-primary transition-colors"
-                >
-                  <ExternalLink className="w-4 h-4 text-brand-muted shrink-0" />
-                  <span>Facebook</span>
-                </a>
-              )}
-              {club.youtube && (
-                <a
-                  href={club.youtube}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 text-sm text-white hover:text-brand-primary transition-colors"
-                >
-                  <ExternalLink className="w-4 h-4 text-brand-muted shrink-0" />
-                  <span>YouTube</span>
-                </a>
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* ── CTA ────────────────────────────────────────────────────────── */}
-        <section className="rounded-2xl bg-brand-surface border border-white/10 p-6 text-center">
-          {!user ? (
-            <>
-              <p className="text-base font-semibold text-white mb-1.5">
-                ¿Quieres reservar en {club.name}?
-              </p>
-              <p className="text-sm text-brand-muted mb-5">
-                Crea una cuenta gratuita para unirte al club y solicitar reservas.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                <Link
-                  href={`/auth/signup?next=/clubs/${club.slug}`}
-                  className="inline-flex items-center justify-center rounded-xl bg-brand-primary px-6 py-3 text-sm font-semibold text-brand-bg hover:bg-brand-primary/90 transition-colors"
-                >
-                  Crear cuenta gratis
-                </Link>
-                <Link
-                  href={`/auth/login?next=/clubs/${club.slug}`}
-                  className="inline-flex items-center justify-center rounded-xl border border-white/20 px-6 py-3 text-sm font-semibold text-white hover:bg-white/5 transition-colors"
-                >
-                  Iniciar sesión
-                </Link>
+            {/* Gallery — Airbnb bento */}
+            <div className="grid grid-cols-3 gap-2 rounded-2xl overflow-hidden h-56 sm:h-72 lg:h-80">
+              <div
+                className="col-span-2 row-span-2 flex items-center justify-center relative"
+                style={{ backgroundColor: `${p}12` }}
+              >
+                <Camera className="w-8 h-8" style={{ color: `${p}28` }} />
+                <span className="absolute bottom-3 left-3 text-[10px] text-white/20 font-medium">
+                  Fotos próximamente
+                </span>
               </div>
-            </>
-          ) : membership ? (
-            <>
-              <p className="text-xs text-brand-muted mb-4">
-                {isAdmin
-                  ? "Tienes permisos de administración en este club."
-                  : "Ya eres miembro de este club."}
-              </p>
-              <Link
-                href={getClubEntryPath(club.slug, membership.role)}
-                className="inline-flex items-center justify-center rounded-xl px-7 py-3 text-sm font-semibold transition-colors"
+              <div className="flex items-center justify-center" style={{ backgroundColor: `${p}08` }}>
+                <Camera className="w-4 h-4" style={{ color: `${p}18` }} />
+              </div>
+              <div className="flex items-center justify-center" style={{ backgroundColor: `${p}06` }}>
+                <Camera className="w-4 h-4" style={{ color: `${p}14` }} />
+              </div>
+            </div>
+
+            {/* About */}
+            <div>
+              <h2 className="text-base font-semibold text-white mb-2.5">Sobre {club.name}</h2>
+              {club.description ? (
+                <p className="text-sm text-white/65 leading-relaxed whitespace-pre-line">{club.description}</p>
+              ) : (
+                <p className="text-sm text-brand-muted/40 italic">Este club aún no ha añadido una descripción.</p>
+              )}
+            </div>
+
+            {/* Courts */}
+            {courts.length > 0 && (
+              <div>
+                <h2 className="text-base font-semibold text-white mb-2.5">Instalaciones</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {courts.map((court) => (
+                    <div key={court.id} className="flex items-center gap-3 rounded-xl border border-white/8 bg-white/3 px-4 py-3">
+                      <div className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${p}18` }}>
+                        <LayoutGrid className="w-3.5 h-3.5" style={{ color: p }} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-white truncate">{court.name}</p>
+                        {(court.is_indoor != null || court.surface) && (
+                          <p className="text-xs text-brand-muted mt-0.5">
+                            {court.is_indoor === true ? "Indoor" : court.is_indoor === false ? "Outdoor" : ""}
+                            {court.is_indoor != null && court.surface ? " · " : ""}
+                            {court.surface ?? ""}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Bottom CTA — mobile + tablet only */}
+            {(!user || !membership) && (
+              <div
+                className="lg:hidden rounded-2xl p-6 text-center"
                 style={{
-                  backgroundColor: `${p}22`,
-                  color: p,
-                  border: `1px solid ${p}44`,
+                  background: isPublic
+                    ? `linear-gradient(135deg, ${p}22 0%, ${p}0a 100%)`
+                    : `linear-gradient(135deg, rgba(251,191,36,0.07) 0%, transparent 100%)`,
+                  border: isPublic ? `1px solid ${p}30` : `1px solid rgba(251,191,36,0.12)`,
                 }}
               >
-                {isAdmin ? "Administrar club →" : "Entrar al club →"}
-              </Link>
-            </>
-          ) : (
-            <>
-              <p className="text-base font-semibold text-white mb-1.5">
-                ¿Quieres jugar en {club.name}?
-              </p>
-              <p className="text-sm text-brand-muted mb-5">
-                Solicita acceso para unirte como jugador.
-              </p>
-              <RequestAccessButton whatsapp={club.whatsapp} />
-            </>
-          )}
-        </section>
+                <h3 className="text-base font-bold text-white mb-1.5">
+                  {isPublic ? `¿Listo para jugar en ${club.name}?` : `¿Quieres jugar en ${club.name}?`}
+                </h3>
+                <p className="text-sm text-brand-muted mb-4">
+                  {isPublic ? "Únete al club y comienza a reservar canchas." : "Solicita acceso. Un administrador revisará tu solicitud."}
+                </p>
+                <CtaBlock />
+              </div>
+            )}
 
+          </div>
+
+          {/* ── Right column (2/5) — Info + Schedule + Contact + CTA ─────── */}
+          <div className="lg:col-span-2 flex flex-col gap-4 lg:sticky lg:top-20">
+
+            {/* Quick info card */}
+            <div className="rounded-2xl bg-brand-surface border border-white/10 overflow-hidden">
+              <div className="px-5 py-4 border-b border-white/5">
+                <h3 className="text-sm font-semibold text-white">Información del club</h3>
+              </div>
+              <div className="px-5 divide-y divide-white/5">
+                {locFull && (
+                  <InfoRow Icon={MapPin} label="Ubicación" value={locFull} />
+                )}
+                {mainSchedule && (
+                  <InfoRow Icon={Clock} label="Horario principal" value={mainSchedule} />
+                )}
+                {courts.length > 0 && (
+                  <InfoRow Icon={LayoutGrid} label="Instalaciones" value={`${courts.length} cancha${courts.length > 1 ? "s" : ""} activa${courts.length > 1 ? "s" : ""}`} />
+                )}
+                <InfoRow Icon={CalendarDays} label="Reservas" value="Online vía PadelClub" />
+                <InfoRow Icon={Trophy} label="Ranking" value="En construcción" badge="Pronto" badgeAmber />
+              </div>
+            </div>
+
+            {/* Horarios */}
+            {schedule.length > 0 && (
+              <div className="rounded-2xl bg-brand-surface border border-white/10 overflow-hidden">
+                <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
+                  <Clock className="w-3.5 h-3.5 text-brand-muted" />
+                  <h3 className="text-sm font-semibold text-white">Horarios</h3>
+                </div>
+                <div className="px-5 divide-y divide-white/5">
+                  {schedule.map(({ label, timeRange }) => (
+                    <div key={label} className="flex items-center justify-between py-3">
+                      <span className="text-sm text-white">{label}</span>
+                      <span className="text-sm font-semibold tabular-nums" style={{ color: p }}>{timeRange}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Contacto */}
+            {hasContact && (
+              <div className="rounded-2xl bg-brand-surface border border-white/10 overflow-hidden">
+                <div className="px-5 py-4 border-b border-white/5">
+                  <h3 className="text-sm font-semibold text-white">Contacto</h3>
+                </div>
+                <div className="px-5 divide-y divide-white/5">
+                  {club.whatsapp && (
+                    <a href={`https://wa.me/${club.whatsapp.replace(/[^\d+]/g, "")}`} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-3 py-3 hover:opacity-80 transition-opacity">
+                      <MessageCircle className="w-4 h-4 text-brand-muted shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-[11px] text-brand-muted/60">WhatsApp</p>
+                        <p className="text-sm text-white font-medium truncate">{club.whatsapp}</p>
+                      </div>
+                    </a>
+                  )}
+                  {club.instagram && (
+                    <a href={club.instagram.startsWith("http") ? club.instagram : `https://instagram.com/${club.instagram.replace(/^@/, "")}`}
+                      target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-3 py-3 hover:opacity-80 transition-opacity">
+                      <ExternalLink className="w-4 h-4 text-brand-muted shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-[11px] text-brand-muted/60">Instagram</p>
+                        <p className="text-sm text-white font-medium truncate">{club.instagram}</p>
+                      </div>
+                    </a>
+                  )}
+                  {club.facebook && (
+                    <a href={club.facebook} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-3 py-3 hover:opacity-80 transition-opacity">
+                      <ExternalLink className="w-4 h-4 text-brand-muted shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-[11px] text-brand-muted/60">Facebook</p>
+                        <p className="text-sm text-white font-medium truncate">{club.facebook}</p>
+                      </div>
+                    </a>
+                  )}
+                  {club.youtube && (
+                    <a href={club.youtube} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-3 py-3 hover:opacity-80 transition-opacity">
+                      <ExternalLink className="w-4 h-4 text-brand-muted shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-[11px] text-brand-muted/60">YouTube</p>
+                        <p className="text-sm text-white font-medium truncate">{club.youtube}</p>
+                      </div>
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Bottom CTA — desktop only */}
+            {(!user || !membership) && (
+              <div
+                className="hidden lg:block rounded-2xl p-6 text-center"
+                style={{
+                  background: isPublic
+                    ? `linear-gradient(135deg, ${p}22 0%, ${p}0a 100%)`
+                    : `linear-gradient(135deg, rgba(251,191,36,0.07) 0%, transparent 100%)`,
+                  border: isPublic ? `1px solid ${p}30` : `1px solid rgba(251,191,36,0.12)`,
+                }}
+              >
+                <h3 className="text-base font-bold text-white mb-1.5">
+                  {isPublic ? `¿Listo para jugar en ${club.name}?` : `¿Quieres jugar en ${club.name}?`}
+                </h3>
+                <p className="text-sm text-brand-muted mb-4">
+                  {isPublic ? "Únete al club y comienza a reservar canchas." : "Solicita acceso. Un administrador revisará tu solicitud."}
+                </p>
+                <CtaBlock />
+              </div>
+            )}
+
+          </div>
+        </div>
       </div>
+
     </div>
   );
 }
