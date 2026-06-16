@@ -59,10 +59,15 @@ export function ClubHero({ club, actions, variant = "page" }: ClubHeroProps) {
   const inner = (
     <>
       {/* Cover — full-bleed within its container */}
-      <div className="h-48 sm:h-64 w-full bg-cover bg-center" style={coverStyle} />
+      <div className="h-48 sm:h-64 w-full bg-cover bg-center relative" style={coverStyle}>
+        <div
+          className="absolute inset-0"
+          style={{ background: "linear-gradient(to top, rgba(0,0,0,.45), rgba(0,0,0,.15), transparent)" }}
+        />
+      </div>
 
-      {/* Identity */}
-      <div className={variant === "card" ? "px-5 pb-5" : "max-w-5xl mx-auto px-5"}>
+      {/* Identity — relative z-10 lifts this above the positioned cover div */}
+      <div className={`relative z-10 ${variant === "card" ? "px-5 pb-5" : "max-w-5xl mx-auto px-5"}`}>
         <div className="flex flex-col lg:flex-row lg:items-end lg:gap-6 -mt-10 lg:-mt-12 pb-6">
 
           {/* Logo — overlaps cover via negative margin */}
@@ -86,16 +91,22 @@ export function ClubHero({ club, actions, variant = "page" }: ClubHeroProps) {
             <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between lg:gap-8">
 
               <div className="min-w-0">
-                <h1 className="text-2xl lg:text-3xl font-black text-white tracking-tight leading-tight">
+                <h1
+                  className="text-2xl lg:text-3xl font-black text-white tracking-tight leading-tight"
+                  style={{ textShadow: "0 2px 4px rgba(0,0,0,.6), 0 4px 12px rgba(0,0,0,.4)" }}
+                >
                   {club.name}
                 </h1>
                 {loc && (
-                  <p className="flex items-center gap-1.5 text-sm text-brand-muted mt-1">
+                  <p
+                    className="flex items-center gap-1.5 text-sm text-brand-muted mt-1"
+                    style={{ textShadow: "0 1px 3px rgba(0,0,0,.5)" }}
+                  >
                     <MapPin className="w-3.5 h-3.5 shrink-0" style={{ color: `${p}aa` }} />
                     {loc}
                   </p>
                 )}
-                <div className="mt-2">
+                <div className="mt-2" style={{ textShadow: "0 1px 3px rgba(0,0,0,.5)" }}>
                   {isPrivate ? (
                     <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-400">
                       <Lock className="w-3 h-3 shrink-0" />
