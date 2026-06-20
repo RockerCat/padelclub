@@ -1,27 +1,69 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardHeader, CardContent, Button } from "@/components/ui";
 import { saveOperatingHours } from "./actions";
-import type { OperatingHour } from "@/lib/operatingHours";
-
-const DAY_NAMES = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
+import {
+  DAY_NAMES,
+  generateTimeOptions,
+  validateOperatingHours,
+  type OperatingHour,
+} from "@/lib/operatingHours";
 
 // Display order: Mon → Sun
 const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
+// 24h-only options, no native AM/PM time picker — see generateTimeOptions().
+const TIME_OPTIONS = generateTimeOptions(30);
 
 interface OperatingHoursFormProps {
   clubId: string;
   initialHours: OperatingHour[];
 }
 
-const timeInputClass =
+const timeSelectClass =
   "h-9 w-[90px] rounded-lg border bg-white/5 px-2 text-sm text-white transition-colors focus:outline-none focus:ring-1 focus:ring-brand-primary/50 focus:border-brand-primary/50 disabled:opacity-30 disabled:cursor-not-allowed";
 
+function TimeSelect({
+  value,
+  disabled,
+  hasError,
+  onChange,
+}: {
+  value: string;
+  disabled: boolean;
+  hasError: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <select
+      value={value}
+      disabled={disabled}
+      onChange={(e) => onChange(e.target.value)}
+      className={timeSelectClass}
+      style={{
+        borderColor: hasError ? "#EF4444" : disabled ? "transparent" : "rgba(255,255,255,0.15)",
+      }}
+    >
+      <option value="" className="bg-[#001A24]">—</option>
+      {TIME_OPTIONS.map((t) => (
+        <option key={t} value={t} className="bg-[#001A24]">
+          {t}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export function OperatingHoursForm({ clubId, initialHours }: OperatingHoursFormProps) {
+  const router = useRouter();
   const [hours, setHours] = useState<OperatingHour[]>(initialHours);
   const [isPending, startTransition] = useTransition();
   const [result, setResult] = useState<{ success?: boolean; error?: string }>({});
+
+  const dayErrors = validateOperatingHours(hours);
+  const hasErrors = dayErrors.size > 0;
 
   function updateDay(dayOfWeek: number, patch: Partial<OperatingHour>) {
     setHours((prev) =>
@@ -31,9 +73,11 @@ export function OperatingHoursForm({ clubId, initialHours }: OperatingHoursFormP
   }
 
   function handleSave() {
+    if (hasErrors) return;
     startTransition(async () => {
       const r = await saveOperatingHours(clubId, hours);
       setResult(r);
+      if (r.success) router.refresh();
     });
   }
 
@@ -59,62 +103,61 @@ export function OperatingHoursForm({ clubId, initialHours }: OperatingHoursFormP
             {/* Rows */}
             {DAY_ORDER.map((dayNum, idx) => {
               const h = hours.find((x) => x.day_of_week === dayNum)!;
+              const dayError = dayErrors.get(dayNum);
               return (
                 <div
                   key={dayNum}
-                  className={`grid grid-cols-[1fr_48px_90px_90px] gap-3 items-center px-3 py-2.5 ${
-                    idx % 2 === 1 ? "bg-white/[0.02]" : ""
-                  } ${idx > 0 ? "border-t border-white/[0.04]" : ""}`}
+                  className={`px-3 py-2.5 ${idx % 2 === 1 ? "bg-white/[0.02]" : ""} ${
+                    idx > 0 ? "border-t border-white/[0.04]" : ""
+                  }`}
                 >
-                  {/* Day name */}
-                  <span className="text-sm text-white">{DAY_NAMES[dayNum]}</span>
+                  <div className="grid grid-cols-[1fr_48px_90px_90px] gap-3 items-center">
+                    {/* Day name */}
+                    <span className="text-sm text-white">{DAY_NAMES[dayNum]}</span>
 
-                  {/* Toggle */}
-                  <div className="flex justify-center">
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={h.is_open}
-                      onClick={() => updateDay(dayNum, { is_open: !h.is_open })}
-                      className="relative w-9 h-5 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/50"
-                      style={{
-                        backgroundColor: h.is_open
-                          ? "var(--club-primary, #B7E000)"
-                          : "rgba(255,255,255,0.15)",
-                      }}
-                    >
-                      <span
-                        className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform"
-                        style={{ left: h.is_open ? "calc(100% - 18px)" : "2px" }}
-                      />
-                    </button>
+                    {/* Toggle */}
+                    <div className="flex justify-center">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={h.is_open}
+                        onClick={() => updateDay(dayNum, { is_open: !h.is_open })}
+                        className="relative w-9 h-5 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/50"
+                        style={{
+                          backgroundColor: h.is_open
+                            ? "var(--club-primary, #B7E000)"
+                            : "rgba(255,255,255,0.15)",
+                        }}
+                      >
+                        <span
+                          className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform"
+                          style={{ left: h.is_open ? "calc(100% - 18px)" : "2px" }}
+                        />
+                      </button>
+                    </div>
+
+                    {/* Opens at */}
+                    <TimeSelect
+                      value={h.opens_at?.slice(0, 5) ?? ""}
+                      disabled={!h.is_open}
+                      hasError={!!dayError}
+                      onChange={(value) => updateDay(dayNum, { opens_at: value })}
+                    />
+
+                    {/* Closes at */}
+                    <TimeSelect
+                      value={h.closes_at?.slice(0, 5) ?? ""}
+                      disabled={!h.is_open}
+                      hasError={!!dayError}
+                      onChange={(value) => updateDay(dayNum, { closes_at: value })}
+                    />
                   </div>
 
-                  {/* Opens at */}
-                  <input
-                    type="time"
-                    value={h.opens_at?.slice(0, 5) ?? ""}
-                    disabled={!h.is_open}
-                    onChange={(e) => updateDay(dayNum, { opens_at: e.target.value })}
-                    className={timeInputClass}
-                    style={{
-                      borderColor: h.is_open ? "rgba(255,255,255,0.15)" : "transparent",
-                      colorScheme: "dark",
-                    }}
-                  />
-
-                  {/* Closes at */}
-                  <input
-                    type="time"
-                    value={h.closes_at?.slice(0, 5) ?? ""}
-                    disabled={!h.is_open}
-                    onChange={(e) => updateDay(dayNum, { closes_at: e.target.value })}
-                    className={timeInputClass}
-                    style={{
-                      borderColor: h.is_open ? "rgba(255,255,255,0.15)" : "transparent",
-                      colorScheme: "dark",
-                    }}
-                  />
+                  {dayError && (
+                    <p className="text-[11px] text-red-400 mt-1.5">
+                      {DAY_NAMES[dayNum]}: {dayError}
+                    </p>
+                  )}
                 </div>
               );
             })}
@@ -134,7 +177,7 @@ export function OperatingHoursForm({ clubId, initialHours }: OperatingHoursFormP
         )}
 
         <div className="mt-5">
-          <Button type="button" loading={isPending} onClick={handleSave}>
+          <Button type="button" loading={isPending} disabled={hasErrors} onClick={handleSave}>
             Guardar horarios
           </Button>
         </div>

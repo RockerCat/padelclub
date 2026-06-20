@@ -1,248 +1,881 @@
 # PadelClub — MVP Architecture
 
-> Source of truth for technical decisions during MVP development.
-> Last updated: 2026-06-13 (rev 5 — Sprint 3.3 complete, Dashboard 1.1, Operating Hours, Reservation UX, Validation Gate 1.0)
+> Source of truth for technical and product architecture decisions during MVP development.
+>
+> Last updated: June 2026 (rev 6 — Owner Experience, Club Identity, Public Club Profiles, Reservation Approval Flow)
 
 ---
 
-## 1. Project Overview
+# 1. Project Overview
 
-PadelClub is a **multi-tenant SaaS platform** for amateur padel clubs. Each club is an isolated tenant with its own players, reservations, tournaments, rankings, clinics, and branding.
+PadelClub is a multi-tenant SaaS platform for amateur padel clubs.
 
-**Vision:** Replace fragmented workflows (WhatsApp groups, Excel spreadsheets, paper notebooks) with a single digital platform that becomes the operational home of every club.
+Each club is an isolated tenant with its own:
 
-**Primary customer:** Club owner (makes adoption decisions, controls budget, benefits from visibility).
+* Members
+* Roles
+* Courts
+* Reservations
+* Operating hours
+* Branding
+* Public profile
+* Reservation rules
 
-**Secondary users:** Club administrators (daily operations) and players (consume the experience).
+## Vision
+
+PadelClub should become the digital home of an amateur sports club.
+
+The goal is not to build a complex ERP.
+
+The goal is not to build a social network.
+
+The goal is to replace fragmented workflows currently handled through:
+
+* WhatsApp
+* Excel
+* Paper notebooks
+* Manual scheduling
+
+## Primary Customer
+
+The primary customer is the club owner.
+
+Club owners:
+
+* Make adoption decisions
+* Control budgets
+* Benefit from operational visibility
+* Need to reduce administrative dependency
+* Care about occupancy and club growth
+
+## Secondary Users
+
+### Administrators
+
+Administrators operate the club day to day.
+
+They manage:
+
+* Reservations
+* Players
+* Courts
+* Reservation approvals
+
+### Players
+
+Players consume the experience.
+
+They care about:
+
+* Finding clubs
+* Joining clubs
+* Seeing availability
+* Requesting reservations
+* Tracking their own reservations
 
 ---
 
-## 2. Tech Stack
+# 2. Tech Stack
 
-| Layer | Technology | Version |
-|---|---|---|
-| Framework | Next.js App Router | 16.2.9 |
-| UI Library | React | 19.2.4 |
-| Language | TypeScript (strict) | 5.x |
-| Styling | Tailwind CSS | 4.x |
-| Backend / Auth | Supabase | @supabase/supabase-js ^2.108 |
-| SSR Auth | @supabase/ssr | ^0.12.0 |
-| Database | PostgreSQL (via Supabase) | — |
-| Storage | Supabase Storage | — |
-| Deployment | Vercel | — |
-| Utilities | clsx, tailwind-merge | — |
+| Layer        | Technology              | Version                      |
+| ------------ | ----------------------- | ---------------------------- |
+| Framework    | Next.js App Router      | 16.2.9                       |
+| UI Library   | React                   | 19.2.4                       |
+| Language     | TypeScript strict       | 5.x                          |
+| Styling      | Tailwind CSS            | 4.x                          |
+| Backend/Auth | Supabase                | @supabase/supabase-js ^2.108 |
+| SSR Auth     | @supabase/ssr           | ^0.12.0                      |
+| Database     | PostgreSQL via Supabase | —                            |
+| Storage      | Supabase Storage        | —                            |
+| Deployment   | Vercel                  | —                            |
+| Utilities    | clsx, tailwind-merge    | —                            |
 
 ---
 
-## 3. Current Repository State
+# 3. Current Repository State
 
-As of Sprint 3.3 (2026-06-13):
+As of June 2026:
 
-### Implemented
+## Implemented
 
-- Multi-club ownership
-- Courts management
-- Players & invitations
-- Operating hours
-- Reservation management
-- Owner dashboard
-- Dashboard analytics
-- Smart slot picker
-- Modal-based reservation workflows
-- Role-specific navigation
+* Public landing page
+* Authentication
+* Multi-club ownership
+* Club creation
+* Club selector
+* Public club directory
+* Public club profile pages
+* Club visibility: public/private
+* Club branding
+* Club logo
+* Club cover image
+* Owner dashboard
+* Dashboard club hero
+* Owner onboarding checklist
+* Courts management
+* Players and invitations
+* Operating hours
+* Reservation management
+* Player reservation requests
+* Owner/Admin reservation approval
+* Configurable reservation durations
+* Smart slot picker
+* Modal-based reservation workflows
+* Dashboard analytics
+* Role-specific navigation
 
-### Current Phase
+## Current Phase
 
 Validation Gate 1.0
 
-### Operational Status
+## Operational Status
 
-OWNER: operational
-ADMIN: operational
-PLAYER: functional, pending availability-first redesign
+| Role   | Status                                                          |
+| ------ | --------------------------------------------------------------- |
+| OWNER  | Operational, onboarding under refinement                        |
+| ADMIN  | Operational                                                     |
+| PLAYER | Functional, availability-first experience still being validated |
 
 ---
 
-## 4. Proposed Folder Structure
+# 4. Folder Structure
 
-```
-Note:
+The following represents the current and intended MVP architecture.
 
-The folder structure represents the target MVP architecture.
+Some modules shown below, such as rankings, tournaments, and clinics, are intentionally deferred and may not yet be implemented.
 
-Some modules shown below (rankings, tournaments, clinics) are intentionally deferred and may not yet exist in the repository.
-
+```text
 src/
   app/
-    (marketing)/                    # public landing
-    (app)/                          # authenticated app shell
-      layout.tsx                    # auth guard, redirects unauthenticated to /auth/login
-      [club]/                       # tenant scope — resolved by slug
-        layout.tsx                  # club context provider, club branding
-        page.tsx                    # role-aware entry route (redirects by role)
-        dashboard/
-          page.tsx                  # owner dashboard (requires OWNER role)
-        admin/
-          layout.tsx                # requires ADMIN or OWNER role
-          courts/page.tsx
-          reservations/page.tsx
-          players/page.tsx
-          tournaments/
-            page.tsx
-            [id]/page.tsx
-            [id]/bracket/page.tsx
-          clinics/
-            page.tsx
-            [id]/page.tsx
-          settings/page.tsx         # club branding + configuration
-          rankings/page.tsx         # ranking management
-        reservations/
-          page.tsx                  # player-facing calendar
-        rankings/
-          page.tsx                  # public ranking for club members
-        tournaments/
-          page.tsx
-          [id]/page.tsx
-        clinics/
-          page.tsx
-        profile/
-          page.tsx
+    (marketing)/
+      page.tsx                         # public landing
+
     auth/
       login/page.tsx
       signup/page.tsx
-      callback/route.ts             # Supabase OAuth callback
+      callback/route.ts
+
+    clubs/
+      page.tsx                         # public/authenticated club directory
+      create/page.tsx                  # create a new club
+      [slug]/page.tsx                  # public club profile
+
+    onboarding/
+      page.tsx                         # legacy/alias route, redirects to /clubs/create
+
+    (app)/
+      layout.tsx                       # authenticated app shell
+      [club]/
+        layout.tsx                     # club context, membership guard, branding
+        page.tsx                       # role-aware entry route
+
+        dashboard/
+          page.tsx                     # OWNER dashboard
+
+        admin/
+          layout.tsx                   # OWNER/ADMIN guard
+          reservations/
+            page.tsx
+            new/page.tsx
+            [id]/page.tsx
+          courts/page.tsx
+          players/page.tsx
+          settings/page.tsx
+
+        reservations/
+          page.tsx                     # PLAYER-facing reservations / availability
+
+        profile/
+          page.tsx
+
     api/
       clubs/[club]/
-        stats/route.ts              # owner dashboard metrics
+        stats/route.ts                 # owner dashboard metrics / aggregations
+
   components/
     features/
-      marketing/                    # existing landing components
-      dashboard/                    # owner dashboard widgets
-      reservations/                 # reservation UI
-      tournaments/                  # bracket, participants
-      rankings/                     # ranking table, entry
-      players/                      # player card, profile
-      clinics/                      # clinic card, registration
-      clubs/                        # club settings, branding form
+      dashboard/
+      reservations/
+      players/
+      courts/
+      clubs/
+      marketing/
+
     layout/
-      Navbar.tsx                    # marketing navbar (existing)
-      Footer.tsx                    # marketing footer (existing)
-      AppNav.tsx                    # authenticated app navigation
-      ClubHeader.tsx                # club branding header
-    ui/                             # shared primitives (Button, Card, Input, Badge...)
+      Navbar.tsx
+      Footer.tsx
+      AppNav.tsx
+      ClubHero.tsx                     # shared club hero / identity component
+
+    ui/
+      Button.tsx
+      Card.tsx
+      Input.tsx
+      Badge.tsx
+      Modal.tsx
+
   lib/
     supabase/
-      client.ts                     # browser client (createBrowserClient)
-      server.ts                     # server client (createServerClient)
-      middleware.ts                 # helper for middleware.ts at root
+      client.ts
+      server.ts
+      middleware.ts
+
     utils/
-      cn.ts                         # clsx + tailwind-merge (add immediately)
-      rankings.ts                   # ranking calculation logic
+      cn.ts
+      navigation.ts
+
+    operatingHours.ts
+    durations.ts
+
   types/
-    database.ts                     # generated Supabase types (supabase gen types)
-    index.ts                        # re-exports and application types
-  proxy.ts                          # at src/ root — session refresh (Next.js 16 convention)
+    database.ts
+    index.ts
+
+  proxy.ts                             # Next.js 16 session refresh
 ```
 
 ---
 
-## 5. Multi-Tenancy Architecture
+# 5. Multi-Tenancy Architecture
 
-### Strategy: Path-based slug routing
+## Strategy
 
-Every authenticated route is scoped under `/[club]`. The club slug resolves the tenant.
+PadelClub uses path-based tenant routing.
 
-```
-padelclub.co/platino-padel/dashboard
-padelclub.co/padel-duitama/rankings
-```
+Authenticated club routes are scoped under:
 
-Subdomain routing (`platino.padelclub.co`) is architecturally possible via Next.js middleware rewriting to `[club]` paths but is **deferred to Phase 2**. The DB schema supports it with no changes.
-
-Note:
-
-This section describes the intended architecture and responsibilities.
-
-Implementation details may evolve as the codebase matures.
-
-### Middleware responsibilities
-
-`src/middleware.ts` runs on every `/(app)/[club]/` request and must:
-
-1. Verify the user is authenticated (Supabase session cookie).
-2. Resolve the `club` slug to a `club_id` (cache in middleware or a short-lived lookup).
-3. Verify the user is a member of that club (`club_members` row).
-4. Attach the resolved `club_id` + `role` to request headers for Server Components.
-5. Redirect unauthenticated users to `/auth/login?next=/[club]/...`.
-
-```typescript
-// src/middleware.ts (sketch — not implementation)
-export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-  const clubSlug = extractClubSlug(pathname); // extract [club] segment
-
-  const supabase = createServerClient(/* cookies */);
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) return redirectToLogin(request);
-
-  const { data: member } = await supabase
-    .from("club_members")
-    .select("club_id, role, clubs!inner(slug)")
-    .eq("clubs.slug", clubSlug)
-    .eq("profile_id", user.id)
-    .single();
-
-  if (!member) return NextResponse.redirect(new URL("/unauthorized", request.url));
-
-  // Inject club context into request headers
-  const response = NextResponse.next();
-  response.headers.set("x-club-id", member.club_id);
-  response.headers.set("x-club-role", member.role);
-  return response;
-}
+```text
+/[club]/*
 ```
 
-## Operating Hours Architecture
+Examples:
+
+```text
+/alex-club-padel/dashboard
+/alex-club-padel/admin/reservations
+/alex-club-padel/reservations
+```
+
+The `[club]` segment is the club slug.
+
+## Core Rule
+
+Account is not the same as club.
+
+A user account can exist without belonging to any club.
+
+A user may belong to multiple clubs.
+
+A user may have different roles across clubs.
+
+Example:
+
+```text
+auth.users
+  ↓
+profiles
+  ↓
+club_members
+  ↓
+clubs
+```
+
+Roles are stored per club in:
+
+```text
+club_members.role
+```
+
+There is no global user role.
+
+---
+
+# 6. Club Identity Architecture
+
+A club is both:
+
+1. An operational entity
+2. A branded public entity
+
+Each club may define:
+
+* Name
+* Slug
+* Description
+* Logo
+* Cover image
+* Colors
+* Visibility
+* Location
+* Contact information
+
+## Design Principle
+
+The owner dashboard and public club page should share the same visual identity.
+
+The owner should feel:
+
+```text
+This is my club.
+```
+
+not:
+
+```text
+This is a generic admin panel.
+```
+
+## Shared Club Hero
+
+The public club profile and owner dashboard should reuse the same club identity system.
+
+Shared elements:
+
+* Cover image
+* Logo
+* Club name
+* Location
+* Public/private badge
+* Description
+* Owner actions when applicable
+
+## Default Cover
+
+If a club does not have a custom cover image, use:
+
+```text
+/public/img/portada-default.png
+```
+
+This prevents newly created clubs from feeling empty.
+
+---
+
+# 7. Club Visibility Architecture
+
+Clubs support visibility configuration.
+
+## Values
+
+```text
+public
+private
+```
+
+## Public Clubs
+
+Public clubs:
+
+* Appear in the club directory
+* Have public profile pages
+* May support direct join flows
+* Are discoverable by anonymous visitors
+
+## Private Clubs
+
+Private clubs:
+
+* Show a private badge
+* Require approval or invitation-based access
+* May still have a public-facing profile
+* Should clearly communicate that access requires approval
+
+## Directory Behavior
+
+The `/clubs` page is public.
+
+Anonymous users can:
+
+* Browse public club information
+* Search clubs
+* View public club profiles
+
+Authenticated users can:
+
+* See their own clubs
+* Explore other clubs
+* Enter clubs they belong to
+* Request access or join depending on visibility
+
+---
+
+# 8. Auth Architecture
+
+## Provider
+
+Supabase Auth.
+
+MVP supports:
+
+* Email/password
+* Invite-based signup
+
+OAuth is optional and deferred.
+
+## Session Handling
+
+Sessions are cookie-based through `@supabase/ssr`.
+
+Sessions are refreshed through the Next.js proxy/middleware layer.
+
+## Email Confirmation
+
+During development, email confirmation may be disabled to speed up testing.
+
+Before public beta, email confirmation should be re-enabled and tested end-to-end.
+
+## Signup Behavior
+
+A new account does not automatically create a club.
+
+Post-signup flow:
+
+```text
+Signup
+  ↓
+/clubs
+  ↓
+Create club or explore clubs
+```
+
+## Login Behavior
+
+Current preferred behavior:
+
+```text
+Login
+  ↓
+/clubs
+```
+
+The `/clubs` page acts as the authenticated home for multi-club users.
+
+---
+
+# 9. Route Access Architecture
+
+## Public Routes
+
+| Route           | Purpose             |
+| --------------- | ------------------- |
+| `/`             | Public landing      |
+| `/clubs`        | Club directory      |
+| `/clubs/[slug]` | Public club profile |
+| `/auth/login`   | Login               |
+| `/auth/signup`  | Signup              |
+
+## Authenticated Routes
+
+| Route                        | Purpose                  |
+| ---------------------------- | ------------------------ |
+| `/clubs/create`              | Create a club            |
+| `/[club]`                    | Role-aware club entry    |
+| `/[club]/dashboard`          | OWNER dashboard          |
+| `/[club]/admin/reservations` | OWNER/ADMIN reservations |
+| `/[club]/admin/courts`       | OWNER/ADMIN courts       |
+| `/[club]/admin/players`      | OWNER/ADMIN players      |
+| `/[club]/admin/settings`     | OWNER settings           |
+| `/[club]/reservations`       | PLAYER reservations      |
+
+---
+
+# 10. Role Experience Architecture
+
+## OWNER
+
+Entry:
+
+```text
+/{slug}/dashboard
+```
+
+Primary workflows:
+
+* Owner dashboard
+* Public profile management
+* Branding
+* Reservations
+* Courts
+* Players
+* Settings
+* Club configuration
+* Multi-club management
+
+The owner is the primary customer.
+
+---
+
+## ADMIN
+
+Entry:
+
+```text
+/{slug}/admin/reservations
+```
+
+Primary workflows:
+
+* Reservation management
+* Reservation approval
+* Player management
+* Court management
+
+Restrictions:
+
+* No owner dashboard
+* No global settings
+* No branding management
+
+---
+
+## PLAYER
+
+Entry:
+
+```text
+/{slug}/reservations
+```
+
+Primary workflows:
+
+* View availability
+* Request reservations
+* Track own reservations
+* Join or request access to clubs
+
+Players should not see operational or private administrative information.
+
+---
+
+# 11. Canonical Navigation
+
+All role-based redirects should use:
+
+```ts
+getClubEntryPath(slug, role)
+```
+
+Expected behavior:
+
+```text
+OWNER  → /{slug}/dashboard
+ADMIN  → /{slug}/admin/reservations
+PLAYER → /{slug}/reservations
+```
+
+Do not hardcode role-based paths elsewhere.
+
+---
+
+# 12. Owner Onboarding Architecture
+
+The owner onboarding flow should guide a new club from creation to operational readiness.
+
+## Flow
+
+```text
+Signup
+  ↓
+/clubs
+  ↓
+/clubs/create
+  ↓
+/{slug}/dashboard?new=1
+  ↓
+Onboarding checklist
+```
+
+## Checklist
+
+Current onboarding checklist:
+
+1. Personalize public page
+2. Add first court
+3. Configure operating hours
+4. Invite first player
+5. Create first reservation
+
+## Principles
+
+* The owner should never land first on a complex settings form.
+* The dashboard is the first meaningful owner experience.
+* Empty states should guide the next correct action.
+* If there are no courts, do not prompt the owner to create a reservation.
+* Branding and public profile setup are part of adoption, not optional decoration.
+
+---
+
+# 13. Club Assets Architecture
+
+Club assets include:
+
+* Logo
+* Cover image
+
+Current fields:
+
+```text
+clubs.logo_url
+clubs.cover_image_url
+```
+
+## Storage
+
+Use Supabase Storage for uploaded club assets.
+
+Recommended bucket:
+
+```text
+club-assets
+```
+
+Suggested path structure:
+
+```text
+club-assets/
+  clubs/
+    {clubId}/
+      logo-{timestamp}.{ext}
+      cover-{timestamp}.{ext}
+```
+
+## Upload Rules
+
+Only OWNER can update:
+
+* logo_url
+* cover_image_url
+
+Validation:
+
+* image/jpeg
+* image/png
+* image/webp
+
+Suggested limits:
+
+* Logo: 2 MB
+* Cover: 5 MB
+
+Assets are public because they appear on public club pages.
+
+---
+
+# 14. Operating Hours Architecture
 
 Operating hours are configured at the club level.
 
 Current implementation:
 
-- Per-day opening hours
-- Per-day closing hours
-- Closed day support
-- Club-wide configuration
+* Per-day opening hours
+* Per-day closing hours
+* Closed day support
+* Club-wide configuration
 
 Data source:
 
+```text
 club_operating_hours
+```
 
 Used by:
 
-- Reservation validation
-- Slot generation
-- Availability calculations
-- Occupancy metrics
+* Reservation validation
+* Slot generation
+* Availability calculations
+* Occupancy metrics
 
 Single source of truth:
 
+```text
 src/lib/operatingHours.ts
+```
 
 No court-specific operating hours exist in the MVP.
 
+Per-court operating hours are deferred until real club needs validate the complexity.
+
 ---
 
-## 6. Auth Architecture
+# 15. Reservation Architecture
 
-**Provider:** Supabase Auth (email/password for MVP; OAuth optional).
+Reservations are the core operational entity of PadelClub.
 
-**Session handling:** Cookie-based via `@supabase/ssr`. Sessions are refreshed transparently on every request by the middleware.
+## Reservation Types
 
-**Library setup required:**
+```text
+MATCH
+CLASS
+BLOCK
+```
 
-```typescript
-// src/lib/supabase/client.ts — REPLACE current file
+## Reservation Statuses
+
+```text
+PENDING
+CONFIRMED
+CANCELLED
+```
+
+## Staff-Created Reservations
+
+OWNER and ADMIN can create confirmed operational reservations.
+
+Typical use cases:
+
+* Match booking
+* Class
+* Maintenance block
+* Private block
+
+## Player Reservation Requests
+
+Players create reservation requests.
+
+Flow:
+
+```text
+PLAYER
+  ↓
+Create request
+  ↓
+PENDING
+  ↓
+OWNER / ADMIN approval
+  ↓
+CONFIRMED or CANCELLED
+```
+
+This is now the official MVP player reservation model.
+
+---
+
+# 16. Reservation Validation Rules
+
+All reservation validation must happen server-side.
+
+Rules:
+
+1. Court must belong to the club.
+2. Court must be active.
+3. Reservation must not be in the past.
+4. Reservation must fit inside operating hours.
+5. Reservation cannot be created on a closed day.
+6. Reservation cannot overlap a non-cancelled reservation.
+7. Duration must be allowed by the club.
+8. Player-created reservations must start as PENDING.
+9. OWNER/ADMIN approval is required before becoming CONFIRMED.
+
+Client-side validation improves UX but cannot be trusted.
+
+---
+
+# 17. Reservation Duration Architecture
+
+Reservation durations are configured per club.
+
+Source:
+
+```text
+clubs.allowed_reservation_durations
+```
+
+Supported catalog:
+
+```text
+60
+90
+120
+150
+180
+```
+
+Single source of truth:
+
+```text
+src/lib/durations.ts
+```
+
+All reservation creation and update flows must validate duration against the club configuration.
+
+Applies to:
+
+* OWNER reservations
+* ADMIN reservations
+* PLAYER reservation requests
+* Slot generation
+* Availability filtering
+
+---
+
+# 18. Player Privacy Architecture
+
+Player-facing reservation experiences should prioritize availability over operational detail.
+
+Players may see:
+
+* Available slots
+* Their own reservation requests
+* Status of their own requests
+* Confirmed reservations they created
+
+Players should not see:
+
+* Other players' names
+* Internal notes
+* Operational blocks
+* Staff activity
+* Reservation titles unless explicitly intended
+
+Availability should be computed from:
+
+* Courts
+* Operating hours
+* Non-cancelled reservations
+* Current date/time
+
+---
+
+# 19. Data Flow Patterns
+
+## Server Components
+
+Default pattern:
+
+* Fetch data directly in Server Components.
+* Use Supabase server client.
+* Avoid unnecessary API routes.
+
+## Server Actions
+
+Use Server Actions for mutations.
+
+Examples:
+
+* Create reservation
+* Approve reservation
+* Reject reservation
+* Update club settings
+* Upload club asset
+* Create court
+* Invite player
+
+## Route Handlers
+
+Use route handlers only for:
+
+* Webhooks
+* Complex aggregations
+* Third-party integrations
+* Dashboard analytics endpoints
+
+---
+
+# 20. Supabase Client Architecture
+
+## Browser Client
+
+```ts
 import { createBrowserClient } from "@supabase/ssr";
 import type { Database } from "@/types/database";
 
@@ -254,512 +887,265 @@ export function createClient() {
 }
 ```
 
-```typescript
-// src/lib/supabase/server.ts — CREATE
+## Server Client
+
+```ts
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import type { Database } from "@/types/database";
 
 export async function createClient() {
   const cookieStore = await cookies();
+
   return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { getAll: () => cookieStore.getAll(), setAll: (c) => c.forEach(({ name, value, options }) => cookieStore.set(name, value, options)) } }
+    {
+      cookies: {
+        getAll: () => cookieStore.getAll(),
+        setAll: (cookiesToSet) =>
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options)
+          ),
+      },
+    }
   );
 }
 ```
 
-**Role enforcement layers:**
-
-| Layer | Mechanism |
-|---|---|
-| Route access | Next.js middleware (checks `club_members.role`) |
-| Data access | Supabase RLS policies |
-| UI visibility | Role from middleware headers → conditionally render components |
-
 ---
 
-## 7. Environment Variables
+# 21. RLS Architecture
 
-```bash
-# .env.local
-NEXT_PUBLIC_SUPABASE_URL=https://[project-ref].supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
-SUPABASE_SERVICE_ROLE_KEY=eyJ...    # server-only, never expose to client
-```
+RLS is mandatory.
 
----
+Every tenant-scoped table must enforce access by club membership.
 
-## 8. Shared UI Utilities
+## Helper Functions
 
-Add immediately before any feature development:
-
-```typescript
-// src/lib/utils/cn.ts
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
-```
-
-A `/components/ui/` directory should contain primitives (Button, Card, Input, Select, Badge, Modal) built with Tailwind 4 and the brand tokens from `globals.css`. Do not pull in a component library — keep the design system consistent with the existing landing page aesthetic.
-
----
-
-## 9. Data Flow Patterns
-
-### Server Components (default)
-Fetch data directly in Server Components using the server Supabase client. No API route needed.
-
-```typescript
-// app/(app)/[club]/rankings/page.tsx
-import { createClient } from "@/lib/supabase/server";
-import { headers } from "next/headers";
-
-export default async function RankingsPage() {
-  const clubId = (await headers()).get("x-club-id")!;
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("ranking_entries")
-    .select("*, profiles(full_name, avatar_url)")
-    .eq("ranking_id", ...) // resolved from clubId
-    .order("position");
-  return <RankingTable entries={data} />;
-}
-```
-
-### Mutations
-Use Next.js **Server Actions** (`"use server"`) for all writes. No API routes needed for CRUD.
-
-### Route Handlers
-Reserve `app/api/` for:
-- Webhook receivers (Supabase triggers, future payment callbacks)
-- Complex aggregation queries (owner dashboard stats)
-- Third-party integrations
-
----
-
-## 10. Automatic Rankings — Computation Strategy
-
-Rankings must update automatically when match results are registered (CLAUDE.md Principle 2).
-
-**Recommended approach:** Supabase **Database Trigger** on `match_results INSERT`.
+Use helper functions to avoid expensive repeated policy logic.
 
 ```sql
--- Trigger fires after a match result is inserted
-CREATE OR REPLACE FUNCTION update_ranking_on_result()
-RETURNS TRIGGER AS $$
-BEGIN
-  -- Recalculate points for all participants of the match
-  -- Update ranking_entries positions
-  -- This keeps ranking computation in the DB, not application code
-  PERFORM recalculate_club_ranking(
-    (SELECT club_id FROM matches WHERE id = NEW.match_id)
-  );
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+auth.club_role(club_id)
+auth.is_club_member(club_id)
 ```
 
-This ensures rankings are never stale regardless of which interface registers the result.
+## Core Rules
+
+* OWNER can manage club settings.
+* OWNER and ADMIN can manage operations.
+* PLAYER can access player-facing workflows.
+* Anonymous users may read public club data only.
+* Service role must never be exposed to the client.
 
 ---
 
-## 11. Architecture Review & Recommendations
+# 22. Public Club Data Architecture
 
-### MVP Refinements (Post Sprint Review)
+Some club data is intentionally public.
 
-## Authentication & Club Access
+Public data may include:
 
-### Public Landing
+* Name
+* Slug
+* Description
+* Logo
+* Cover image
+* Visibility
+* City
+* Country
+* Contact information
+* Public profile content
 
-- Add "Login" button in header.
-- Existing club owners, admins and players must be able to access their club from the landing page.
+Private data includes:
 
-### Post Login Navigation
+* Members
+* Reservations
+* Internal notes
+* Player details
+* Operational blocks
+* Admin activity
 
-#### Single Club Membership
+Public profile pages must never expose private tenant data.
 
-If the user belongs to exactly one club:
+---
 
-OWNER  → /{slug}/dashboard
-ADMIN  → /{slug}/admin/reservations
-PLAYER → /{slug}/reservations
+# 23. Dashboard Architecture
 
-#### Multiple Club Memberships
+The owner dashboard has two responsibilities:
 
-If the user belongs to multiple clubs:
+1. Represent the club identity.
+2. Show operational readiness and activity.
 
-- Show club selector.
-- User chooses which club to enter.
+## Dashboard Sections
 
-### Role Experiences
-
-The platform must support three experiences:
-
-- OWNER
-- ADMIN
-- PLAYER
-
-The current dashboard is considered an OWNER dashboard.
-A dedicated availability-first PLAYER experience is planned after Validation Gate 1.0.
-
-#### Club Selection Priority
-
-If the user belongs to only one club:
-- Enter directly.
-
-If the user belongs to multiple clubs:
-- Show club selector.
-
-The system should remember the last selected club and use it as the default destination on future logins.
-
-### R1 — Supabase SSR client ✅ resolved in Sprint 0
-`src/lib/supabase/client.ts` now uses `createBrowserClient` from `@supabase/ssr`. `src/lib/supabase/server.ts` created with `createServerClient`. `src/proxy.ts` handles session refresh on every request.
-
-### R2 — Padel-specific domain model: pairs, not individuals
-**Decision:** Padel is a doubles sport. For MVP, pairs are modeled using `profile_id` + `partner_id` on `tournament_participants`. This is intentionally simple and sufficient for single-elimination bracket generation. A dedicated `pairs` table is **deferred** until the product requires persistent team history across multiple tournaments. Do not create a `pairs` table in the MVP.
-
-### R3 — No `seasons` entity
-**Risk:** MEDIUM. Rankings and tournaments without a season concept will become unmanageable after 3–4 tournaments. Even a simple `season text` column on `rankings` and `tournaments` tables defers this problem cheaply.
-
-### R4 — RLS policy performance
-**Risk:** MEDIUM. Calling `SELECT` on `club_members` in every RLS policy creates N+1 query patterns at the database level. Mitigation: use a PostgreSQL helper function `auth.is_club_member(club_id)` and `auth.club_role(club_id)` marked as `STABLE` so Postgres caches the result per transaction.
-
-```sql
-CREATE OR REPLACE FUNCTION auth.club_role(p_club_id uuid)
-RETURNS text LANGUAGE sql STABLE SECURITY DEFINER AS $$
-  SELECT role FROM public.club_members
-  WHERE club_id = p_club_id AND profile_id = auth.uid() AND is_active = true
-  LIMIT 1;
-$$;
-```
-
-### R5 — Club onboarding flow is undefined
-**Risk:** MEDIUM. How does a new club get created? Who creates the first OWNER member? A self-serve onboarding flow (`/onboarding`) is needed in Sprint 1 before any club-specific feature can be tested end-to-end.
-
-### R6 — Player invitation flow
-**Risk:** MEDIUM. Players need a way to join a club. Without an invitation mechanism, the admin must manually create player accounts. Consider an `invitation_links` table with a short-lived token that auto-creates the `club_members` row on signup.
-
-### R7 — `club_id` denormalization
-**Recommendation:** Denormalize `club_id` into tables like `ranking_entries`, `clinic_registrations`, and `match_players`. This allows RLS policies to filter directly on `club_id` without expensive JOINs, and keeps row-level security simple and fast.
-
-### R8 — No `cn()` utility yet ✅ resolved in Sprint 0
-`src/lib/utils/cn.ts` created with `clsx` + `tailwind-merge`.
-
-### R9 — `lang` attribute on root HTML ✅ resolved in Sprint 0
-`src/app/layout.tsx` now sets `lang="es"`.
-
-### R10 — No `players` table (by design)
-**Clarification:** There is no `players` table in PadelClub. The data model for players is: `auth.users → profiles → club_members (role = 'PLAYER')`. Any code or query that refers to "players" must target `club_members JOIN profiles WHERE role = 'PLAYER'`. Creating a separate `players` table would duplicate `profiles` data and create sync issues across multi-club membership.
-
-### R11 — Ranking formula must be decided before implementation
-**Risk:** HIGH for trust. The automatic ranking trigger cannot be written until the points formula is agreed upon with a real club owner. A ranking that assigns wrong points — or changes after players have competed — destroys credibility. This decision must happen before Sprint 5 begins. Hardcoded constants are acceptable for MVP. A `ranking_rules` table is a Phase 2 option if clubs need per-club customization.
-
-## Role Experience Architecture
-
-Three distinct experiences exist in the platform.
-
-### OWNER
-
-Entry:
-
-`/{slug}/dashboard`
-
-Primary workflows:
-
-- Dashboard
-- Reservations
-- Players
-- Courts
-- Club configuration
-- Multi-club management
-
-The owner is the primary customer.
-
-### ADMIN
-
-Entry:
-
-`/{slug}/admin/reservations`
-
-Primary workflows:
-
-- Reservation management
-- Player management
-- Court management
-
-Restrictions:
-
-- No dashboard access
-- No configuration access
-
-Administrators focus on daily operations.
-
-### PLAYER
-
-Entry:
-
-`/{slug}/reservations`
-
-Current focus:
-
-- Reservation visibility
-
-Validation in progress:
-
-- Availability-first experience
-- Reservation request workflow
-
-Future focus:
-
-- Tournament registration
-- Ranking visibility
-
-Players are secondary users.
-
-Player experiences should prioritize action over administration.
-
-## Post-Login Routing Logic
+Current intended structure:
 
 ```text
-login success
-  │
-  ├── ?next= param present → follow next
-  │
-  ├── 0 clubs → /onboarding
-  │
-  ├── 1 club → getClubEntryPath(slug, role)
-  │     OWNER  → /{slug}/dashboard
-  │     ADMIN  → /{slug}/admin/reservations
-  │     PLAYER → /{slug}/reservations
-  │
-  └── 2+ clubs → /clubs
+Club Hero
+  ↓
+Onboarding Checklist
+  ↓
+Metrics / Empty State
+  ↓
+Quick Actions
 ```
 
-#### `getClubEntryPath(slug, role)` — Canonical navigation utility
+## Empty State Logic
 
-Defined in `src/lib/utils/navigation.ts`. Must be used in:
-- `LoginForm.tsx` (post-login redirect)
-- `/clubs` page (club selector)
-- Any future redirect after club context is established
+If no active courts exist:
 
-Do not hardcode role-based paths anywhere else.
-
-## Reservations Architecture
-
-Reservations are the core operational entity of PadelClub.
-
-### Creation
-
-OWNER and ADMIN can create reservations.
-
-PLAYER reservation requests are currently under evaluation during Validation Gate.
-
-### Validation Rules
-
-Reservations must:
-
-- Belong to an active court
-- Respect operating hours
-- Respect closed days
-- Not overlap existing reservations
-- Not exist in the past
-
-All validation occurs server-side.
-
-### Scheduling
-
-Available slots are generated dynamically using:
-
-- Operating hours
-- Existing reservations
-- Reservation duration
-
-### Editing
-
-Reservations support:
-
-- Update
-- Reschedule
-- Cancellation
-
-### Privacy
-
-Player-facing reservation experiences should prioritize availability over exposing reservation details.
-
-## Reservation UX Architecture
-
-PadelClub is operational software.
-
-Operational users repeat the same actions frequently.
-
-Current reservation UX is modal-first.
-
-Goals:
-
-- Preserve calendar context
-- Reduce page transitions
-- Minimize friction
-- Accelerate repetitive workflows
-
-Current implementation:
-
-- Create reservation modal
-- Edit reservation modal
-- Cancel reservation modal
-- Smart slot picker
-
-Users should remain inside the calendar whenever possible.
-
-## 12. Multi-Club Ownership
-
-### Core Rule: Account ≠ Club
-
-A PadelClub account and a club are independent entities. Creating an account does not create a club. Joining a club does not create a new account.
-
-One account can:
-- be `OWNER` of multiple clubs
-- be `ADMIN` of multiple clubs
-- be `PLAYER` in multiple clubs
-- hold different roles in different clubs simultaneously (e.g., OWNER in Club A, PLAYER in Club B)
-
-### Data Model
-
-Roles are stored in `club_members (club_id, profile_id, role)`. There is no global role on `profiles`. Every role query must be scoped to a specific `club_id`.
-
-```
-auth.users (1) ──→ (N) club_members ──→ (N) clubs
-                         role: OWNER | ADMIN | PLAYER
-                         is_active: boolean
+```text
+Prompt: Add first court
 ```
 
-### Route Responsibilities
+If courts exist but no reservations exist:
 
-| Route | Purpose | Who uses it |
-|---|---|---|
-| `/auth/signup` | Create account (no club created) | Anyone new to the platform |
-| `/onboarding` | Create the **first** club after account creation | Authenticated user with 0 clubs |
-| `/clubs/create` | Create an **additional** club | Authenticated user with 1+ clubs |
-| `/clubs` | Select which club to enter | Any user with 1+ clubs |
-
-### Routing Behavior
-
-#### `/onboarding`
-- Not authenticated → `/auth/login`
-- 0 clubs → show form
-- 1+ clubs → `/clubs`
-
-#### `/clubs`
-- Not authenticated → `/auth/login`
-- 0 clubs → `/onboarding`
-- 1+ clubs → always show the selector (no auto-redirect)
-  - Only the login flow redirects directly when there is exactly 1 club
-
-#### `/clubs/create`
-- Not authenticated → `/auth/login?next=/clubs/create`
-- Authenticated → show form (creates club + OWNER membership, then → /{slug}/dashboard)
-
-#### Post-login routing
-```
-login success
-  │
-  ├── ?next= param present → follow next
-  │
-  ├── 0 clubs → /onboarding
-  │
-  ├── 1 club → getClubEntryPath(slug, role)   ← only login does this auto-redirect
-  │
-  └── 2+ clubs → /clubs
+```text
+Prompt: Create first reservation
 ```
 
-### Landing Page CTA
+The dashboard should guide the next correct operational action.
 
-"Crear mi club" on the marketing Navbar behaves differently based on session state:
+---
 
-| State | Destination |
-|---|---|
-| Not authenticated | `/auth/signup` |
-| Authenticated | `/clubs/create` |
+# 24. Analytics Architecture
 
-The check runs client-side via `supabase.auth.getSession()` in a `useEffect`. Default href is `/auth/signup` (no flash for unauthenticated visitors).
-
-### AppNav: OWNER-only actions
-
-| Action | Role | Condition |
-|---|---|---|
-| Cambiar de club | any | membershipCount ≥ 2 |
-| Crear otro club | OWNER only | always visible |
-
-### Invitation Rules
-
-Invitation links are scoped to a single club. Accepting an invitation does not affect the user's membership in other clubs. If the invited user already belongs to the club, `claim_invitation` returns an error.
-
-## Analytics Architecture
-
-Dashboard 1.1 is implemented.
+Dashboard analytics currently derive from reservation data.
 
 Current metrics:
 
-- Reservations this week
-- Reserved hours
-- Weekly occupancy
-- Active players
-- Court occupancy
-- Peak reservation hour
-- Cancellation rate
-- Previous week comparison
+* Reservations this week
+* Reserved hours
+* Weekly occupancy
+* Active players
+* Court occupancy
+* Peak reservation hour
+* Cancellation rate
+* Previous week comparison
 
-Analytics are operational.
+Analytics are operational but still under validation.
 
-The objective is helping owners understand utilization and activity inside the club.
+The goal is to learn which metrics owners actually care about.
 
-## MVP Scope Guardrails
+---
+
+# 25. Automatic Rankings Architecture
+
+Rankings are deferred.
+
+When implemented, ranking updates should be automatic.
+
+Recommended strategy:
+
+* Database trigger on match result insert
+* Recalculate ranking entries from trusted match result data
+* Do not depend on manual admin updates
+
+Important:
+
+The ranking formula must be validated with real club owners before implementation.
+
+Incorrect ranking logic damages trust.
+
+---
+
+# 26. Deferred Modules
+
+The following modules are intentionally deferred until MVP validation is stronger:
+
+* Rankings
+* Tournaments
+* Clinics
+* Payments
+* Mobile applications
+* Community features
+* Open matches
+* Find players
+* Membership billing
+* Push notifications
+
+These should not displace owner onboarding, reservations, courts, players, and club identity.
+
+---
+
+# 27. MVP Scope Guardrails
 
 Current MVP priorities:
 
-1. Reservations
-2. Courts
-3. Players
-4. Club administration
-5. Operational analytics
-
-The following modules are intentionally deferred:
-
-- Rankings
-- Tournaments
-- Clinics
-- Payments
-- Mobile applications
-- Community features
+1. Owner onboarding
+2. Reservations
+3. Courts
+4. Players
+5. Club identity
+6. Club discovery
+7. Operational analytics
 
 When prioritization conflicts arise:
 
-Reservations and owner value take precedence.
+* Owner value wins.
+* Reservation workflows win.
+* Operational simplicity wins.
+* Real adoption beats feature count.
 
-## Validation Gate 1.0
+---
+
+# 28. Validation Gate 1.0
 
 Current objective:
 
-- Validate operational workflows
-- Remove friction
-- Verify permissions
-- Improve usability
-- Test real-world club usage
+Validate operational workflows with real clubs.
 
-Recent findings already corrected:
+Validation focus:
 
-- OWNER incorrect landing page
-- ADMIN placeholder landing page
-- PLAYER placeholder landing page
-- Staff appearing as selectable players
-- Past reservations allowed
+* Owner onboarding
+* Club setup
+* Court creation
+* Operating hours
+* Player invitations
+* Reservation requests
+* Reservation approvals
+* Dashboard usefulness
+* Public club profile usefulness
 
-Before Sprint 4:
+Before building major new modules:
 
-- Complete role validation
-- Refine player experience
-- Validate availability workflows
+* Validate real club usage.
+* Collect owner feedback.
+* Collect admin feedback.
+* Observe player behavior.
+* Remove workflow confusion.
+
+---
+
+# 29. Definition of Done
+
+A feature is complete when:
+
+1. TypeScript compiles successfully.
+2. RLS policies exist and are tested.
+3. Mobile layout is validated.
+4. Desktop layout is validated.
+5. Loading states are implemented.
+6. Error states are implemented.
+7. Empty states are meaningful.
+8. No production console errors remain.
+9. Code review completed.
+10. Merged into main branch.
+
+---
+
+# 30. Core Architectural Principle
+
+PadelClub is not only a reservation system.
+
+PadelClub is the operational and digital identity layer of a club.
+
+The product should help owners:
+
+* See their club
+* Configure their club
+* Operate their club
+* Grow their club
+
+without creating unnecessary complexity.

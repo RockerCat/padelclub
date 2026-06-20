@@ -5,6 +5,8 @@ export type OperatingHour = {
   closes_at: string | null;
 };
 
+export const DAY_NAMES = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+
 // Defaults applied when a club has no configured hours for a day
 export const DEFAULT_OPERATING_HOURS: OperatingHour[] = [
   { day_of_week: 0, is_open: false, opens_at: null,    closes_at: null    }, // Domingo
@@ -19,6 +21,37 @@ export const DEFAULT_OPERATING_HOURS: OperatingHour[] = [
 export function timeToMinutes(t: string): number {
   const [h, m] = t.slice(0, 5).split(":").map(Number);
   return h * 60 + m;
+}
+
+// 24h-only "HH:MM" options in 30-minute steps, e.g. ["00:00","00:30",...,"23:30"].
+// Used by the operating hours <select> pickers so opening/closing times are never
+// entered through a locale-dependent native time input (no AM/PM ambiguity).
+export function generateTimeOptions(stepMinutes = 30): string[] {
+  const options: string[] = [];
+  for (let m = 0; m < 24 * 60; m += stepMinutes) {
+    const h = Math.floor(m / 60);
+    const min = m % 60;
+    options.push(`${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`);
+  }
+  return options;
+}
+
+// Per-day validation for the operating hours form: a day that is open needs
+// both times set, with closes_at strictly after opens_at. Closed days are
+// always valid regardless of their stored opens_at/closes_at values.
+export function validateOperatingHours(hours: OperatingHour[]): Map<number, string> {
+  const errors = new Map<number, string>();
+  for (const h of hours) {
+    if (!h.is_open) continue;
+    if (!h.opens_at || !h.closes_at) {
+      errors.set(h.day_of_week, "Ingresa hora de apertura y de cierre.");
+      continue;
+    }
+    if (timeToMinutes(h.opens_at) >= timeToMinutes(h.closes_at)) {
+      errors.set(h.day_of_week, "La hora de cierre debe ser posterior a la de apertura.");
+    }
+  }
+  return errors;
 }
 
 export function getEffectiveHour(dbHours: OperatingHour[], dayOfWeek: number): OperatingHour {
@@ -41,6 +74,54 @@ export function computeWeeklyAvailableMinutes(
     total += timeToMinutes(h.closes_at) - timeToMinutes(h.opens_at);
   }
   return total;
+}
+
+// Available minutes across an arbitrary date range (inclusive), based on each
+// calendar day's weekday hours. Used as the occupancy denominator for ranges
+// that aren't exactly one week (this_month, this_semester, etc).
+export function computeAvailableMinutesForRange(
+  hours: OperatingHour[],
+  startDate: Date,
+  endDate: Date
+): number {
+  let total = 0;
+  const cur = new Date(startDate);
+  cur.setHours(0, 0, 0, 0);
+  const end = new Date(endDate);
+  end.setHours(0, 0, 0, 0);
+  while (cur <= end) {
+    const h = getEffectiveHour(hours, cur.getDay());
+    if (h.is_open && h.opens_at && h.closes_at) {
+      total += timeToMinutes(h.closes_at) - timeToMinutes(h.opens_at);
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+  return total;
+}
+
+// Available minutes per weekday across an arbitrary date range (inclusive) —
+// index 0=Dom..6=Sáb. Same per-day logic as computeAvailableMinutesForRange,
+// but bucketed by weekday instead of summed into a single total. Used to
+// compute occupancy "por día de la semana" within the selected range.
+export function computeAvailableMinutesByWeekday(
+  hours: OperatingHour[],
+  startDate: Date,
+  endDate: Date
+): number[] {
+  const totals = [0, 0, 0, 0, 0, 0, 0];
+  const cur = new Date(startDate);
+  cur.setHours(0, 0, 0, 0);
+  const end = new Date(endDate);
+  end.setHours(0, 0, 0, 0);
+  while (cur <= end) {
+    const dayNum = cur.getDay();
+    const h = getEffectiveHour(hours, dayNum);
+    if (h.is_open && h.opens_at && h.closes_at) {
+      totals[dayNum] += timeToMinutes(h.closes_at) - timeToMinutes(h.opens_at);
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+  return totals;
 }
 
 // Returns an error string if the reservation conflicts with operating hours, or null if OK.

@@ -42,6 +42,8 @@ export interface Database {
           facebook: string | null;
           instagram: string | null;
           youtube: string | null;
+          latitude: number | null;
+          longitude: number | null;
           is_active: boolean;
           allowed_reservation_durations: number[];
           created_at: string;
@@ -66,6 +68,8 @@ export interface Database {
           facebook?: string | null;
           instagram?: string | null;
           youtube?: string | null;
+          latitude?: number | null;
+          longitude?: number | null;
           is_active?: boolean;
           allowed_reservation_durations?: number[];
           created_at?: string;
@@ -90,6 +94,8 @@ export interface Database {
           facebook?: string | null;
           instagram?: string | null;
           youtube?: string | null;
+          latitude?: number | null;
+          longitude?: number | null;
           is_active?: boolean;
           allowed_reservation_durations?: number[];
           updated_at?: string;

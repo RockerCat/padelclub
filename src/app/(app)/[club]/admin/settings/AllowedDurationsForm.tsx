@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { updateAllowedDurations, type UpdateAllowedDurationsState } from "./actions";
 import { DURATION_CATALOG } from "@/lib/durations";
 import { Card, CardHeader, CardContent } from "@/components/ui";
@@ -12,12 +13,17 @@ interface AllowedDurationsFormProps {
 }
 
 export function AllowedDurationsForm({ clubId, initialDurations }: AllowedDurationsFormProps) {
+  const router = useRouter();
   const [selected, setSelected] = useState<Set<number>>(() => new Set(initialDurations));
   const boundAction = updateAllowedDurations.bind(null, clubId);
   const [state, action, pending] = useActionState<UpdateAllowedDurationsState, FormData>(
     boundAction,
     {},
   );
+
+  useEffect(() => {
+    if (state.success) router.refresh();
+  }, [state.success, router]);
 
   function toggle(minutes: number) {
     setSelected((prev) => {

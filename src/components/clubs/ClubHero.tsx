@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { MapPin, Lock } from "lucide-react";
 import { CoverUploadButton, LogoUploadButton } from "./ClubHeroUploadButtons";
+import { ClubNameEditor } from "./ClubNameEditor";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -102,12 +103,20 @@ export function ClubHero({ club, actions, variant = "page", editable = false }: 
             <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between lg:gap-8">
 
               <div className="min-w-0">
-                <h1
-                  className="text-2xl lg:text-3xl font-black text-white tracking-tight leading-tight"
-                  style={{ textShadow: "0 2px 4px rgba(0,0,0,.6), 0 4px 12px rgba(0,0,0,.4)" }}
-                >
-                  {club.name}
-                </h1>
+                {editable ? (
+                  <ClubNameEditor
+                    clubId={club.id}
+                    name={club.name}
+                    primaryColor={p}
+                  />
+                ) : (
+                  <h1
+                    className="text-2xl lg:text-3xl font-black text-white tracking-tight leading-tight"
+                    style={{ textShadow: "0 2px 4px rgba(0,0,0,.6), 0 4px 12px rgba(0,0,0,.4)" }}
+                  >
+                    {club.name}
+                  </h1>
+                )}
                 {loc && (
                   <p
                     className="flex items-center gap-1.5 text-sm text-brand-muted mt-1"

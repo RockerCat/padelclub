@@ -4,39 +4,39 @@ import {
   CalendarDays,
   Clock,
   TrendingUp,
-  TrendingDown,
   Users,
-  Plus,
   ArrowRight,
   Home,
   Settings,
-  Flame,
-  XCircle,
   ExternalLink,
+  AlertTriangle,
+  Shield,
+  Share2,
   type LucideIcon,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import {
   DEFAULT_OPERATING_HOURS,
-  computeWeeklyAvailableMinutes,
+  DAY_NAMES,
+  computeAvailableMinutesForRange,
+  computeAvailableMinutesByWeekday,
   type OperatingHour,
 } from "@/lib/operatingHours";
-import { OnboardingChecklist } from "./OnboardingChecklist";
+import { resolveDashboardRange, getTrendBuckets } from "@/lib/dashboardRange";
+import { OnboardingWizard } from "./OnboardingWizard";
 import { ClubHero } from "@/components/clubs/ClubHero";
+import { CourtIllustration, getSurfaceLabel } from "@/components/courts/CourtIllustration";
+import { TrendChart } from "./TrendChart";
+import { WeekdayOccupancyChart } from "./WeekdayOccupancyChart";
+import { TopHoursChart } from "./TopHoursChart";
+import { DateRangeSelector } from "./DateRangeSelector";
 
 interface DashboardPageProps {
   params: Promise<{ club: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
 // ─── Date helpers ──────────────────────────────────────────────────────────────
-
-function getWeekMonday(d: Date): Date {
-  const r = new Date(d);
-  r.setHours(0, 0, 0, 0);
-  const day = r.getDay();
-  r.setDate(r.getDate() - (day === 0 ? 6 : day - 1));
-  return r;
-}
 
 function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -64,18 +64,10 @@ function formatHours(minutes: number): string {
   return h % 1 === 0 ? String(h) : h.toFixed(1);
 }
 
-function computePeakHour(startTimes: string[]): { hour: number; count: number } | null {
-  if (!startTimes.length) return null;
-  const freq = new Map<number, number>();
-  for (const t of startTimes) {
-    const h = parseInt(t.slice(0, 2), 10);
-    freq.set(h, (freq.get(h) ?? 0) + 1);
-  }
-  let maxH = 0, maxC = 0;
-  for (const [h, c] of freq) {
-    if (c > maxC) { maxH = h; maxC = c; }
-  }
-  return { hour: maxH, count: maxC };
+function calcEndTime(startTime: string, durationMinutes: number): string {
+  const [h, m] = startTime.split(":").map(Number);
+  const total = h * 60 + m + durationMinutes;
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -88,6 +80,15 @@ type RecentRow = {
   type: string;
   status: string;
   courts: { name: string } | null;
+};
+
+type UpcomingRow = {
+  id: string;
+  court_id: string;
+  date: string;
+  start_time: string;
+  duration_minutes: number;
+  reservation_players: Array<{ profiles: { full_name: string | null } | null }>;
 };
 
 // ─── KPI card sub-component ───────────────────────────────────────────────────
@@ -145,8 +146,15 @@ const TYPE_LABELS: Record<string, string> = {
 
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
-export default async function DashboardPage({ params }: DashboardPageProps) {
+export default async function DashboardPage({ params, searchParams }: DashboardPageProps) {
   const { club: slug } = await params;
+  const resolvedSearchParams = await searchParams;
+  const rangeParam =
+    typeof resolvedSearchParams.range === "string" ? resolvedSearchParams.range : undefined;
+  const fromParam =
+    typeof resolvedSearchParams.from === "string" ? resolvedSearchParams.from : undefined;
+  const toParam =
+    typeof resolvedSearchParams.to === "string" ? resolvedSearchParams.to : undefined;
 
   const supabase = await createClient();
   const {
@@ -156,7 +164,7 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
 
   const { data: club } = await supabase
     .from("clubs")
-    .select("id, slug, name, description, city, state, address, logo_url, cover_image_url, visibility, primary_color, secondary_color")
+    .select("id, slug, name, description, city, state, country, address, latitude, longitude, logo_url, cover_image_url, visibility, primary_color, secondary_color, whatsapp, instagram, facebook, youtube, allowed_reservation_durations")
     .eq("slug", slug)
     .eq("is_active", true)
     .single();
@@ -173,115 +181,173 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
   if (!["OWNER", "ADMIN"].includes(membership.role)) redirect(`/${slug}`);
 
   // ─── Date ranges ─────────────────────────────────────────────────────────────
+  const now = new Date();
+  const nowTimeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:00`;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayStr      = toDateStr(today);
   const yesterdayStr  = toDateStr(addDays(today, -1));
-  const weekMonday    = getWeekMonday(today);
-  const mondayStr     = toDateStr(weekMonday);
-  const sundayStr     = toDateStr(addDays(weekMonday, 6));
-  const thirtyDaysAgo = toDateStr(addDays(today, -30));
 
-  // Previous week: full Mon–Sun (mirrors the current week Mon–Sun range)
-  const prevWeekMonday    = addDays(weekMonday, -7);
-  const prevWeekMondayStr = toDateStr(prevWeekMonday);
-  const prevWeekSundayStr = toDateStr(addDays(prevWeekMonday, 6));
+  // Selected analysis range (?range=, +?from=/?to= for custom) — drives all
+  // historical/analytics sections below. "Próximo turno" stays real-time and
+  // is NOT affected by it.
+  const range = resolveDashboardRange(rangeParam, today, fromParam, toParam);
 
   // ─── Round 1: all independent fetches in parallel ────────────────────────────
   const [
-    weekCountRes,
+    rangeCountRes,
     courtsRes,
-    weekOccupancyRes,
-    thirtyDayAllRes,
+    rangeOccupancyRes,
+    rangeInsightsRes,
     operatingHoursRes,
     recentRes,
-    prevWeekCountRes,
-    nonOwnerMembersRes,
+    hasAnyReservationRes,
+    upcomingRes,
+    prevRangeCountRes,
+    playerCountRes,
+    adminCountRes,
   ] = await Promise.all([
-    // KPI 1 — confirmed reservations this week
+    // KPI 1 — confirmed reservations in the selected range
     supabase
       .from("reservations")
       .select("id", { count: "exact", head: true })
       .eq("club_id", club.id)
       .eq("status", "confirmed")
-      .gte("date", mondayStr)
-      .lte("date", sundayStr),
+      .gte("date", range.current.startStr)
+      .lte("date", range.current.endStr),
 
-    // Courts — id + name ordered for per-court breakdown
+    // Courts — id + name + surface ordered for per-court breakdown
     supabase
       .from("courts")
-      .select("id, name")
+      .select("id, name, surface")
       .eq("club_id", club.id)
       .eq("is_active", true)
       .order("name"),
 
-    // KPI 2 + KPI 3 + per-court occupancy: confirmed this week with court_id
+    // KPI 2 + KPI 3 + per-court occupancy + trend chart: confirmed in the
+    // selected range, with court_id and date (date powers the trend buckets)
     supabase
       .from("reservations")
-      .select("court_id, duration_minutes")
+      .select("court_id, duration_minutes, date")
       .eq("club_id", club.id)
       .eq("status", "confirmed")
-      .gte("date", mondayStr)
-      .lte("date", sundayStr),
+      .gte("date", range.current.startStr)
+      .lte("date", range.current.endStr),
 
-    // Insights source: all reservations last 30 days (confirmed + cancelled)
-    // Used for: active players, peak hour, cancellation rate
+    // Insights source: all reservations in the selected range (confirmed + cancelled)
+    // Used for: active players (overall + trend), peak hour
     supabase
       .from("reservations")
-      .select("id, status, start_time")
+      .select("id, status, start_time, date")
       .eq("club_id", club.id)
-      .gte("date", thirtyDaysAgo),
+      .gte("date", range.current.startStr)
+      .lte("date", range.current.endStr),
 
-    // Occupancy denominator — club operating hours
+    // Occupancy denominator + onboarding step3 check
     supabase
       .from("club_operating_hours")
       .select("day_of_week, is_open, opens_at, closes_at")
       .eq("club_id", club.id),
 
-    // Actividad reciente — last 10 by created_at, any status
+    // Actividad reciente — last 10 by created_at within the selected range, any status
     supabase
       .from("reservations")
       .select("id, date, start_time, duration_minutes, type, status, courts(name)")
       .eq("club_id", club.id)
+      .gte("date", range.current.startStr)
+      .lte("date", range.current.endStr)
       .order("created_at", { ascending: false })
       .limit(10),
 
-    // Week comparison — confirmed count in prev full week (Mon–Sun, mirrors current week)
+    // Empty-state check — does this club have ANY reservation, ever (any status,
+    // any date)? Decoupled from the selected range so the empty dashboard only
+    // depends on whether the club has ever had activity, not on the filter.
+    supabase
+      .from("reservations")
+      .select("id", { count: "exact", head: true })
+      .eq("club_id", club.id)
+      .limit(1),
+
+    // Próximo turno por cancha — upcoming confirmed reservations from right now
+    // onward, sorted chronologically; the first row per court_id is its next
+    // slot. Always real-time — NOT affected by the selected analysis range.
+    supabase
+      .from("reservations")
+      .select(
+        `id, court_id, date, start_time, duration_minutes,
+         reservation_players(profiles(full_name))`
+      )
+      .eq("club_id", club.id)
+      .eq("status", "confirmed")
+      .or(`date.gt.${todayStr},and(date.eq.${todayStr},start_time.gte.${nowTimeStr})`)
+      .order("date", { ascending: true })
+      .order("start_time", { ascending: true })
+      .limit(50),
+
+    // Comparison — confirmed count in the immediately preceding period (same length)
     supabase
       .from("reservations")
       .select("id", { count: "exact", head: true })
       .eq("club_id", club.id)
       .eq("status", "confirmed")
-      .gte("date", prevWeekMondayStr)
-      .lte("date", prevWeekSundayStr),
+      .gte("date", range.previous.startStr)
+      .lte("date", range.previous.endStr),
 
-    // Onboarding checklist: non-owner active members (players + admins)
+    // Empty-state KPI — active players
     supabase
       .from("club_members")
       .select("id", { count: "exact", head: true })
       .eq("club_id", club.id)
-      .eq("is_active", true)
-      .neq("role", "OWNER"),
+      .eq("role", "PLAYER")
+      .eq("is_active", true),
+
+    // Empty-state KPI — active owners/admins
+    supabase
+      .from("club_members")
+      .select("id", { count: "exact", head: true })
+      .eq("club_id", club.id)
+      .in("role", ["OWNER", "ADMIN"])
+      .eq("is_active", true),
   ]);
 
-  const weekCount     = weekCountRes.count ?? 0;
-  const prevWeekCount = prevWeekCountRes.count ?? 0;
-  const courts        = courtsRes.data ?? [];
-  const thirtyDayAll  = thirtyDayAllRes.data ?? [];
-  const recent        = (recentRes.data ?? []) as unknown as RecentRow[];
+  const rangeCount     = rangeCountRes.count ?? 0;
+  const prevRangeCount = prevRangeCountRes.count ?? 0;
+  const courts         = courtsRes.data ?? [];
+  const rangeInsightsAll = rangeInsightsRes.data ?? [];
+  const recent          = (recentRes.data ?? []) as unknown as RecentRow[];
+  const hasAnyReservation = (hasAnyReservationRes.count ?? 0) > 0;
+  const playerCount     = playerCountRes.count ?? 0;
+  const adminCount      = adminCountRes.count ?? 0;
 
-  // Split 30-day data by status
-  const confirmedIds30   = thirtyDayAll.filter((r) => r.status === "confirmed").map((r) => r.id);
-  const confirmedCount30 = confirmedIds30.length;
-  const cancelledCount30 = thirtyDayAll.filter((r) => r.status === "cancelled").length;
+  // Next slot per court — rows arrive sorted chronologically, so the first
+  // occurrence of each court_id is that court's nearest upcoming reservation.
+  const nextSlotByCourtId = new Map<
+    string,
+    { startTime: string; endTime: string; playerName: string }
+  >();
+  for (const r of (upcomingRes.data ?? []) as unknown as UpcomingRow[]) {
+    if (nextSlotByCourtId.has(r.court_id)) continue;
+    nextSlotByCourtId.set(r.court_id, {
+      startTime: r.start_time.slice(0, 5),
+      endTime: calcEndTime(r.start_time.slice(0, 5), r.duration_minutes),
+      playerName:
+        r.reservation_players.map((rp) => rp.profiles?.full_name).filter(Boolean)[0] ??
+        "—",
+    });
+  }
 
-  // ─── Round 2: active players (depends on confirmedIds30) ─────────────────────
+  // Split range data by status
+  const confirmedRange   = rangeInsightsAll.filter((r) => r.status === "confirmed");
+  const confirmedIdsRange = confirmedRange.map((r) => r.id);
+  const dateByReservationId = new Map(confirmedRange.map((r) => [r.id, r.date]));
+
+  // ─── Round 2: active players (depends on confirmedIdsRange) ──────────────────
   const activePlayers =
-    confirmedIds30.length > 0
+    confirmedIdsRange.length > 0
       ? await supabase
           .from("reservation_players")
-          .select("profile_id")
-          .in("reservation_id", confirmedIds30)
+          .select("profile_id, reservation_id")
+          .in("reservation_id", confirmedIdsRange)
           .then((r) => r.data ?? [])
       : [];
 
@@ -293,27 +359,80 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
     const found = dbHours.find((h) => h.day_of_week === def.day_of_week);
     return found ?? def;
   });
-  const weekDayNums          = [1, 2, 3, 4, 5, 6, 0];
-  const availableMinPerCourt = computeWeeklyAvailableMinutes(effectiveHours, weekDayNums);
+  const availableMinPerCourt = computeAvailableMinutesForRange(
+    effectiveHours,
+    range.current.start,
+    range.current.end
+  );
 
-  // ─── KPI 2: Horas reservadas · KPI 3: Ocupación semanal ─────────────────────
-  type OccupancyRow = { court_id: string; duration_minutes: number };
-  const weekOccupancyData = (weekOccupancyRes.data ?? []) as OccupancyRow[];
-  const weekMinutes = weekOccupancyData.reduce((sum, r) => sum + r.duration_minutes, 0);
+  // ─── KPI 2: Horas reservadas · KPI 3: Ocupación del período ─────────────────
+  type OccupancyRow = { court_id: string; duration_minutes: number; date: string };
+  const rangeOccupancyData = (rangeOccupancyRes.data ?? []) as OccupancyRow[];
+  const rangeMinutes = rangeOccupancyData.reduce((sum, r) => sum + r.duration_minutes, 0);
   const totalAvailableMinutes = availableMinPerCourt * courts.length;
   const occupancyPct =
     totalAvailableMinutes > 0
-      ? Math.min(100, Math.round((weekMinutes / totalAvailableMinutes) * 100))
+      ? Math.min(100, Math.round((rangeMinutes / totalAvailableMinutes) * 100))
       : 0;
   const occupancyColor =
     occupancyPct >= 70 ? "#22C55E" : occupancyPct >= 40 ? "#EAB308" : "#EF4444";
 
+  // ─── Evolución de Reservas: cantidad de reservas confirmadas por bucket ─────
+  // Reuses rangeOccupancyData (one row per confirmed reservation) — counting
+  // rows per bucket avoids a separate query. The "vs período anterior" badge
+  // reuses periodChangeLabel/periodChangeColor (same reservation-count
+  // comparison already computed below for the "Vs período anterior" card).
+  const trendBuckets = getTrendBuckets(range);
+  const trendPoints = trendBuckets.map((b) => {
+    const count = rangeOccupancyData.filter(
+      (r) => r.date >= b.startStr && r.date <= b.endStr
+    ).length;
+    return { label: b.label, value: count };
+  });
+
+  // ─── Jugadores Activos por bucket: jugadores únicos con reserva en el bucket ─
+  // Reuses activePlayers (profile_id + reservation_id) and dateByReservationId
+  // (built above) — no new query.
+  const activePlayersTrendPoints = trendBuckets.map((b) => {
+    const profileIds = new Set<string>();
+    for (const ap of activePlayers) {
+      const date = dateByReservationId.get(ap.reservation_id);
+      if (date && date >= b.startStr && date <= b.endStr) profileIds.add(ap.profile_id);
+    }
+    return { label: b.label, value: profileIds.size };
+  });
+
+  // ─── Ocupación por día de la semana ──────────────────────────────────────────
+  // Reuses the same rangeOccupancyData (no new query) and the same per-day
+  // operating-hours lookup as the main occupancy denominator, just bucketed
+  // by weekday instead of summed into one total.
+  const reservedMinByWeekday = [0, 0, 0, 0, 0, 0, 0];
+  for (const r of rangeOccupancyData) {
+    const dayNum = new Date(r.date + "T00:00:00").getDay();
+    reservedMinByWeekday[dayNum] += r.duration_minutes;
+  }
+  const availableMinByWeekday = computeAvailableMinutesByWeekday(
+    effectiveHours,
+    range.current.start,
+    range.current.end
+  );
+  const weekdayOccupancyPoints = [1, 2, 3, 4, 5, 6, 0]
+    .map((dayNum) => {
+      const totalAvailable = availableMinByWeekday[dayNum] * courts.length;
+      const pct =
+        totalAvailable > 0
+          ? Math.min(100, Math.round((reservedMinByWeekday[dayNum] / totalAvailable) * 100))
+          : 0;
+      return { label: DAY_NAMES[dayNum].slice(0, 3), pct };
+    })
+    .sort((a, b) => b.pct - a.pct);
+
   // ─── Insights: per-court occupancy ───────────────────────────────────────────
   const reservedMinByCourt = new Map<string, number>();
-  for (const r of weekOccupancyData) {
+  for (const r of rangeOccupancyData) {
     reservedMinByCourt.set(r.court_id, (reservedMinByCourt.get(r.court_id) ?? 0) + r.duration_minutes);
   }
-  const courtOccupancy = (courts as { id: string; name: string }[]).map((c) => {
+  const courtOccupancy = (courts as { id: string; name: string; surface: string | null }[]).map((c) => {
     const reservedMin = reservedMinByCourt.get(c.id) ?? 0;
     const pct =
       availableMinPerCourt > 0
@@ -322,53 +441,73 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
     return {
       id: c.id,
       name: c.name,
+      surface: c.surface,
       reservedHours: +(reservedMin / 60).toFixed(1),
       availableHours: +(availableMinPerCourt / 60).toFixed(1),
       pct,
       color: pct >= 70 ? "#22C55E" : pct >= 40 ? "#EAB308" : "#EF4444",
+      nextSlot: nextSlotByCourtId.get(c.id) ?? null,
     };
   });
 
-  // ─── Insights: hora pico ─────────────────────────────────────────────────────
-  const confirmedStartTimes = thirtyDayAll
+  // ─── Ocupación por cancha: layout adapta según cantidad de canchas ───────────
+  // 1 cancha → 1 columna · número par → 2 columnas · número impar (>1) → 3 columnas
+  const courtColumnCount = courts.length === 1 ? 1 : courts.length % 2 === 0 ? 2 : 3;
+  const courtGridClass =
+    courtColumnCount === 1
+      ? "grid-cols-1"
+      : courtColumnCount === 2
+      ? "grid-cols-1 lg:grid-cols-2"
+      : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3";
+  const courtIllustrationWidthClass = courtColumnCount === 3 ? "w-[200px]" : "w-[260px]";
+
+  // ─── Horas Más Demandadas: top 5 horarios por cantidad de reservas ──────────
+  const confirmedStartTimes = rangeInsightsAll
     .filter((r) => r.status === "confirmed")
     .map((r) => r.start_time as string);
-  const peakHour = computePeakHour(confirmedStartTimes);
+  const hourFrequency = new Map<number, number>();
+  for (const t of confirmedStartTimes) {
+    const hour = parseInt(t.slice(0, 2), 10);
+    hourFrequency.set(hour, (hourFrequency.get(hour) ?? 0) + 1);
+  }
+  const topHoursPoints = [...hourFrequency.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([hour, count]) => ({ label: `${String(hour).padStart(2, "0")}:00`, count }));
 
-  // ─── Insights: tasa de cancelación ───────────────────────────────────────────
-  const totalCount30    = confirmedCount30 + cancelledCount30;
-  const cancellationPct =
-    totalCount30 > 0 ? Math.round((cancelledCount30 / totalCount30) * 100) : 0;
-
-  // ─── Insights: comparación vs semana anterior ────────────────────────────────
-  // Same-days-elapsed comparison: if today is Wed, Mon–Wed this week vs Mon–Wed last week
-  let weekChangeLabel  = "—";
-  let weekChangeColor  = "#94A3B8";
-  let weekChangeTrend: "up" | "down" | "flat" = "flat";
-  if (prevWeekCount === 0 && weekCount > 0) {
-    weekChangeLabel = `+${weekCount}`;
-    weekChangeColor = "#22C55E";
-    weekChangeTrend = "up";
-  } else if (prevWeekCount > 0) {
-    const pct = Math.round(((weekCount - prevWeekCount) / prevWeekCount) * 100);
-    weekChangeLabel = pct > 0 ? `▲ +${pct}%` : pct < 0 ? `▼ ${pct}%` : "=";
-    weekChangeColor = pct > 0 ? "#22C55E" : pct < 0 ? "#EF4444" : "#94A3B8";
-    weekChangeTrend = pct > 0 ? "up" : pct < 0 ? "down" : "flat";
+  // ─── Insights: comparación vs período anterior (badge en Evolución de Reservas) ─
+  let periodChangeLabel  = "—";
+  let periodChangeColor  = "#94A3B8";
+  if (prevRangeCount === 0 && rangeCount > 0) {
+    periodChangeLabel = `+${rangeCount}`;
+    periodChangeColor = "#22C55E";
+  } else if (prevRangeCount > 0) {
+    const pct = Math.round(((rangeCount - prevRangeCount) / prevRangeCount) * 100);
+    periodChangeLabel = pct > 0 ? `▲ +${pct}%` : pct < 0 ? `▼ ${pct}%` : "=";
+    periodChangeColor = pct > 0 ? "#22C55E" : pct < 0 ? "#EF4444" : "#94A3B8";
   }
 
-  const isEmpty = recent.length === 0;
+  // Decoupled from the selected range — a populated club must keep showing the
+  // operational dashboard even if the chosen period has zero activity.
+  const isEmpty = !hasAnyReservation;
 
-  // ─── Onboarding checklist ─────────────────────────────────────────────────────
-  const hasCourts       = courts.length > 0;
-  const hasHours        = dbHours.some((h) => h.is_open);
-  const hasMembers      = (nonOwnerMembersRes.count ?? 0) > 0;
-  const hasReservations = !isEmpty;
-  const hasPublicPage   = !!(
-    club.description &&
-    (club.city || club.address) &&
-    (club.logo_url || club.cover_image_url)
-  );
-  const allChecklistDone = hasPublicPage && hasCourts && hasHours && hasMembers && hasReservations;
+  // ─── Onboarding wizard step completion ───────────────────────────────────────
+  // Step 1: club has a description (social links remain optional)
+  const step1Done = !!club.description;
+  // Step 2: club has city as minimum location signal
+  const step2Done = !!club.city;
+  // Step 3: operating hours + durations configured
+  const step3Done = dbHours.length > 0 && (club.allowed_reservation_durations?.length ?? 0) > 0;
+  // Step 4: at least one active court exists
+  const step4Done = courts.length > 0;
+
+  const pendingSetupItems = [
+    { done: step1Done, step: 1, todoLabel: "Falta completar perfil público" },
+    { done: step2Done, step: 2, todoLabel: "Falta configurar ubicación" },
+    { done: step3Done, step: 3, todoLabel: "Falta configurar horarios" },
+    { done: step4Done, step: 4, todoLabel: "Falta agregar una cancha" },
+  ].filter((item) => !item.done);
+  const firstIncompleteStep = pendingSetupItems[0]?.step ?? null;
 
   return (
     <div className="p-6 md:p-10">
@@ -398,87 +537,133 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
         }
       />
 
-      {/* ─── Onboarding checklist ──────────────────────────────────────── */}
-      {!allChecklistDone && (
-        <OnboardingChecklist
-          clubId={club.id}
-          clubSlug={slug}
-          hasPublicPage={hasPublicPage}
-          hasCourts={hasCourts}
-          hasHours={hasHours}
-          hasMembers={hasMembers}
-          hasReservations={hasReservations}
+      {/* ─── Onboarding wizard ─────────────────────────────────────────── */}
+      {membership.role === "OWNER" && (
+        <OnboardingWizard
+          club={{
+            ...club,
+            allowed_reservation_durations: club.allowed_reservation_durations ?? [60, 90, 120],
+          }}
+          initialHours={effectiveHours}
+          step1Done={step1Done}
+          step2Done={step2Done}
+          step3Done={step3Done}
+          step4Done={step4Done}
         />
       )}
 
       {isEmpty ? (
-        /* ─── Empty state ─────────────────────────────────────────────────── */
-        <div className="flex flex-col items-center justify-center text-center py-16 px-6 bg-brand-surface border border-dashed border-white/10 rounded-2xl mb-8">
-          <div
-            className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6"
-            style={{ backgroundColor: "color-mix(in srgb, var(--club-primary) 12%, transparent)" }}
-          >
-            {hasCourts
-              ? <CalendarDays className="w-8 h-8" style={{ color: "var(--club-primary)" }} />
-              : <Home        className="w-8 h-8" style={{ color: "var(--club-primary)" }} />}
+        /* ─── Empty state: management dashboard summary ──────────────────── */
+        <>
+          {/* Sección 1 — KPIs principales */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <KpiCard label="Canchas" value={String(courts.length)} Icon={Home} color="var(--club-primary)" />
+            <KpiCard label="Jugadores" value={String(playerCount)} Icon={Users} color="var(--club-secondary)" />
+            <KpiCard label="Reservas" value={String(recent.length)} Icon={CalendarDays} color="var(--club-primary)" />
+            <KpiCard label="Administradores" value={String(adminCount)} Icon={Shield} color="var(--club-secondary)" />
           </div>
 
-          {hasCourts ? (
-            <>
-              <h2 className="text-xl font-bold text-white mb-2">
-                Aún no tienes reservas registradas
-              </h2>
-              <p className="text-sm text-brand-muted mb-8 max-w-sm">
-                Registra la primera reserva de tu club para comenzar a ver métricas aquí.
+          {/* Sección 2 — Configuración pendiente (solo si falta algo) */}
+          {pendingSetupItems.length > 0 && (
+            <div className="bg-brand-surface border border-amber-400/20 rounded-2xl p-5 mb-8">
+              <p className="text-sm font-semibold text-white mb-1">Configuración pendiente</p>
+              <p className="text-xs text-brand-muted/70 mb-4">
+                Todavía hay elementos por configurar antes de aprovechar completamente tu club.
               </p>
+              <div className="flex flex-col gap-3 mb-5">
+                {pendingSetupItems.map((item) => (
+                  <div key={item.step} className="flex items-center gap-3">
+                    <div
+                      className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: "color-mix(in srgb, #EAB308 15%, transparent)" }}
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                    </div>
+                    <span className="text-sm text-amber-300/90">{item.todoLabel}</span>
+                  </div>
+                ))}
+              </div>
               <Link
-                href={`/${slug}/admin/reservations/new`}
-                className="inline-flex items-center gap-2 h-10 px-6 rounded-xl text-sm font-semibold transition-all hover:brightness-110"
+                href={`/${slug}/dashboard?setupStep=${firstIncompleteStep}`}
+                className="inline-flex items-center justify-center h-9 px-4 rounded-xl text-sm font-semibold transition-all hover:brightness-110"
                 style={{ backgroundColor: "var(--club-primary)", color: "var(--club-bg, #001A24)" }}
               >
-                <Plus className="w-4 h-4" />
-                Crear primera reserva
+                Continuar configuración
               </Link>
-            </>
-          ) : (
-            <>
-              <h2 className="text-xl font-bold text-white mb-2">
-                Agrega tu primera cancha
-              </h2>
-              <p className="text-sm text-brand-muted mb-8 max-w-sm">
-                Antes de registrar reservas, necesitas crear al menos una cancha.
-              </p>
-              <Link
-                href={`/${slug}/admin/courts`}
-                className="inline-flex items-center gap-2 h-10 px-6 rounded-xl text-sm font-semibold transition-all hover:brightness-110"
-                style={{ backgroundColor: "var(--club-primary)", color: "var(--club-bg, #001A24)" }}
-              >
-                <Plus className="w-4 h-4" />
-                Agregar primera cancha
-              </Link>
-            </>
+            </div>
           )}
-        </div>
+
+          {/* Sección 3 — Próximos pasos recomendados */}
+          <div className="mb-8">
+            <p className="text-sm font-semibold text-white mb-4">Próximos pasos recomendados</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {(
+                [
+                  { label: "Invitar jugadores", sub: "Comparte el enlace de invitación con tu comunidad", href: `/${slug}/admin/players`, Icon: Users, color: "var(--club-primary)", external: false },
+                  { label: "Crear primera reserva", sub: "Registra manualmente el primer turno del club", href: `/${slug}/admin/reservations/new`, Icon: CalendarDays, color: "var(--club-secondary)", external: false },
+                  { label: "Ver página pública", sub: "Así es como los jugadores ven tu club", href: `/clubs/${slug}`, Icon: Share2, color: "var(--club-primary)", external: true },
+                ] as const
+              ).map((step) => (
+                <Link
+                  key={step.label}
+                  href={step.href}
+                  target={step.external ? "_blank" : undefined}
+                  style={{ "--ns-color": step.color } as React.CSSProperties}
+                  className="flex flex-col gap-2 p-4 rounded-2xl bg-brand-surface border border-white/10 hover:border-[var(--ns-color)] transition-colors"
+                >
+                  <div
+                    className="w-9 h-9 rounded-xl flex items-center justify-center"
+                    style={{ backgroundColor: `color-mix(in srgb, ${step.color} 15%, transparent)`, color: step.color }}
+                  >
+                    <step.Icon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-white">{step.label}</p>
+                    <p className="text-xs text-brand-muted/60 mt-0.5">{step.sub}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          {/* Sección 4 — Actividad reciente (placeholder) */}
+          <div className="bg-brand-surface border border-white/10 rounded-2xl p-6 mb-8">
+            <p className="text-sm font-semibold text-white mb-2">Actividad reciente</p>
+            <p className="text-sm text-brand-muted">
+              Aquí aparecerán las últimas reservas, registros de jugadores y actividad del club.
+            </p>
+          </div>
+        </>
       ) : (
         <>
+          {/* ─── Selector de rango ─────────────────────────────────────────── */}
+          <div className="flex justify-end mb-3">
+            <DateRangeSelector
+              value={range.key}
+              customFrom={range.key === "custom" ? range.current.startStr : undefined}
+              customTo={range.key === "custom" ? range.current.endStr : undefined}
+              dateRangeLabel={range.dateRangeLabel}
+            />
+          </div>
+
           {/* ─── KPIs ──────────────────────────────────────────────────────── */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             <KpiCard
-              label="Reservas esta semana"
-              value={String(weekCount)}
+              label={`Reservas ${range.label.toLowerCase()}`}
+              value={String(rangeCount)}
               Icon={CalendarDays}
               color="var(--club-primary)"
             />
             <KpiCard
               label="Horas reservadas"
-              value={formatHours(weekMinutes)}
+              value={formatHours(rangeMinutes)}
               unit="h"
-              sub="esta semana"
+              sub={range.label.toLowerCase()}
               Icon={Clock}
               color="var(--club-secondary)"
             />
             <KpiCard
-              label="Ocupación semanal"
+              label="Ocupación del período"
               value={String(occupancyPct)}
               unit="%"
               Icon={TrendingUp}
@@ -487,7 +672,7 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
             <KpiCard
               label="Jugadores activos"
               value={String(activePlayerCount)}
-              sub="últimos 30 días"
+              sub={range.label.toLowerCase()}
               Icon={Users}
               color="var(--club-primary)"
             />
@@ -498,172 +683,126 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
             <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-4">
               Insights del Club
             </h2>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-              {/* ── Ocupación por cancha ───────────────────────────────── */}
+            {/* Fila 1 — Horas Más Demandadas + Jugadores Activos */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
               <div className="bg-brand-surface border border-white/10 rounded-2xl p-5">
-                <div className="flex items-center justify-between mb-5">
-                  <p className="text-sm font-semibold text-white">Ocupación por cancha</p>
-                  <span className="text-[11px] text-brand-muted">Esta semana</span>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-semibold text-white">Horas Más Demandadas</p>
+                  <span className="text-[11px] text-brand-muted">{range.label}</span>
                 </div>
-                {courtOccupancy.length === 0 ? (
-                  <p className="text-sm text-brand-muted">Sin canchas activas</p>
-                ) : (
-                  <div className="flex flex-col gap-5">
-                    {courtOccupancy.map((c) => (
-                      <div key={c.id}>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-white">{c.name}</span>
-                          <span
-                            className="text-sm font-bold tabular-nums"
-                            style={{ color: c.color }}
-                          >
-                            {c.pct}%
-                          </span>
-                        </div>
-                        <div className="h-2 rounded-full bg-white/[0.07] overflow-hidden mb-1.5">
+                <TopHoursChart points={topHoursPoints} />
+              </div>
+
+              <div className="bg-brand-surface border border-white/10 rounded-2xl p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-semibold text-white">Jugadores Activos</p>
+                  <span className="text-[11px] text-brand-muted">{range.label}</span>
+                </div>
+                <TrendChart points={activePlayersTrendPoints} />
+              </div>
+            </div>
+
+            {/* Fila 2 — Evolución de Reservas + Ocupación por Día de la Semana */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="bg-brand-surface border border-white/10 rounded-2xl p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-semibold text-white">Evolución de Reservas</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-brand-muted">{range.label}</span>
+                    {range.hasComparison && (
+                      <span
+                        className="text-xs font-semibold tabular-nums"
+                        style={{ color: periodChangeColor }}
+                      >
+                        {periodChangeLabel} vs {range.comparisonLabel}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <TrendChart points={trendPoints} />
+              </div>
+
+              <div className="bg-brand-surface border border-white/10 rounded-2xl p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-semibold text-white">Ocupación por Día de la Semana</p>
+                  <span className="text-[11px] text-brand-muted">{range.label}</span>
+                </div>
+                <WeekdayOccupancyChart points={weekdayOccupancyPoints} />
+              </div>
+            </div>
+          </div>
+
+          {/* ─── Ocupación por cancha ───────────────────────────────────────── */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider">
+                Ocupación por cancha
+              </h2>
+              <span className="text-[11px] text-brand-muted">{range.label}</span>
+            </div>
+            {courtOccupancy.length === 0 ? (
+              <p className="text-sm text-brand-muted">Sin canchas activas</p>
+            ) : (
+              <div className={`grid ${courtGridClass} gap-4`}>
+                {courtOccupancy.map((c) => (
+                  <div
+                    key={c.id}
+                    className="bg-brand-surface border border-white/10 rounded-2xl p-4 flex gap-4"
+                  >
+                    <div className={`relative shrink-0 ${courtIllustrationWidthClass}`}>
+                      {/* Badges placeholder — reserved for "Más reservada" / "Baja
+                          utilización" / Indoor·Outdoor / Panorámica / Techada.
+                          Not implemented yet. */}
+                      <div className="absolute top-1 left-1 z-10 flex gap-1.5" />
+                      <CourtIllustration surface={c.surface} className="w-full" />
+                    </div>
+
+                    <div className="flex-1 min-w-0 flex flex-col justify-center">
+                      <p className="text-base font-semibold text-white uppercase tracking-wide truncate">
+                        {c.name}
+                      </p>
+                      <p className="text-xs text-brand-muted/60 mt-0.5">{getSurfaceLabel(c.surface)}</p>
+
+                      <div className="mt-3">
+                        <span
+                          className="text-3xl font-bold tabular-nums leading-none"
+                          style={{ color: c.color }}
+                        >
+                          {c.pct}%
+                        </span>
+                        <p className="text-[11px] text-brand-muted mt-1 mb-1.5">ocupación {range.label.toLowerCase()}</p>
+                        <div className="h-2 rounded-full bg-white/[0.07] overflow-hidden">
                           <div
                             className="h-full rounded-full"
                             style={{ width: `${c.pct}%`, backgroundColor: c.color }}
                           />
                         </div>
-                        <p className="text-[11px] text-brand-muted/70">
-                          {c.reservedHours}h reservadas · {c.availableHours}h disponibles
-                        </p>
                       </div>
-                    ))}
+
+                      <div className="mt-3 pt-3 border-t border-white/[0.06]">
+                        <p className="text-[11px] text-brand-muted mb-1">Próximo turno:</p>
+                        {c.nextSlot ? (
+                          <div className="flex items-start gap-1.5">
+                            <Clock className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: c.color }} />
+                            <div>
+                              <p className="text-sm font-semibold text-white leading-tight">
+                                {c.nextSlot.startTime} - {c.nextSlot.endTime}
+                              </p>
+                              <p className="text-sm font-semibold text-white leading-tight">
+                                {c.nextSlot.playerName}
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-brand-muted/70">Sin reservas programadas</p>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                )}
+                ))}
               </div>
-
-              {/* ── Right column: 3 stacked insight cards ───────────────── */}
-              <div className="flex flex-col gap-4">
-
-                {/* Hora pico */}
-                <div className="bg-brand-surface border border-white/10 rounded-2xl p-5">
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-sm font-semibold text-white">Hora pico</p>
-                    <span className="text-[11px] text-brand-muted">Últimos 30 días</span>
-                  </div>
-                  {peakHour ? (
-                    <>
-                      <div className="flex items-center gap-2.5 mb-1">
-                        <div
-                          className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                          style={{
-                            backgroundColor: "color-mix(in srgb, #EAB308 15%, transparent)",
-                          }}
-                        >
-                          <Flame className="w-3.5 h-3.5" style={{ color: "#EAB308" }} />
-                        </div>
-                        <span
-                          className="text-2xl font-bold tabular-nums"
-                          style={{ color: "#EAB308" }}
-                        >
-                          {String(peakHour.hour).padStart(2, "0")}:00
-                          <span className="text-base font-normal text-brand-muted ml-1">
-                            – {String(peakHour.hour + 1).padStart(2, "0")}:00
-                          </span>
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-brand-muted/70">
-                        {peakHour.count} reserva{peakHour.count !== 1 ? "s" : ""} en este horario
-                      </p>
-                    </>
-                  ) : (
-                    <p className="text-sm text-brand-muted">Sin datos suficientes</p>
-                  )}
-                </div>
-
-                {/* Cancelaciones */}
-                <div className="bg-brand-surface border border-white/10 rounded-2xl p-5">
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-sm font-semibold text-white">Cancelaciones</p>
-                    <span className="text-[11px] text-brand-muted">Últimos 30 días</span>
-                  </div>
-                  {totalCount30 > 0 ? (
-                    <>
-                      <div className="flex items-center gap-2.5 mb-1">
-                        <div
-                          className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                          style={{
-                            backgroundColor:
-                              cancelledCount30 === 0
-                                ? "color-mix(in srgb, #22C55E 15%, transparent)"
-                                : "color-mix(in srgb, #EF4444 15%, transparent)",
-                          }}
-                        >
-                          <XCircle
-                            className="w-3.5 h-3.5"
-                            style={{
-                              color: cancelledCount30 === 0 ? "#22C55E" : "#EF4444",
-                            }}
-                          />
-                        </div>
-                        <span
-                          className="text-2xl font-bold tabular-nums"
-                          style={{
-                            color: cancelledCount30 === 0 ? "#22C55E" : "#EF4444",
-                          }}
-                        >
-                          {cancellationPct}%
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-brand-muted/70">
-                        {cancelledCount30} de {totalCount30} reserva
-                        {totalCount30 !== 1 ? "s" : ""} cancelada
-                        {cancelledCount30 !== 1 ? "s" : ""}
-                      </p>
-                    </>
-                  ) : (
-                    <p className="text-sm text-brand-muted">Sin datos suficientes</p>
-                  )}
-                </div>
-
-                {/* Comparación vs semana anterior */}
-                <div className="bg-brand-surface border border-white/10 rounded-2xl p-5">
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-sm font-semibold text-white">Vs semana anterior</p>
-                    <span className="text-[11px] text-brand-muted">Mismo período</span>
-                  </div>
-                  {prevWeekCount === 0 && weekCount === 0 ? (
-                    <p className="text-sm text-brand-muted">Sin reservas en ambas semanas</p>
-                  ) : (
-                    <>
-                      <div className="flex items-center gap-2.5 mb-1">
-                        <div
-                          className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                          style={{
-                            backgroundColor: `color-mix(in srgb, ${weekChangeColor} 15%, transparent)`,
-                          }}
-                        >
-                          {weekChangeTrend === "down" ? (
-                            <TrendingDown
-                              className="w-3.5 h-3.5"
-                              style={{ color: weekChangeColor }}
-                            />
-                          ) : (
-                            <TrendingUp
-                              className="w-3.5 h-3.5"
-                              style={{ color: weekChangeColor }}
-                            />
-                          )}
-                        </div>
-                        <span
-                          className="text-2xl font-bold tabular-nums"
-                          style={{ color: weekChangeColor }}
-                        >
-                          {weekChangeLabel}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-brand-muted/70">
-                        {weekCount} esta sem · {prevWeekCount} semana anterior
-                      </p>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
+            )}
           </div>
 
           {/* ─── Actividad reciente ──────────────────────────────────────── */}
@@ -679,54 +818,60 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
               </Link>
             </div>
 
-            {/* Table header — desktop only */}
-            <div className="hidden md:grid grid-cols-[140px_1fr_80px_120px] gap-4 px-3 pb-2.5 border-b border-white/[0.06]">
-              {["Fecha", "Cancha", "Horario", "Estado"].map((h) => (
-                <span
-                  key={h}
-                  className="text-[11px] font-semibold text-brand-muted uppercase tracking-wider"
-                >
-                  {h}
-                </span>
-              ))}
-            </div>
+            {recent.length === 0 ? (
+              <p className="text-sm text-brand-muted py-3">No hay reservas en este período.</p>
+            ) : (
+              <>
+                {/* Table header — desktop only */}
+                <div className="hidden md:grid grid-cols-[140px_1fr_80px_120px] gap-4 px-3 pb-2.5 border-b border-white/[0.06]">
+                  {["Fecha", "Cancha", "Horario", "Estado"].map((h) => (
+                    <span
+                      key={h}
+                      className="text-[11px] font-semibold text-brand-muted uppercase tracking-wider"
+                    >
+                      {h}
+                    </span>
+                  ))}
+                </div>
 
-            {/* Rows */}
-            <div className="flex flex-col divide-y divide-white/[0.04]">
-              {recent.map((r) => (
-                <Link
-                  key={r.id}
-                  href={`/${slug}/admin/reservations/${r.id}`}
-                  className="flex flex-col md:grid md:grid-cols-[140px_1fr_80px_120px] md:gap-4 md:items-center px-3 py-3 -mx-3 rounded-xl hover:bg-white/[0.03] transition-colors"
-                >
-                  <span className="text-xs text-brand-muted md:text-sm md:text-white">
-                    {formatDate(r.date, todayStr, yesterdayStr)}
-                  </span>
-                  <div className="flex items-center gap-2 mt-0.5 md:mt-0">
-                    <span className="text-sm font-medium text-white">
-                      {r.courts?.name ?? "—"}
-                    </span>
-                    <span className="md:hidden text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-brand-muted font-medium">
-                      {TYPE_LABELS[r.type] ?? r.type}
-                    </span>
-                  </div>
-                  <span className="text-sm font-mono text-white mt-0.5 md:mt-0">
-                    {r.start_time.slice(0, 5)}
-                  </span>
-                  {r.status === "confirmed" ? (
-                    <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-green-400 mt-0.5 md:mt-0">
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
-                      Confirmada
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-red-400 mt-0.5 md:mt-0">
-                      <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
-                      Cancelada
-                    </span>
-                  )}
-                </Link>
-              ))}
-            </div>
+                {/* Rows */}
+                <div className="flex flex-col divide-y divide-white/[0.04]">
+                  {recent.map((r) => (
+                    <Link
+                      key={r.id}
+                      href={`/${slug}/admin/reservations/${r.id}`}
+                      className="flex flex-col md:grid md:grid-cols-[140px_1fr_80px_120px] md:gap-4 md:items-center px-3 py-3 -mx-3 rounded-xl hover:bg-white/[0.03] transition-colors"
+                    >
+                      <span className="text-xs text-brand-muted md:text-sm md:text-white">
+                        {formatDate(r.date, todayStr, yesterdayStr)}
+                      </span>
+                      <div className="flex items-center gap-2 mt-0.5 md:mt-0">
+                        <span className="text-sm font-medium text-white">
+                          {r.courts?.name ?? "—"}
+                        </span>
+                        <span className="md:hidden text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-brand-muted font-medium">
+                          {TYPE_LABELS[r.type] ?? r.type}
+                        </span>
+                      </div>
+                      <span className="text-sm font-mono text-white mt-0.5 md:mt-0">
+                        {r.start_time.slice(0, 5)}
+                      </span>
+                      {r.status === "confirmed" ? (
+                        <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-green-400 mt-0.5 md:mt-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
+                          Confirmada
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-red-400 mt-0.5 md:mt-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
+                          Cancelada
+                        </span>
+                      )}
+                    </Link>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </>
       )}
@@ -737,7 +882,7 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
           Acceso rápido
         </h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {(hasCourts
+          {(step4Done
             ? [
                 { label: "Reservaciones", Icon: CalendarDays, href: `/${slug}/admin/reservations`, color: "var(--club-primary)" },
                 { label: "Canchas",       Icon: Home,         href: `/${slug}/admin/courts`,        color: "var(--club-secondary)" },

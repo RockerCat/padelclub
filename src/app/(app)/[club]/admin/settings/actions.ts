@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { timeToMinutes, type OperatingHour } from "@/lib/operatingHours";
+import { DAY_NAMES, validateOperatingHours, type OperatingHour } from "@/lib/operatingHours";
 import { DURATION_CATALOG } from "@/lib/durations";
 
 export type UpdateAllowedDurationsState = { success?: boolean; error?: string };
@@ -85,6 +85,39 @@ export async function updateClubLogo(
     return { error: updateError.message };
   }
 
+  return {};
+}
+
+export async function updateClubName(
+  clubId: string,
+  name: string
+): Promise<{ error?: string }> {
+  const supabase = await createClient();
+
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) return { error: "No autenticado." };
+
+  const { data: membership } = await supabase
+    .from("club_members")
+    .select("role")
+    .eq("club_id", clubId)
+    .eq("profile_id", user.id)
+    .eq("is_active", true)
+    .single();
+
+  if (!membership || membership.role !== "OWNER")
+    return { error: "No tienes permiso para editar este club." };
+
+  const trimmed = name.trim();
+  if (!trimmed || trimmed.length < 2)
+    return { error: "El nombre debe tener al menos 2 caracteres." };
+
+  const { error: updateError } = await supabase
+    .from("clubs")
+    .update({ name: trimmed })
+    .eq("id", clubId);
+
+  if (updateError) return { error: "Error al guardar. Intenta de nuevo." };
   return {};
 }
 
@@ -235,16 +268,11 @@ export async function saveOperatingHours(
     return { error: "Solo el propietario puede modificar los horarios." };
   }
 
-  // Validate each day
-  for (const h of hours) {
-    if (h.is_open) {
-      if (!h.opens_at || !h.closes_at) {
-        return { error: "Ingresa hora de apertura y cierre para los días abiertos." };
-      }
-      if (timeToMinutes(h.opens_at) >= timeToMinutes(h.closes_at)) {
-        return { error: "La hora de apertura debe ser anterior a la de cierre." };
-      }
-    }
+  // Validate each day — closes_at must be strictly after opens_at when open
+  const dayErrors = validateOperatingHours(hours);
+  if (dayErrors.size > 0) {
+    const [day, message] = [...dayErrors.entries()][0];
+    return { error: `${DAY_NAMES[day]}: ${message}` };
   }
 
   const rows = hours.map((h) => ({
@@ -260,7 +288,12 @@ export async function saveOperatingHours(
     .upsert(rows, { onConflict: "club_id,day_of_week" });
 
   if (upsertError) {
-    console.error("[saveOperatingHours] upsert failed:", upsertError);
+    console.error("[saveOperatingHours] upsert failed:", {
+      message: upsertError.message,
+      code: upsertError.code,
+      details: upsertError.details,
+      hint: upsertError.hint,
+    });
     return { error: "Error al guardar los horarios. Intenta de nuevo." };
   }
 

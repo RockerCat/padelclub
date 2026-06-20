@@ -113,7 +113,10 @@ CREATE TABLE clubs (
   youtube         text,                          -- URL
   is_active       boolean NOT NULL DEFAULT true,
   created_at      timestamptz NOT NULL DEFAULT now(),
-  updated_at      timestamptz NOT NULL DEFAULT now()
+  updated_at      timestamptz NOT NULL DEFAULT now(),
+  cover_image_url text,
+  visibility text NOT NULL DEFAULT 'private' CHECK (visibility IN ('public', 'private')),
+  allowed_reservation_durations integer[] NOT NULL DEFAULT ARRAY[60,90,120]
 );
 
 -- Indexes
@@ -435,6 +438,8 @@ These are enforced server-side and should not rely only on client UI:
 4. Reservation cannot overlap another non-cancelled reservation for the same court.
 5. Reservation court must belong to the same club and be active.
 6. Staff-created reservations may be `CONFIRMED`; player-created reservations should be `PENDING` unless the product explicitly changes this rule.
+7. Player-created reservations must be created as PENDING.
+8. OWNER or ADMIN approval is required before a reservation becomes CONFIRMED.
 
 ### Availability Rules
 
@@ -974,6 +979,17 @@ Important computed metrics:
 
 Cancellation analytics should be interpreted carefully because operational `BLOCK` reservations can distort player cancellation rates. If the owner-facing metric is intended to measure player cancellations, exclude `type = 'BLOCK'`.
 
+The Owner dashboard also acts as the primary club identity surface.
+
+The dashboard should expose:
+
+- Club branding
+- Club visibility
+- Club profile information
+- Operational analytics
+
+and should visually align with the public club page.
+
 ---
 
 ## Future Tables (Phase 2+)
@@ -989,3 +1005,55 @@ Cancellation analytics should be interpreted carefully because operational `BLOC
 | `notifications` | In-app notification queue |
 | `push_tokens` | FCM/APNS tokens for mobile push |
 | `player_connections` | Social graph (friends/contacts within platform) |
+
+## Club Identity
+
+A club is both:
+
+- An operational entity
+- A branded entity
+
+Each club may define:
+
+- Logo
+- Cover image
+- Description
+- Colors
+- Visibility
+
+The owner dashboard and public club page should share the same visual identity whenever possible.
+
+## Club Visibility
+
+Visibility is configured at the club level.
+
+Values:
+
+- PUBLIC
+- PRIVATE
+
+PUBLIC clubs:
+- Appear in the club directory
+- Expose a public club profile page
+- May allow self-service registration flows
+
+PRIVATE clubs:
+- Require approval or invitation-based access
+- Display a private club badge
+- Restrict direct participation
+
+### Reservation Duration Rules
+
+Reservation durations are configured per club.
+
+Supported values:
+
+- 60
+- 90
+- 120
+- 150
+- 180
+
+The club selects which durations are available.
+
+All reservation creation workflows must validate against the club configuration.

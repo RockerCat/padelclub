@@ -1,429 +1,549 @@
 # PadelClub — Development Roadmap
 
-> MVP focus: replace WhatsApp + manual court scheduling for a real padel club.
+> MVP Focus: Help real padel clubs replace WhatsApp coordination and manual administration.
+>
 > Build only what is necessary to validate adoption.
-> Last updated: 2026-06-13 (Validation Gate 1.0)
+>
+> Last Updated: June 2026 (Validation Gate 1.0)
 
 ---
 
-## Development Philosophy
+# Product Strategy
 
 PadelClub will not be built feature-complete before validating with real clubs.
 
-The objective is to solve a real operational problem:
+The goal is not to build every possible club-management feature.
 
-- Court reservations
-- Club administration
-- Player management
+The goal is to prove that club owners are willing to operate their clubs using PadelClub as their primary system.
 
-Only after proving real-world adoption should additional modules be developed.
+The MVP focuses on solving:
 
-Features such as:
+* Club setup
+* Club administration
+* Court management
+* Player management
+* Reservation workflows
+* Reservation approvals
 
-- Rankings
-- Tournaments
-- Clinics
-- Community features
-
-are valuable, but only after reservation workflows have been validated.
+Everything else is secondary until adoption is validated.
 
 ---
 
-## MVP Success Definition
+# Core Product Thesis
 
-A real club can replace:
+The primary customer is the Club Owner.
 
-- WhatsApp reservation coordination
-- Manual court scheduling
-- Reservation spreadsheets
+Players are important.
 
-with PadelClub for at least:
+Administrators are important.
 
-**30 consecutive days**
+But the buying decision is made by the Owner.
 
-without requiring external tools.
+Every roadmap decision should answer:
 
----
+> Does this help a club owner operate and grow their club?
 
-## Current Status
-
-### Completed
-
-#### Sprint 0 — Infrastructure & Foundations
-
-Completed.
-
-#### Sprint 1 — Auth + Multi-Tenant + Clubs + Branding
-
-Completed.
-
-#### Sprint 2 — Courts & Players
-
-Completed.
-
-#### Sprint 3.0 — Reservations Core
-
-Completed.
-
-Delivered:
-
-- Reservations
-- Reservation players
-- Weekly calendar
-- Overlap prevention
-- Admin reservation management
-- Player reservation visibility
-
-#### Sprint 3.1 — Reservation Management
-
-Completed.
-
-Delivered:
-
-- Edit reservations
-- Reschedule reservations
-- Cancel reservations
-- Success banners
-- Confirmation dialogs
-- Improved reservation actions
-
-#### Sprint 3.2 — Operating Hours
-
-Completed.
-
-Delivered:
-
-- Club operating hours
-- Closed days
-- Operating hours configuration
-- Server-side validation
-- Calendar awareness
-
-#### Sprint 3.3 — Reservation UX
-
-Completed.
-
-Delivered:
-
-- Modal reservation workflows
-- Smart slot picker
-- Today highlighting
-- Past reservation prevention
-- Improved reservation experience
-
-#### Dashboard 1.1
-
-Completed.
-
-Delivered:
-
-- Reservations this week
-- Reserved hours
-- Weekly occupancy
-- Active players
-- Court occupancy
-- Peak reservation hour
-- Cancellation rate
-- Previous week comparison
+If not, it should be deprioritized.
 
 ---
 
-## Current Phase
+# Product Evolution
+
+## Phase 0 — Foundations
+
+Status:
+
+✅ Completed
+
+Delivered:
+
+* Next.js architecture
+* Supabase integration
+* Authentication
+* Multi-tenant model
+* Role system
+* RLS foundation
+* Club membership architecture
+
+Outcome:
+
+Platform foundation established.
+
+---
+
+## Phase 1 — Multi-Club Platform
+
+Status:
+
+✅ Completed
+
+Delivered:
+
+* Club creation
+* Club membership
+* Club invitations
+* Multi-club users
+* Role-based navigation
+* Club switching
+
+Outcome:
+
+Users can belong to multiple clubs with different roles.
+
+---
+
+## Phase 2 — Operations Core
+
+Status:
+
+✅ Completed
+
+Delivered:
+
+### Courts
+
+* Create courts
+* Edit courts
+* Activate/deactivate courts
+
+### Players
+
+* Invite players
+* Membership management
+* Role management
+
+### Administration
+
+* Club settings
+* Operating hours
+* Closed days
+
+Outcome:
+
+Basic club operations became manageable through the platform.
+
+---
+
+## Phase 3 — Reservation System
+
+Status:
+
+✅ Completed
+
+Delivered:
+
+### Reservation Management
+
+* Create reservations
+* Edit reservations
+* Cancel reservations
+* Weekly calendar
+
+### Availability
+
+* Smart slot selection
+* Availability validation
+* Overlap prevention
+* Court scheduling
+
+### Reservation Policies
+
+* Club operating hours
+* Closed days
+* Reservation duration validation
+
+### Reservation Requests
+
+* Player reservation requests
+* Pending reservations
+* Approval workflow
+* Rejection workflow
+
+Outcome:
+
+Reservation workflows are now operationally usable.
+
+---
+
+## Phase 4 — Owner Experience & Club Identity
+
+Status:
+
+🚧 In Progress
+
+Objective:
+
+Transform PadelClub from an administration tool into the digital home of a club.
+
+---
+
+### Dashboard Evolution
+
+Delivered:
+
+* Club hero
+* Shared branding
+* Public/private status
+* Club profile visibility
+* Owner-focused navigation
+
+In Progress:
+
+* Improved onboarding
+* Dashboard refinement
+* Club profile editing
+
+---
+
+### Club Identity
+
+Delivered:
+
+* Logo support
+* Cover image support
+* Club description
+* Club visibility
+
+In Progress:
+
+* Direct logo upload
+* Direct cover upload
+* Club profile enrichment
+
+---
+
+### Club Discovery
+
+Delivered:
+
+* Public club directory
+* Club search
+* Public club profiles
+* Membership awareness
+
+In Progress:
+
+* Private club experience
+* Join request UX
+* Discovery improvements
+
+---
+
+### Owner Onboarding
+
+Delivered:
+
+* Club creation flow
+* Owner dashboard entry point
+* Guided onboarding checklist
+
+Current checklist:
+
+1. Personalize public page
+2. Add first court
+3. Configure operating hours
+4. Invite first player
+5. Create first reservation
+
+Goal:
+
+Reach operational readiness without assistance.
+
+---
 
 # Validation Gate 1.0
 
-The system is now feature-complete enough to validate with real clubs.
+Status:
 
-The goal is no longer feature development.
-
-The goal is learning.
+🚧 Active
 
 ---
 
-## Validation Gate 1.0
+## Objective
 
-### Objective
+Validate that a real club can operate daily using PadelClub.
 
-Confirm that a real club can operate daily reservation workflows using PadelClub.
+The focus is no longer feature development.
 
----
-
-### Success Criteria
-
-All criteria should be met before significant new modules are built.
-
-#### Club Setup
-
-- [ ] Real club created
-- [ ] Courts configured
-- [ ] Players invited
-
-#### Reservations
-
-- [ ] Reservations created successfully
-- [ ] Reservations edited successfully
-- [ ] Reservations cancelled successfully
-- [ ] Operating hours respected
-- [ ] Calendar understood without training
-
-#### Adoption
-
-- [ ] Reduced WhatsApp coordination
-- [ ] Used for at least 7 consecutive days
-- [ ] Owner feedback collected
-- [ ] Admin feedback collected
-
-#### Satisfaction
-
-- [ ] No critical usability blockers
-- [ ] No major permission issues
-- [ ] No major workflow confusion
+The focus is learning.
 
 ---
 
-### Validation Findings Already Resolved
+## Success Criteria
 
-The following issues were discovered and fixed during Validation Gate:
+### Club Setup
 
-#### Routing
+* [ ] Real club created
+* [ ] Public profile completed
+* [ ] Courts configured
+* [ ] Operating hours configured
 
-- OWNER incorrect landing page
-- ADMIN placeholder landing page
-- PLAYER placeholder landing page
+### Players
 
-#### Permissions
+* [ ] Players invited
+* [ ] Players joined successfully
 
-- Staff appearing in player selector
+### Reservations
 
-#### Reservations
+* [ ] Reservation requests created
+* [ ] Requests approved successfully
+* [ ] Reservations managed without confusion
 
-- Reservations allowed in the past
-- Missing operating-hours awareness
-- Missing slot guidance
-- Excessive page navigation
+### Adoption
 
-#### UX
+* [ ] Reduced WhatsApp coordination
+* [ ] Daily usage
+* [ ] At least 30 days of real operation
 
-- Calendar now highlights today
-- Reservation create/edit moved to modal workflows
-- Smart slot picker added
+### Satisfaction
 
----
-
-### Currently Under Evaluation
-
-#### Player Experience
-
-Questions still being validated:
-
-- Should players see reservation details?
-- Should players see only availability?
-- Should players create requests instead of reservations?
-- What information is useful to players?
-
-#### Reservation Rules
-
-Questions still being validated:
-
-- Allowed reservation durations
-- Club-specific reservation policies
-- Future pricing rules
-
-#### Analytics
-
-Questions still being validated:
-
-- Which metrics owners actually use?
-- Which metrics drive decisions?
-- Which metrics are unnecessary?
+* [ ] No major usability blockers
+* [ ] No critical workflow confusion
+* [ ] Positive owner feedback
+* [ ] Positive admin feedback
 
 ---
 
-## Next Decision Point
+# Current Learning Questions
 
-After Validation Gate concludes:
+## Owner Experience
 
-Choose one of the following paths.
+Questions:
 
-### Option A — Player Reservation Requests
+* What information should appear on the dashboard?
+* Which metrics matter most?
+* Which onboarding steps create friction?
 
-Potential Sprint 4.
+---
+
+## Club Discovery
+
+Questions:
+
+* How do players discover clubs?
+* Should private clubs appear in search?
+* How should membership requests work?
+
+---
+
+## Reservations
+
+Questions:
+
+* Which duration combinations are most common?
+* Are approval workflows sufficient?
+* Which reservation restrictions are needed?
+
+---
+
+## Analytics
+
+Questions:
+
+* Which metrics owners actually use?
+* Which metrics drive decisions?
+* Which metrics create noise?
+
+---
+
+# Post-Validation Decision Point
+
+After Validation Gate concludes, choose the next major investment area.
+
+---
+
+## Option A — Owner Analytics
+
+Potential Phase 5
 
 Deliver:
 
-- Reservation requests
-- Approval workflow
-- Availability-first player experience
+* Occupancy trends
+* Court utilization
+* Reservation patterns
+* Activity insights
+* Operational KPIs
 
-This is currently the most likely next step.
+Priority:
+
+High
+
+Only if owners actively request analytics.
 
 ---
 
-### Option B — Club Analytics Expansion
+## Option B — Club Growth Tools
 
-Potential Sprint 4.
+Potential Phase 5
 
 Deliver:
 
-- Occupancy trends
-- Revenue tracking
-- Court utilization reports
-- Activity insights
+* Enhanced club profiles
+* Gallery support
+* Location support
+* Contact information
+* Public profile improvements
 
-Only if owners request it.
+Priority:
+
+High
+
+Supports club acquisition and visibility.
 
 ---
 
-### Option C — Tournaments
+## Option C — Rankings
 
-Potential Sprint 4.
+Potential Phase 6
 
 Deliver:
 
-- Tournament creation
-- Brackets
-- Match results
+* Ranking configuration
+* Ranking tables
+* Ranking visibility controls
+* Automated updates
 
-Only if validated clubs explicitly request tournaments.
+Priority:
+
+Medium
+
+Only after operations are validated.
 
 ---
 
-### Option D — Rankings
+## Option D — Tournaments
 
-Potential Sprint 4 or 5.
+Potential Phase 6
 
 Deliver:
 
-- Automatic rankings
-- Points system
-- Ranking tables
+* Tournament creation
+* Brackets
+* Match tracking
+* Results
 
-Only after tournament requirements are understood.
+Priority:
+
+Medium
+
+Only if real clubs request tournament support.
 
 ---
 
-## Deferred Modules
+# Deferred Modules
 
-These modules are intentionally deferred until after Validation Gate.
+These modules are intentionally deferred until adoption is validated.
 
-### Rankings
+---
+
+## Clinics
 
 Status:
 
-Deferred.
+Deferred
 
-Dependency:
+Reason:
 
-Tournament validation.
+Not required for MVP validation.
 
 ---
 
-### Tournaments
+## Payments
 
 Status:
 
-Deferred.
+Deferred
 
-Dependency:
+Reason:
 
-Reservation workflow adoption.
+Business model validation comes first.
 
 ---
 
-### Clinics
+## Mobile Applications
 
 Status:
 
-Deferred.
+Deferred
 
-Dependency:
+Reason:
 
-Owner demand.
+Web adoption must be validated first.
 
 ---
 
-### Payments
+## Community Features
 
 Status:
 
-Deferred.
+Deferred
 
-Dependency:
+Reason:
 
-Business model validation.
+Community is not the primary value proposition.
+
+Owners pay for operations, not community.
 
 ---
 
-### Mobile Applications
+## Open Matches
 
 Status:
 
-Deferred.
+Deferred
 
-Dependency:
+Reason:
 
-Web product validation.
+Requires reservation adoption first.
 
 ---
 
-### Community Features
+## Find Players
 
 Status:
 
-Deferred.
+Deferred
 
-Dependency:
+Reason:
 
-Proven club adoption.
-
----
-
-## Post-MVP Roadmap
-
-Potential future initiatives:
-
-- Open matches
-- Find players
-- Waitlists
-- Memberships
-- Push notifications
-- Mobile applications
-- Advanced analytics
-- Subdomain routing
-- Online payments
-
-None are part of the current MVP.
+Depends on community strategy decisions.
 
 ---
 
-## Definition of Done
-
-A feature is complete when:
-
-1. TypeScript compiles successfully.
-2. RLS policies exist and are tested.
-3. Mobile layout is validated.
-4. Desktop layout is validated.
-5. Loading states are implemented.
-6. Error states are implemented.
-7. No production console errors remain.
-8. Code review completed.
-9. Merged into main branch.
-
----
-
-## Current Product Priority Order
+# Product Priority Order
 
 When priorities conflict:
 
-1. Reservations
-2. Courts
-3. Players
-4. Club administration
-5. Operational analytics
-6. Rankings
-7. Tournaments
-8. Clinics
-9. Community features
+1. Owner onboarding
+2. Reservation workflows
+3. Courts
+4. Players
+5. Club identity
+6. Club discovery
+7. Analytics
+8. Rankings
+9. Tournaments
+10. Clinics
+11. Community features
 
-The owner experience and reservation workflow always take precedence.
+---
+
+# Definition of Success
+
+PadelClub reaches MVP validation when:
+
+A real club can:
+
+* Configure itself
+* Invite players
+* Manage reservations
+* Approve requests
+* Operate for 30 consecutive days
+
+without relying on:
+
+* WhatsApp coordination
+* Manual scheduling
+* External spreadsheets
+
+At that point the platform can confidently expand into rankings, tournaments, analytics, and additional club-management features.

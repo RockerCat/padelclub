@@ -20,6 +20,8 @@ The goal is NOT to build a social network.
 
 The goal is to replace fragmented workflows currently handled through WhatsApp, Excel and manual processes.
 
+Build the digital home of an amateur sports club.
+
 ## Product Strategy
 
 ### Primary Customer
@@ -320,3 +322,30 @@ The current objective is:
 - Validate real-world club usage.
 
 Before introducing major new modules, ensure the core reservation and club management experience is solid and operationally reliable.
+
+## Club Identity Principles
+
+A club is not only operational data.
+
+Each club should feel like a real place with its own identity.
+
+The Owner should immediately recognize:
+
+- Club branding
+- Club logo
+- Club cover image
+- Club visibility
+- Club public profile
+
+The dashboard should not feel like a generic administration panel.
+
+The dashboard should feel like the digital home of the club.
+
+Whenever possible:
+
+- Reuse club identity elements across public and private experiences.
+- Maintain visual consistency between the public club page and the owner dashboard.
+- Avoid forcing owners to navigate deep configuration screens for common branding tasks.
+- Prefer direct manipulation of visual assets (logo, cover image, branding) from the dashboard.
+
+Operational workflows remain important, but club identity should always be visible.
