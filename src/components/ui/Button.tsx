@@ -4,7 +4,7 @@ import { Spinner } from "./Spinner";
 
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "secondary" | "ghost" | "danger";
+  variant?: "primary" | "secondary" | "ghost" | "danger" | "success";
   size?: "sm" | "md" | "lg";
   loading?: boolean;
 }
@@ -41,6 +41,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             // danger
             "bg-red-500/15 border border-red-500/30 text-red-400 hover:bg-red-500/25":
               variant === "danger",
+            // success
+            "bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/25":
+              variant === "success",
           },
           {
             "h-8 px-3 text-sm": size === "sm",

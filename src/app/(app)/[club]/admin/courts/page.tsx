@@ -1,8 +1,8 @@
 import { notFound, redirect } from "next/navigation";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { Badge } from "@/components/ui";
-import { Plus, Home } from "lucide-react";
+import { CourtsGrid } from "./CourtsGrid";
+import { CreateCourtButton } from "./CreateCourtButton";
+import { Home } from "lucide-react";
 
 interface CourtsPageProps {
   params: Promise<{ club: string }>;
@@ -42,8 +42,7 @@ export default async function CourtsPage({ params }: CourtsPageProps) {
     .from("courts")
     .select("*")
     .eq("club_id", club.id)
-    .order("sort_order", { ascending: true })
-    .order("created_at", { ascending: true });
+    .order("name", { ascending: true });
 
   const courtList = courts ?? [];
 
@@ -57,13 +56,7 @@ export default async function CourtsPage({ params }: CourtsPageProps) {
             Gestiona las canchas del club.
           </p>
         </div>
-        <Link
-          href={`/${slug}/admin/courts/new`}
-          className="inline-flex items-center gap-2 h-10 px-4 text-sm font-medium rounded-xl bg-brand-primary text-brand-bg hover:brightness-110 active:brightness-95 transition-all duration-200 shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          Crear cancha
-        </Link>
+        <CreateCourtButton clubSlug={slug} clubId={club.id} />
       </div>
 
       {/* Empty state */}
@@ -78,73 +71,17 @@ export default async function CourtsPage({ params }: CourtsPageProps) {
           <p className="text-sm text-brand-muted max-w-sm mb-6">
             Agrega la primera cancha del club para empezar a gestionar reservaciones.
           </p>
-          <Link
-            href={`/${slug}/admin/courts/new`}
+          <CreateCourtButton
+            clubSlug={slug}
+            clubId={club.id}
             className="inline-flex items-center gap-2 h-10 px-4 text-sm font-medium rounded-xl bg-brand-primary text-brand-bg hover:brightness-110 active:brightness-95 transition-all duration-200"
-          >
-            <Plus className="w-4 h-4" />
-            Crear cancha
-          </Link>
+          />
         </div>
       )}
 
-      {/* Courts list */}
+      {/* Courts grid — expandable cards, edit inline without leaving the page */}
       {courtList.length > 0 && (
-        <div className="flex flex-col gap-3">
-          {courtList.map((court) => (
-            <Link
-              key={court.id}
-              href={`/${slug}/admin/courts/${court.id}`}
-              className="flex items-center gap-4 px-5 py-4 rounded-2xl bg-brand-surface border border-white/10 hover:border-brand-primary/25 hover:bg-brand-primary/5 transition-colors group"
-            >
-              {/* Icon */}
-              <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
-                <Home className="w-5 h-5 text-brand-muted group-hover:text-brand-primary transition-colors" />
-              </div>
-
-              {/* Info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-semibold text-white truncate">
-                    {court.name}
-                  </span>
-                  <Badge variant={court.is_active ? "success" : "default"} size="sm">
-                    {court.is_active ? "Activa" : "Inactiva"}
-                  </Badge>
-                </div>
-                {(court.surface || court.is_indoor !== null) && (
-                  <p className="text-xs text-brand-muted mt-0.5">
-                    {[
-                      court.surface,
-                      court.is_indoor === true
-                        ? "Interior"
-                        : court.is_indoor === false
-                        ? "Exterior"
-                        : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </p>
-                )}
-              </div>
-
-              {/* Chevron */}
-              <svg
-                className="w-4 h-4 text-brand-muted shrink-0"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M9 5l7 7-7 7"
-                />
-              </svg>
-            </Link>
-          ))}
-        </div>
+        <CourtsGrid courts={courtList} clubSlug={slug} clubId={club.id} />
       )}
     </div>
   );

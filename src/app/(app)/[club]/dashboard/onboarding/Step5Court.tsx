@@ -6,7 +6,8 @@ import Link from "next/link";
 import { Check } from "lucide-react";
 import { Input } from "@/components/ui";
 import { createCourt, type CourtFormState } from "@/app/(app)/[club]/admin/courts/actions";
-import { CourtIllustration, SURFACE_OPTIONS, getSurfaceLabel } from "@/components/courts/CourtIllustration";
+import { SURFACE_OPTIONS } from "@/components/courts/CourtIllustration";
+import { CourtPreviewCard } from "@/components/courts/CourtPreviewCard";
 
 interface Step5Props {
   clubId: string;
@@ -14,37 +15,6 @@ interface Step5Props {
   formId: string;
   alreadyHasCourt: boolean;
   onNext: () => void;
-}
-
-function CourtPreviewCard({ name, surface }: { name: string; surface: string }) {
-  const displayName = name.trim() || "Tu primera cancha";
-
-  return (
-    <div className="relative flex flex-col items-center gap-3 h-full min-h-[300px] rounded-2xl border border-white/10 bg-white/[0.03] px-6 py-6 text-center overflow-hidden">
-      <span
-        className="absolute top-4 right-4 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide"
-        style={{
-          backgroundColor: "color-mix(in srgb, var(--club-primary, #B7E000) 15%, transparent)",
-          color: "var(--club-primary, #B7E000)",
-        }}
-      >
-        Nueva cancha
-      </span>
-
-      <p className="text-[11px] text-brand-muted/45 uppercase tracking-wide mt-7 leading-relaxed">
-        Vista superior<br />de cancha de pádel
-      </p>
-
-      <CourtIllustration surface={surface} className="w-full max-w-[220px] drop-shadow-lg" />
-
-      <div className="mt-1">
-        <p className="text-base font-bold text-white uppercase tracking-wide leading-tight">
-          {displayName}
-        </p>
-        <p className="text-sm text-brand-muted/70 mt-0.5">{getSurfaceLabel(surface)}</p>
-      </div>
-    </div>
-  );
 }
 
 export function Step5Court({ clubId, clubSlug, formId, alreadyHasCourt, onNext }: Step5Props) {
@@ -143,7 +113,7 @@ export function Step5Court({ clubId, clubSlug, formId, alreadyHasCourt, onNext }
       </div>
 
       {/* Right column: live preview */}
-      <CourtPreviewCard name={name} surface={surface} />
+      <CourtPreviewCard name={name} surface={surface} placeholderName="Tu primera cancha" />
     </div>
   );
 }

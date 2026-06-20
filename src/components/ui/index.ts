@@ -14,3 +14,12 @@ export { Spinner } from "./Spinner";
 export type { SpinnerProps } from "./Spinner";
 
 export { LogoUpload } from "./LogoUpload";
+
+export { Switch } from "./Switch";
+export type { SwitchProps } from "./Switch";
+
+export { ConfirmDialog } from "./ConfirmDialog";
+export type { ConfirmDialogProps } from "./ConfirmDialog";
+
+export { Toast } from "./Toast";
+export type { ToastProps } from "./Toast";
