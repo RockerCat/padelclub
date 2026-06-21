@@ -29,6 +29,7 @@ interface NavItem {
   disabled?: boolean;
   soon?: boolean;
   color?: "primary" | "secondary";
+  badgeCount?: number;
 }
 
 interface AppNavProps {
@@ -41,9 +42,13 @@ interface AppNavProps {
   };
   role: "OWNER" | "ADMIN" | "PLAYER";
   membershipCount: number;
+  pendingJoinRequests?: number;
 }
 
-function getNavItems(slug: string, role: AppNavProps["role"]): NavItem[] {
+// pendingJoinRequests only ever has a meaningful value for OWNER/ADMIN (the
+// layout never queries it for PLAYER), so gating the badge by role here is
+// just a safety net — the real exclusion already happens in the layout.
+function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequests: number): NavItem[] {
   const base: NavItem[] = [];
 
   if (role === "OWNER") {
@@ -64,9 +69,10 @@ function getNavItems(slug: string, role: AppNavProps["role"]): NavItem[] {
         href: `/${slug}/admin/players`,
         icon: Users,
         color: "secondary" as const,
+        badgeCount: pendingJoinRequests,
       },
       {
-        label: "Administradores",
+        label: "Equipo",
         href: `/${slug}/admin/team`,
         icon: ShieldCheck,
       },
@@ -100,6 +106,7 @@ function getNavItems(slug: string, role: AppNavProps["role"]): NavItem[] {
         href: `/${slug}/admin/players`,
         icon: Users,
         color: "secondary" as const,
+        badgeCount: pendingJoinRequests,
       }
     );
   } else {
@@ -200,7 +207,12 @@ function NavContent({
                 }
               >
                 <Icon className="w-4 h-4 shrink-0" />
-                <span>{item.label}</span>
+                <span className="flex-1">{item.label}</span>
+                {!!item.badgeCount && (
+                  <span className="text-[10px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/25 rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shrink-0">
+                    {item.badgeCount}
+                  </span>
+                )}
               </Link>
             </li>
           );
@@ -251,7 +263,7 @@ function NavContent({
 
 // ─── AppNav main component ────────────────────────────────────────────────────
 
-export function AppNav({ club, role, membershipCount }: AppNavProps) {
+export function AppNav({ club, role, membershipCount, pendingJoinRequests = 0 }: AppNavProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -266,7 +278,7 @@ export function AppNav({ club, role, membershipCount }: AppNavProps) {
     setMobileOpen(false);
   }
 
-  const navItems = getNavItems(club.slug, role);
+  const navItems = getNavItems(club.slug, role, pendingJoinRequests);
 
   return (
     <>

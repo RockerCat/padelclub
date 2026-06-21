@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AppNav } from "@/components/layout/AppNav";
 import { ClubThemeProvider } from "@/components/layout/ClubThemeProvider";
 import { UpdateLastClub } from "@/components/layout/UpdateLastClub";
+import { getPendingJoinRequestsCount } from "@/lib/joinRequests";
 import type { ClubRole } from "@/types/database";
 
 interface ClubLayoutProps {
@@ -62,12 +63,17 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
 
   const role = membership.role as ClubRole;
 
-  // Count total active memberships to decide whether to show "Cambiar de club"
-  const { count } = await supabase
-    .from("club_members")
-    .select("id", { count: "exact", head: true })
-    .eq("profile_id", user.id)
-    .eq("is_active", true);
+  // Count total active memberships (for "Cambiar de club") and pending join
+  // requests (for the Jugadores nav badge, OWNER/ADMIN only) side by side —
+  // both are cheap head-count queries, no row data fetched.
+  const [{ count }, pendingJoinRequests] = await Promise.all([
+    supabase
+      .from("club_members")
+      .select("id", { count: "exact", head: true })
+      .eq("profile_id", user.id)
+      .eq("is_active", true),
+    role === "PLAYER" ? Promise.resolve(0) : getPendingJoinRequestsCount(supabase, club.id),
+  ]);
 
   const membershipCount = count ?? 1;
 
@@ -77,7 +83,12 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
       initialSecondary={club.secondary_color}
     >
       <UpdateLastClub clubId={club.id} />
-      <AppNav club={club} role={role} membershipCount={membershipCount} />
+      <AppNav
+        club={club}
+        role={role}
+        membershipCount={membershipCount}
+        pendingJoinRequests={pendingJoinRequests}
+      />
       <main className="flex-1 min-w-0">{children}</main>
     </ClubThemeProvider>
   );

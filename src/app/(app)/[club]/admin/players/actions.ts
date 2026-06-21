@@ -2,6 +2,8 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { insertSingleUseInvite } from "@/lib/invitations";
+import type { PlayerCategory } from "@/types/database";
 
 export type ActionState = { success?: boolean; error?: string; data?: unknown };
 
@@ -63,79 +65,117 @@ export async function toggleMemberActive(
   if (error) return { error: "Error al cambiar el estado del miembro." };
 
   revalidatePath(`/${clubSlug}/admin/players`);
-  revalidatePath(`/${clubSlug}/admin/players/${memberId}`);
   return { success: true };
 }
 
-// ─── changeMemberRole ─────────────────────────────────────────────────────────
+// ─── updateMemberCategory ─────────────────────────────────────────────────────
+// Category (skill level) is manually assigned by admins — no automatic
+// calculation yet. Any OWNER/ADMIN can set it (unlike role changes, which
+// are OWNER-only).
 
-export async function changeMemberRole(
+export async function updateMemberCategory(
   clubId: string,
   memberId: string,
-  newRole: "ADMIN" | "PLAYER",
+  category: PlayerCategory,
   clubSlug: string
 ): Promise<ActionState> {
-  const { supabase, user, role: callerRole, error: authError } = await requireAdminRole(clubId);
-  if (authError || !supabase || !user) return { error: authError! };
-
-  // Only OWNER can change roles
-  if (callerRole !== "OWNER") return { error: "Solo un Owner puede cambiar roles." };
-
-  const { data: target } = await supabase
-    .from("club_members")
-    .select("profile_id, role")
-    .eq("id", memberId)
-    .eq("club_id", clubId)
-    .single();
-
-  if (!target) return { error: "Miembro no encontrado." };
-  if (target.profile_id === user.id) return { error: "No puedes cambiar tu propio rol." };
-  if (target.role === "OWNER") return { error: "No se puede cambiar el rol de un Owner." };
+  const { supabase, error: authError } = await requireAdminRole(clubId);
+  if (authError || !supabase) return { error: authError! };
 
   const { error } = await supabase
     .from("club_members")
-    .update({ role: newRole })
+    .update({ category })
     .eq("id", memberId)
     .eq("club_id", clubId);
 
-  if (error) return { error: "Error al cambiar el rol." };
+  if (error) return { error: "Error al actualizar la categoría." };
 
   revalidatePath(`/${clubSlug}/admin/players`);
-  revalidatePath(`/${clubSlug}/admin/players/${memberId}`);
   return { success: true };
 }
 
 // ─── createInvitationLink ─────────────────────────────────────────────────────
+// Player invitations only (admin invitations are a separate flow — see
+// team/actions.ts's createAdminInvite). Single-use/non-expiring insert
+// shape is shared with that flow via insertSingleUseInvite — same model,
+// same rules, just a different role and a different permission guard.
 
 export async function createInvitationLink(
   clubId: string,
-  role: "PLAYER" | "ADMIN",
   clubSlug: string
 ): Promise<ActionState> {
-  const { supabase, user, role: callerRole, error: authError } = await requireAdminRole(clubId);
+  const { supabase, user, error: authError } = await requireAdminRole(clubId);
   if (authError || !supabase || !user) return { error: authError! };
 
-  // ADMIN can only create PLAYER links
-  if (callerRole === "ADMIN" && role !== "PLAYER") {
-    return { error: "Un Admin solo puede crear invitaciones para jugadores." };
-  }
-
-  const { data, error } = await supabase
-    .from("invitation_links")
-    .insert({
-      club_id: clubId,
-      role,
-      created_by: user.id,
-      // expires_at defaults to 7 days in DB
-      // max_uses: null = unlimited (share via WhatsApp group etc.)
-    })
-    .select("token")
-    .single();
+  const { data, error } = await insertSingleUseInvite(supabase, {
+    clubId,
+    role: "PLAYER",
+    createdBy: user.id,
+  });
 
   if (error || !data) return { error: "Error al crear la invitación." };
 
   revalidatePath(`/${clubSlug}/admin/players`);
   return { success: true, data: { token: data.token } };
+}
+
+// ─── approveJoinRequest ────────────────────────────────────────────────────────
+// club_members' own "club_members_insert" RLS policy already lets an
+// OWNER/ADMIN insert members for their own club, so approving a join request
+// is a plain insert + delete — no SECURITY DEFINER RPC needed.
+
+export async function approveJoinRequest(
+  clubId: string,
+  requestId: string,
+  clubSlug: string
+): Promise<ActionState> {
+  const { supabase, error: authError } = await requireAdminRole(clubId);
+  if (authError || !supabase) return { error: authError! };
+
+  const { data: request } = await supabase
+    .from("club_join_requests")
+    .select("profile_id")
+    .eq("id", requestId)
+    .eq("club_id", clubId)
+    .single();
+
+  if (!request) return { error: "Solicitud no encontrada." };
+
+  const { error: insertError } = await supabase
+    .from("club_members")
+    .insert({ club_id: clubId, profile_id: request.profile_id, role: "PLAYER", is_active: true });
+
+  // 23505 = unique violation — already a member; proceed to clear the request.
+  if (insertError && insertError.code !== "23505") {
+    return { error: "Error al aprobar la solicitud." };
+  }
+
+  await supabase.from("club_join_requests").delete().eq("id", requestId).eq("club_id", clubId);
+
+  revalidatePath(`/${clubSlug}/admin/players`);
+  return { success: true };
+}
+
+// ─── rejectJoinRequest ─────────────────────────────────────────────────────────
+
+export async function rejectJoinRequest(
+  clubId: string,
+  requestId: string,
+  clubSlug: string
+): Promise<ActionState> {
+  const { supabase, error: authError } = await requireAdminRole(clubId);
+  if (authError || !supabase) return { error: authError! };
+
+  const { error } = await supabase
+    .from("club_join_requests")
+    .delete()
+    .eq("id", requestId)
+    .eq("club_id", clubId);
+
+  if (error) return { error: "Error al rechazar la solicitud." };
+
+  revalidatePath(`/${clubSlug}/admin/players`);
+  return { success: true };
 }
 
 // ─── deactivateInvitationLink ─────────────────────────────────────────────────

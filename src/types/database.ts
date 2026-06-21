@@ -146,6 +146,7 @@ export interface Database {
           role: "OWNER" | "ADMIN" | "PLAYER";
           is_active: boolean;
           joined_at: string;
+          category: "Principiante" | "5ta" | "4ta" | "3ra" | "2da" | "1ra";
         };
         Insert: {
           id?: string;
@@ -154,10 +155,12 @@ export interface Database {
           role: "OWNER" | "ADMIN" | "PLAYER";
           is_active?: boolean;
           joined_at?: string;
+          category?: "Principiante" | "5ta" | "4ta" | "3ra" | "2da" | "1ra";
         };
         Update: {
           role?: "OWNER" | "ADMIN" | "PLAYER";
           is_active?: boolean;
+          category?: "Principiante" | "5ta" | "4ta" | "3ra" | "2da" | "1ra";
         };
         Relationships: [
           {
@@ -372,6 +375,37 @@ export interface Database {
           },
         ];
       };
+      club_join_requests: {
+        Row: {
+          id: string;
+          club_id: string;
+          profile_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          club_id: string;
+          profile_id: string;
+          created_at?: string;
+        };
+        Update: Record<string, never>;
+        Relationships: [
+          {
+            foreignKeyName: "club_join_requests_club_id_fkey";
+            columns: ["club_id"];
+            isOneToOne: false;
+            referencedRelation: "clubs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "club_join_requests_profile_id_fkey";
+            columns: ["profile_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -449,6 +483,18 @@ export type InvitationLink = Tables<"invitation_links">;
 
 export type ClubRole = ClubMember["role"];
 export type InvitationRole = InvitationLink["role"];
+export type PlayerCategory = ClubMember["category"];
+
+// MVP skill-level categories, weakest to strongest — manually assigned by
+// admins for now. Order matters for any future ranking/sort UI.
+export const PLAYER_CATEGORIES: PlayerCategory[] = [
+  "Principiante",
+  "5ta",
+  "4ta",
+  "3ra",
+  "2da",
+  "1ra",
+];
 
 // ClubMember with profile joined — used in players list and nav
 export type ClubMemberWithProfile = ClubMember & {

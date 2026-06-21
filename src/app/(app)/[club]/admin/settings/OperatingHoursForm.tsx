@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Card, CardHeader, CardContent, Button } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { saveOperatingHours } from "./actions";
 import {
   DAY_NAMES,
@@ -82,14 +82,11 @@ export function OperatingHoursForm({ clubId, initialHours }: OperatingHoursFormP
   }
 
   return (
-    <Card variant="default">
-      <CardHeader>
-        <h2 className="text-base font-semibold text-white">Horarios de operación</h2>
-        <p className="text-xs text-brand-muted mt-1">
-          Define cuándo está abierto el club. Se usa para calcular la ocupación de canchas.
-        </p>
-      </CardHeader>
-      <CardContent>
+    <div>
+      <p className="text-xs text-brand-muted mb-4">
+        Define cuándo está abierto el club. Se usa para calcular la ocupación de canchas.
+      </p>
+      <div>
         <div className="overflow-x-auto -mx-1 px-1">
           <div className="min-w-[340px]">
             {/* Header */}
@@ -181,7 +178,7 @@ export function OperatingHoursForm({ clubId, initialHours }: OperatingHoursFormP
             Guardar horarios
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

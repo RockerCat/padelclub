@@ -5,7 +5,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateAllowedDurations, type UpdateAllowedDurationsState } from "./actions";
 import { DURATION_CATALOG } from "@/lib/durations";
-import { Card, CardHeader, CardContent } from "@/components/ui";
 
 interface AllowedDurationsFormProps {
   clubId: string;
@@ -39,17 +38,11 @@ export function AllowedDurationsForm({ clubId, initialDurations }: AllowedDurati
   }
 
   return (
-    <Card variant="default">
-      <CardHeader>
-        <div>
-          <h2 className="text-base font-semibold text-white">Duraciones permitidas</h2>
-          <p className="text-sm text-brand-muted mt-0.5">
-            Duraciones que se mostrarán al crear o solicitar una reserva.
-          </p>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <form action={action} className="flex flex-col gap-4">
+    <div>
+      <p className="text-sm text-brand-muted mb-4">
+        Duraciones que se mostrarán al crear o solicitar una reserva.
+      </p>
+      <form action={action} className="flex flex-col gap-4">
           {DURATION_CATALOG.map(({ minutes, label }) => {
             const isChecked = selected.has(minutes);
             const isLast = selected.size === 1 && isChecked;
@@ -96,8 +89,7 @@ export function AllowedDurationsForm({ clubId, initialDurations }: AllowedDurati
               {pending ? "Guardando…" : "Guardar duraciones"}
             </button>
           </div>
-        </form>
-      </CardContent>
-    </Card>
+      </form>
+    </div>
   );
 }

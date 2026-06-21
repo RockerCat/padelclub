@@ -18,6 +18,38 @@ export const DEFAULT_OPERATING_HOURS: OperatingHour[] = [
   { day_of_week: 6, is_open: true,  opens_at: "08:00", closes_at: "18:00" }, // Sábado
 ];
 
+export type ScheduleGroup = { label: string; timeRange: string };
+
+const SCHEDULE_DAY_ORDER = [1, 2, 3, 4, 5, 6, 0]; // Mon → Sun display order
+
+// Groups consecutive days sharing the same opens_at/closes_at into a single
+// range, e.g. "Lunes – Viernes · 06:00 – 22:00" — used by the public club
+// profile and the Settings "Horarios" summary card, so both always agree.
+export function buildScheduleSummary(hours: OperatingHour[]): ScheduleGroup[] {
+  const open = hours
+    .filter((h) => h.is_open && h.opens_at && h.closes_at)
+    .sort((a, b) => SCHEDULE_DAY_ORDER.indexOf(a.day_of_week) - SCHEDULE_DAY_ORDER.indexOf(b.day_of_week));
+
+  type G = { startDay: number; endDay: number; opens: string; closes: string };
+  const groups: G[] = [];
+
+  for (const h of open) {
+    const last = groups[groups.length - 1];
+    const prevI = last != null ? SCHEDULE_DAY_ORDER.indexOf(last.endDay) : -2;
+    const currI = SCHEDULE_DAY_ORDER.indexOf(h.day_of_week);
+    if (last && currI === prevI + 1 && last.opens === h.opens_at && last.closes === h.closes_at) {
+      last.endDay = h.day_of_week;
+    } else {
+      groups.push({ startDay: h.day_of_week, endDay: h.day_of_week, opens: h.opens_at!, closes: h.closes_at! });
+    }
+  }
+
+  return groups.map(({ startDay, endDay, opens, closes }) => ({
+    label: startDay === endDay ? DAY_NAMES[startDay] : `${DAY_NAMES[startDay]} – ${DAY_NAMES[endDay]}`,
+    timeRange: `${opens.slice(0, 5)} – ${closes.slice(0, 5)}`,
+  }));
+}
+
 export function timeToMinutes(t: string): number {
   const [h, m] = t.slice(0, 5).split(":").map(Number);
   return h * 60 + m;

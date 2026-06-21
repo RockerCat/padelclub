@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "seed:reservations": "npx --yes tsx scripts/seed-reservations.ts"
+    "seed:reservations": "npx --yes tsx scripts/seed-reservations.ts",
+    "seed:future-demo": "npx --yes tsx scripts/seed-future-demo-reservations.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

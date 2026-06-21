@@ -2,18 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { Badge, Card, CardHeader, CardContent, Button } from "@/components/ui";
-import {
-  Link as LinkIcon,
-  Copy,
-  Check,
-  Plus,
-  X,
-  Trash2,
-  Shield,
-  ExternalLink,
-} from "lucide-react";
+import { Badge, Card, CardHeader, CardContent, ConfirmDialog, ContextMenu } from "@/components/ui";
+import { PlayerAvatar } from "@/components/players/PlayerAvatar";
+import { InviteLinkList, type InviteLinkRow } from "@/components/invites/InviteLinkList";
+import { Shield, UserMinus, UserPlus } from "lucide-react";
 import { removeAdmin, createAdminInvite, deactivateAdminInvite } from "./actions";
 
 type AdminMember = {
@@ -30,32 +22,13 @@ type AdminMember = {
   } | null;
 };
 
-type InviteLink = {
-  id: string;
-  token: string;
-  role: "PLAYER" | "ADMIN";
-  expires_at: string;
-  uses: number;
-  max_uses: number | null;
-};
-
 interface TeamClientProps {
   clubId: string;
   clubSlug: string;
   owner: AdminMember | null;
   admins: AdminMember[];
   currentUserId: string;
-  activeInvites: InviteLink[];
-}
-
-function getInitials(name: string | null) {
-  if (!name) return "?";
-  return name
-    .split(" ")
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase();
+  invites: InviteLinkRow[];
 }
 
 function formatDate(iso: string) {
@@ -66,249 +39,161 @@ function formatDate(iso: string) {
   });
 }
 
-function CopyButton({ token }: { token: string }) {
-  const [copied, setCopied] = useState(false);
-
-  function handleCopy() {
-    const url = `${window.location.origin}/invite/${token}`;
-    navigator.clipboard.writeText(url).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }
-
-  return (
-    <button
-      onClick={handleCopy}
-      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-white/5 border border-white/10 text-brand-muted hover:text-white hover:border-white/20 transition-colors"
-    >
-      {copied ? (
-        <>
-          <Check className="w-3.5 h-3.5 text-emerald-400" />
-          <span className="text-emerald-400">Copiado</span>
-        </>
-      ) : (
-        <>
-          <Copy className="w-3.5 h-3.5" />
-          Copiar link
-        </>
-      )}
-    </button>
-  );
-}
-
 export function TeamClient({
   clubId,
   clubSlug,
   owner,
   admins,
   currentUserId,
-  activeInvites,
+  invites,
 }: TeamClientProps) {
   const router = useRouter();
   const [removing, startRemove] = useTransition();
-  const [creating, startCreate] = useTransition();
-  const [revoking, startRevoke] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [confirmTarget, setConfirmTarget] = useState<AdminMember | null>(null);
 
-  function handleRemove(memberId: string) {
+  function handleConfirmRemove() {
+    if (!confirmTarget) return;
     setError(null);
     startRemove(async () => {
-      const result = await removeAdmin(clubId, memberId, clubSlug);
+      const result = await removeAdmin(clubId, confirmTarget.id, clubSlug);
+      setConfirmTarget(null);
       if (result.error) setError(result.error);
       else router.refresh();
-    });
-  }
-
-  function handleCreateInvite() {
-    setError(null);
-    startCreate(async () => {
-      const result = await createAdminInvite(clubId, clubSlug);
-      if (result.error) setError(result.error);
-      else router.refresh();
-    });
-  }
-
-  function handleRevokeInvite(linkId: string) {
-    startRevoke(async () => {
-      await deactivateAdminInvite(clubId, linkId, clubSlug);
-      router.refresh();
     });
   }
 
   return (
-    <div className="flex flex-col gap-6 max-w-2xl">
-      {/* Propietario */}
-      {owner && (
-        <Card variant="default">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Shield className="w-4 h-4" style={{ color: "var(--club-primary)" }} />
-              <h2 className="text-sm font-semibold text-white">Propietario</h2>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-3">
-              <div
-                className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold shrink-0"
-                style={{
-                  backgroundColor: "color-mix(in srgb, var(--club-primary) 15%, transparent)",
-                  color: "var(--club-primary)",
-                }}
-              >
-                {getInitials(owner.profiles?.full_name ?? null)}
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-white">
-                  {owner.profiles?.full_name ?? "Sin nombre"}
-                </p>
-                <p className="text-xs text-brand-muted">
-                  Propietario · Desde {formatDate(owner.joined_at)}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+    <div className="max-w-5xl">
+      {/* Personas (propietario + administradores) a la izquierda, con mayor
+          protagonismo visual; invitaciones — herramienta secundaria — a la
+          derecha en su propia columna, donde pueden crecer sin empujar el
+          contenido principal hacia abajo. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        <div className="flex flex-col gap-6">
+          {/* Propietario */}
+          {owner && (
+            <Card variant="default">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Shield className="w-4 h-4" style={{ color: "var(--club-primary)" }} />
+                  <h2 className="text-sm font-semibold text-white">Propietario</h2>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-3">
+                  <PlayerAvatar player={{ id: owner.profile_id, ...owner.profiles }} size="md" />
+                  <div>
+                    <p className="text-sm font-semibold text-white">
+                      {owner.profiles?.full_name ?? "Sin nombre"}
+                    </p>
+                    <p className="text-xs text-brand-muted">
+                      Propietario · Desde {formatDate(owner.joined_at)}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-      {/* Administradores */}
-      <Card variant="default">
-        <CardHeader>
-          <div className="flex items-start justify-between gap-4">
-            <div>
+          {/* Administradores */}
+          <Card variant="default">
+            <CardHeader>
               <h2 className="text-sm font-semibold text-white">Administradores</h2>
               <p className="text-xs text-brand-muted mt-0.5">
                 {admins.length === 0
                   ? "Sin administradores aún."
                   : `${admins.length} administrador${admins.length === 1 ? "" : "es"}`}
               </p>
-            </div>
-            <Button
-              size="sm"
-              variant="secondary"
-              loading={creating}
-              onClick={handleCreateInvite}
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Invitar administrador
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {error && <p className="text-xs text-red-400 mb-3">{error}</p>}
+            </CardHeader>
+            <CardContent>
+              {error && <p className="text-xs text-red-400 mb-3">{error}</p>}
 
-          {admins.length === 0 && activeInvites.length === 0 ? (
-            <div className="py-8 text-center">
-              <p className="text-sm text-brand-muted">
-                Invita a alguien para que te ayude a operar el club.
-              </p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {admins.map((admin) => {
-                const name = admin.profiles?.full_name ?? "Sin nombre";
-                const initials = getInitials(admin.profiles?.full_name ?? null);
-                const isSelf = admin.profile_id === currentUserId;
-
-                return (
-                  <div
-                    key={admin.id}
-                    className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/5 border border-white/10"
-                  >
-                    {/* Avatar */}
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-brand-secondary/15 border border-brand-secondary/20">
-                      <span className="text-xs font-bold text-brand-secondary">
-                        {initials}
-                      </span>
-                    </div>
-
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-white truncate">{name}</p>
-                      <p className="text-xs text-brand-muted">
-                        Admin · Desde {formatDate(admin.joined_at)}
-                        {!admin.is_active && (
-                          <Badge variant="default" size="sm" className="ml-1.5">
-                            Inactivo
-                          </Badge>
-                        )}
-                      </p>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-1 shrink-0">
-                      <Link
-                        href={`/${clubSlug}/admin/players/${admin.id}`}
-                        className="p-1.5 rounded-lg text-brand-muted/50 hover:text-white hover:bg-white/5 transition-colors"
-                        title="Ver perfil"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </Link>
-                      {!isSelf && (
-                        <button
-                          onClick={() => handleRemove(admin.id)}
-                          disabled={removing}
-                          className="p-1.5 rounded-lg text-brand-muted/50 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
-                          title="Eliminar administrador"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Active admin invites */}
-          {activeInvites.length > 0 && (
-            <div className="mt-4 flex flex-col gap-2">
-              <p className="text-xs font-medium text-brand-muted uppercase tracking-wider">
-                Invitaciones activas
-              </p>
-              {activeInvites.map((link) => (
-                <div
-                  key={link.id}
-                  className="rounded-xl bg-white/5 border border-white/10 overflow-hidden"
-                >
-                  <div className="flex items-center gap-3 px-3 py-2.5">
-                    <LinkIcon className="w-3.5 h-3.5 text-brand-muted shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <span className="text-xs text-brand-muted">
-                        Admin · Expira {formatDate(link.expires_at)}
-                        {link.uses > 0 && ` · ${link.uses} usos`}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <CopyButton token={link.token} />
-                      {process.env.NODE_ENV === "development" && (
-                        <Link
-                          href={`/invite/${link.token}`}
-                          target="_blank"
-                          className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20 transition-colors"
-                          title="Dev: abrir invitación directamente"
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                          Dev
-                        </Link>
-                      )}
-                      <button
-                        onClick={() => handleRevokeInvite(link.id)}
-                        disabled={revoking}
-                        className="p-1.5 rounded-lg text-brand-muted/50 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                        title="Revocar invitación"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
+              {admins.length === 0 ? (
+                <div className="py-8 text-center">
+                  <p className="text-sm text-brand-muted">
+                    Invita a alguien para que te ayude a operar el club.
+                  </p>
                 </div>
-              ))}
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {admins.map((admin) => {
+                    const name = admin.profiles?.full_name ?? "Sin nombre";
+                    const isSelf = admin.profile_id === currentUserId;
+
+                    return (
+                      <div
+                        key={admin.id}
+                        className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/5 border border-white/10"
+                      >
+                        <PlayerAvatar player={{ id: admin.profile_id, ...admin.profiles }} size="md" />
+
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-white truncate">{name}</p>
+                          <p className="text-xs text-brand-muted">
+                            Admin · Desde {formatDate(admin.joined_at)}
+                            {!admin.is_active && (
+                              <Badge variant="default" size="sm" className="ml-1.5">
+                                Inactivo
+                              </Badge>
+                            )}
+                          </p>
+                        </div>
+
+                        {!isSelf && (
+                          <ContextMenu
+                            actions={[
+                              {
+                                label: "Remover del equipo",
+                                icon: UserMinus,
+                                variant: "danger" as const,
+                                onClick: () => setConfirmTarget(admin),
+                              },
+                            ]}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Invitar administrador — mismo modelo de invitaciones que Jugadores */}
+        <Card variant="default">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <UserPlus className="w-4 h-4 text-brand-muted" />
+              <h2 className="text-base font-semibold text-white">Invitar administrador</h2>
             </div>
-          )}
-        </CardContent>
-      </Card>
+            <p className="text-xs text-brand-muted mt-1">
+              Genera un link de un solo uso para que un nuevo administrador se una al equipo.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <InviteLinkList
+              links={invites}
+              createLabel="Invitar administrador"
+              onCreate={() => createAdminInvite(clubId, clubSlug)}
+              onRevoke={(linkId) => deactivateAdminInvite(clubId, linkId, clubSlug)}
+              onChanged={() => router.refresh()}
+            />
+          </CardContent>
+        </Card>
+      </div>
+
+      <ConfirmDialog
+        open={confirmTarget != null}
+        title="Remover del equipo"
+        message={`${confirmTarget?.profiles?.full_name ?? "Este administrador"} dejará de formar parte del equipo administrativo del club.\n\nPodrá seguir utilizando su cuenta personal en PadelClub, pero perderá acceso administrativo a este club.`}
+        confirmLabel="Remover"
+        confirmVariant="danger"
+        loading={removing}
+        onConfirm={handleConfirmRemove}
+        onCancel={() => setConfirmTarget(null)}
+      />
     </div>
   );
 }

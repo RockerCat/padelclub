@@ -6,15 +6,10 @@ import { DURATION_CATALOG } from "@/lib/durations";
 
 export type UpdateAllowedDurationsState = { success?: boolean; error?: string };
 
-export type UpdateClubState = {
-  success?: boolean;
-  error?: string;
-};
-
 /**
- * Called immediately after a logo is uploaded to Storage.
- * Persists the public URL to clubs.logo_url so the sidebar reflects the
- * new logo on the next router.refresh() without waiting for the main form save.
+ * Called immediately after a cover image is uploaded to Storage (see
+ * CoverUploadField) — persists the public URL to clubs.cover_image_url
+ * right away, since the Branding modal has no separate "save" step for it.
  */
 export async function updateClubCover(
   clubId: string,
@@ -121,23 +116,18 @@ export async function updateClubName(
   return {};
 }
 
-export async function updateClub(
+const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
+
+export async function updateClubColors(
   clubId: string,
-  _prevState: UpdateClubState,
-  formData: FormData
-): Promise<UpdateClubState> {
+  primaryColor: string,
+  secondaryColor: string
+): Promise<{ error?: string }> {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) return { error: "No autenticado." };
 
-  if (userError || !user) {
-    return { error: "No autenticado. Por favor, inicia sesión de nuevo." };
-  }
-
-  // Verify the user is OWNER of this club
   const { data: membership } = await supabase
     .from("club_members")
     .select("role")
@@ -146,57 +136,19 @@ export async function updateClub(
     .eq("is_active", true)
     .single();
 
-  if (!membership || membership.role !== "OWNER") {
+  if (!membership || membership.role !== "OWNER")
     return { error: "No tienes permiso para editar este club." };
-  }
 
-  const name = (formData.get("name") as string | null)?.trim() ?? "";
-  const description = (formData.get("description") as string | null)?.trim() || null;
-  const cover_image_url = (formData.get("cover_image_url") as string | null)?.trim() || null;
-  const rawVisibility = formData.get("visibility") as string | null;
-  const visibility = rawVisibility === "private" ? "private" : "public";
-  const city = (formData.get("city") as string | null)?.trim() || null;
-  const state = (formData.get("state") as string | null)?.trim() || null;
-  const country = (formData.get("country") as string | null)?.trim() || null;
-  const address = (formData.get("address") as string | null)?.trim() || null;
-  const whatsapp = (formData.get("whatsapp") as string | null)?.trim() || null;
-  const facebook = (formData.get("facebook") as string | null)?.trim() || null;
-  const instagram = (formData.get("instagram") as string | null)?.trim() || null;
-  const youtube = (formData.get("youtube") as string | null)?.trim() || null;
-  const primary_color = (formData.get("primary_color") as string | null)?.trim() || "#B7E000";
-  const secondary_color = (formData.get("secondary_color") as string | null)?.trim() || "#1698BE";
-  const logo_url = (formData.get("logo_url") as string | null)?.trim() || null;
-
-  if (!name || name.length < 2) {
-    return { error: "El nombre del club debe tener al menos 2 caracteres." };
-  }
+  if (!HEX_COLOR_RE.test(primaryColor) || !HEX_COLOR_RE.test(secondaryColor))
+    return { error: "Los colores deben ser un valor hexadecimal válido." };
 
   const { error: updateError } = await supabase
     .from("clubs")
-    .update({
-      name,
-      description,
-      cover_image_url,
-      visibility,
-      city,
-      state,
-      country,
-      address,
-      whatsapp,
-      facebook,
-      instagram,
-      youtube,
-      primary_color,
-      secondary_color,
-      logo_url,
-    })
+    .update({ primary_color: primaryColor, secondary_color: secondaryColor })
     .eq("id", clubId);
 
-  if (updateError) {
-    return { error: "Error al guardar los cambios. Por favor, intenta de nuevo." };
-  }
-
-  return { success: true };
+  if (updateError) return { error: "Error al guardar. Intenta de nuevo." };
+  return {};
 }
 
 const VALID_DURATION_MINUTES = DURATION_CATALOG.map((d) => d.minutes) as number[];

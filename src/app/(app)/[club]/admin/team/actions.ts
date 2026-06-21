@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { insertSingleUseInvite } from "@/lib/invitations";
 
 type ActionResult = { error?: string };
 
@@ -47,7 +48,7 @@ export async function removeAdmin(
     .single();
 
   if (!target) return { error: "Administrador no encontrado." };
-  if (target.profile_id === user.id) return { error: "No puedes eliminarte a ti mismo." };
+  if (target.profile_id === user.id) return { error: "No puedes removerte a ti mismo del equipo." };
   if (target.role !== "ADMIN") return { error: "Este miembro no es administrador." };
 
   const { error } = await supabase
@@ -56,12 +57,16 @@ export async function removeAdmin(
     .eq("id", memberId)
     .eq("club_id", clubId);
 
-  if (error) return { error: "Error al eliminar el administrador." };
+  if (error) return { error: "Error al remover al administrador del equipo." };
 
   revalidatePath(`/${clubSlug}/admin/team`);
   return {};
 }
 
+// Same single-use/non-expiring model as player invitations (see
+// players/actions.ts's createInvitationLink) via the shared
+// insertSingleUseInvite — only the role and the OWNER-only permission guard
+// differ.
 export async function createAdminInvite(
   clubId: string,
   clubSlug: string
@@ -69,10 +74,10 @@ export async function createAdminInvite(
   const { supabase, user, error: authError } = await requireOwnerRole(clubId);
   if (authError || !supabase || !user) return { error: authError! };
 
-  const { error } = await supabase.from("invitation_links").insert({
-    club_id: clubId,
+  const { error } = await insertSingleUseInvite(supabase, {
+    clubId,
     role: "ADMIN",
-    created_by: user.id,
+    createdBy: user.id,
   });
 
   if (error) return { error: "Error al crear la invitación." };

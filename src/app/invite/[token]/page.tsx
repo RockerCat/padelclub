@@ -304,14 +304,20 @@ export default async function InvitePage({ params, searchParams }: InvitePagePro
               </Button>
             </Link>
           </div>
-          <p className="text-xs text-brand-muted text-center mt-5">
-            Invitación válida hasta{" "}
-            {new Date(info.expires_at!).toLocaleDateString("es-MX", {
-              day: "2-digit",
-              month: "short",
-              year: "numeric",
-            })}
-          </p>
+          {/* Player invitations are single-use and non-expiring (a far-future
+              sentinel expires_at is used to satisfy the NOT NULL column) —
+              showing that date would be meaningless, so only admin invites
+              (which still carry a real 7-day expiry) display this line. */}
+          {info.role === "ADMIN" && (
+            <p className="text-xs text-brand-muted text-center mt-5">
+              Invitación válida hasta{" "}
+              {new Date(info.expires_at!).toLocaleDateString("es-MX", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+              })}
+            </p>
+          )}
         </CardContent>
       </Card>
     </Layout>

@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { TeamClient } from "./TeamClient";
+import type { InviteLinkRow } from "@/components/invites/InviteLinkList";
 
 interface TeamPageProps {
   params: Promise<{ club: string }>;
@@ -18,15 +19,6 @@ type TeamMemberRow = {
     avatar_url: string | null;
     phone: string | null;
   } | null;
-};
-
-type InviteLinkRow = {
-  id: string;
-  token: string;
-  role: "PLAYER" | "ADMIN";
-  expires_at: string;
-  uses: number;
-  max_uses: number | null;
 };
 
 export default async function TeamPage({ params }: TeamPageProps) {
@@ -68,19 +60,20 @@ export default async function TeamPage({ params }: TeamPageProps) {
       .eq("club_id", club.id)
       .in("role", ["OWNER", "ADMIN"])
       .order("joined_at", { ascending: true }),
+    // Every ADMIN link, not just active ones — Disponible/Utilizada/Revocada
+    // are all shown explicitly (same as Jugadores), not just the available set.
     supabase
       .from("invitation_links")
-      .select("id, token, role, expires_at, uses, max_uses")
+      .select("id, token, uses, max_uses, is_active, created_at")
       .eq("club_id", club.id)
       .eq("role", "ADMIN")
-      .eq("is_active", true)
       .order("created_at", { ascending: false }),
   ]);
 
   const teamMembers = (teamResult.data ?? []) as TeamMemberRow[];
   const owner = teamMembers.find((m) => m.role === "OWNER") ?? null;
   const admins = teamMembers.filter((m) => m.role === "ADMIN");
-  const activeInvites = (inviteResult.data ?? []) as InviteLinkRow[];
+  const invites = (inviteResult.data ?? []) as InviteLinkRow[];
 
   return (
     <div className="p-6 md:p-10">
@@ -97,7 +90,7 @@ export default async function TeamPage({ params }: TeamPageProps) {
         owner={owner}
         admins={admins}
         currentUserId={user.id}
-        activeInvites={activeInvites}
+        invites={invites}
       />
     </div>
   );

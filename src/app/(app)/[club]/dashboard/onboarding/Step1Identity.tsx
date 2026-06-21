@@ -19,9 +19,11 @@ interface Step1Props {
   club: Step1Club;
   onNext: () => void;
   formId: string;
+  /** Hides the "Necesaria para completar este paso" hint — irrelevant outside the onboarding wizard (e.g. Settings). */
+  hideStepHint?: boolean;
 }
 
-export function Step1Identity({ club, onNext, formId }: Step1Props) {
+export function Step1Identity({ club, onNext, formId, hideStepHint = false }: Step1Props) {
   const router = useRouter();
   const onNextRef = useRef(onNext);
   onNextRef.current = onNext;
@@ -58,9 +60,11 @@ export function Step1Identity({ club, onNext, formId }: Step1Props) {
               rows={3}
               className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-brand-muted/60 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20 resize-none"
             />
-            <p className="text-xs text-brand-muted/60">
-              Necesaria para completar este paso.
-            </p>
+            {!hideStepHint && (
+              <p className="text-xs text-brand-muted/60">
+                Necesaria para completar este paso.
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col gap-2">

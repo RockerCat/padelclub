@@ -10,45 +10,13 @@ import {
 } from "lucide-react";
 import { RequestAccessButton } from "./RequestAccessButton";
 import { ClubHero } from "@/components/clubs/ClubHero";
+import { buildScheduleSummary, type OperatingHour as Hour } from "@/lib/operatingHours";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Props { params: Promise<{ slug: string }> }
 
 type Court = { id: string; name: string; is_indoor: boolean | null; surface: string | null };
-type Hour  = { day_of_week: number; is_open: boolean; opens_at: string | null; closes_at: string | null };
-
-// ─── Schedule ─────────────────────────────────────────────────────────────────
-
-const DAY_NAMES = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
-const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
-
-type ScheduleGroup = { label: string; timeRange: string };
-
-function buildSchedule(hours: Hour[]): ScheduleGroup[] {
-  const open = hours
-    .filter((h) => h.is_open && h.opens_at && h.closes_at)
-    .sort((a, b) => DAY_ORDER.indexOf(a.day_of_week) - DAY_ORDER.indexOf(b.day_of_week));
-
-  type G = { startDay: number; endDay: number; opens: string; closes: string };
-  const groups: G[] = [];
-
-  for (const h of open) {
-    const last  = groups[groups.length - 1];
-    const prevI = last != null ? DAY_ORDER.indexOf(last.endDay) : -2;
-    const currI = DAY_ORDER.indexOf(h.day_of_week);
-    if (last && currI === prevI + 1 && last.opens === h.opens_at && last.closes === h.closes_at) {
-      last.endDay = h.day_of_week;
-    } else {
-      groups.push({ startDay: h.day_of_week, endDay: h.day_of_week, opens: h.opens_at!, closes: h.closes_at! });
-    }
-  }
-
-  return groups.map(({ startDay, endDay, opens, closes }) => ({
-    label: startDay === endDay ? DAY_NAMES[startDay] : `${DAY_NAMES[startDay]} – ${DAY_NAMES[endDay]}`,
-    timeRange: `${opens.slice(0, 5)} – ${closes.slice(0, 5)}`,
-  }));
-}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -122,18 +90,22 @@ export default async function PublicClubPage({ params }: Props) {
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   const club = clubData!;
 
-  const [membershipResult, courtsResult, hoursResult] = await Promise.all([
+  const [membershipResult, courtsResult, hoursResult, joinRequestResult] = await Promise.all([
     user
       ? supabase.from("club_members").select("role").eq("club_id", club.id).eq("profile_id", user.id).eq("is_active", true).single()
       : Promise.resolve({ data: null }),
     supabase.from("courts").select("id, name, is_indoor, surface").eq("club_id", club.id).eq("is_active", true).order("sort_order"),
     supabase.from("club_operating_hours").select("day_of_week, is_open, opens_at, closes_at").eq("club_id", club.id).order("day_of_week"),
+    user
+      ? supabase.from("club_join_requests").select("id").eq("club_id", club.id).eq("profile_id", user.id).maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
 
-  const membership   = membershipResult.data as { role: string } | null;
-  const courts       = (courtsResult.data  ?? []) as Court[];
-  const rawHours     = (hoursResult.data   ?? []) as Hour[];
-  const schedule     = buildSchedule(rawHours);
+  const membership       = membershipResult.data as { role: string } | null;
+  const courts           = (courtsResult.data ?? []) as Court[];
+  const rawHours         = (hoursResult.data  ?? []) as Hour[];
+  const schedule         = buildScheduleSummary(rawHours);
+  const alreadyRequested = joinRequestResult.data != null;
 
   const p            = club.primary_color;
   const isPublic     = club.visibility === "public";
@@ -173,7 +145,16 @@ export default async function PublicClubPage({ params }: Props) {
         </div>
       );
     }
-    return <RequestAccessButton whatsapp={club.whatsapp} isPublic={isPublic} className={compact ? "!px-4 !py-2.5" : "w-full sm:w-auto"} />;
+    return (
+      <RequestAccessButton
+        clubId={club.id}
+        clubSlug={club.slug}
+        whatsapp={club.whatsapp}
+        isPublic={isPublic}
+        alreadyRequested={alreadyRequested}
+        className={compact ? "!px-4 !py-2.5" : "w-full sm:w-auto"}
+      />
+    );
   }
 
   return (
