@@ -1,6 +1,8 @@
 interface TrendPoint {
   label: string;
   value: number;
+  /** Stable identifier (e.g. bucket start date) — falls back to index if omitted. */
+  id?: string;
 }
 
 interface TrendChartProps {
@@ -48,7 +50,7 @@ export function TrendChart({ points }: TrendChartProps) {
 
       {coords.map((c, i) => (
         <span
-          key={`dot-${i}`}
+          key={`dot-${c.id ?? i}`}
           className="absolute -translate-x-1/2 -translate-y-1/2 w-[7px] h-[7px] rounded-full"
           style={{
             left: `${(c.x / WIDTH) * 100}%`,
@@ -60,7 +62,7 @@ export function TrendChart({ points }: TrendChartProps) {
 
       {coords.map((c, i) => (
         <span
-          key={`value-${i}`}
+          key={`value-${c.id ?? i}`}
           className="absolute -translate-x-1/2 text-[10px] leading-none text-[#94A3B8] whitespace-nowrap"
           style={{ left: `${(c.x / WIDTH) * 100}%`, top: `${c.y - 16}px` }}
         >
@@ -69,7 +71,7 @@ export function TrendChart({ points }: TrendChartProps) {
       ))}
       {coords.map((c, i) => (
         <span
-          key={`label-${i}`}
+          key={`label-${c.id ?? i}`}
           className="absolute -translate-x-1/2 text-[10px] leading-none text-[#64748B] whitespace-nowrap"
           style={{ left: `${(c.x / WIDTH) * 100}%`, top: `${HEIGHT - PAD_BOTTOM + 4}px` }}
         >
