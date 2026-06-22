@@ -19,7 +19,8 @@ function makeIcon() {
 interface Props {
   lat: number;
   lng: number;
-  onCoordinatesChange: (lat: number, lng: number) => void;
+  /** Omit for a read-only map — no draggable marker, no click-to-place. */
+  onCoordinatesChange?: (lat: number, lng: number) => void;
 }
 
 export function LocationMap({ lat, lng, onCoordinatesChange }: Props) {
@@ -28,6 +29,7 @@ export function LocationMap({ lat, lng, onCoordinatesChange }: Props) {
   const markerRef = useRef<L.Marker | null>(null);
   const onChangeRef = useRef(onCoordinatesChange);
   onChangeRef.current = onCoordinatesChange;
+  const readOnly = !onCoordinatesChange;
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const placeMarker = useCallback((latLng: L.LatLng) => {
@@ -35,14 +37,16 @@ export function LocationMap({ lat, lng, onCoordinatesChange }: Props) {
     if (markerRef.current) {
       markerRef.current.setLatLng(latLng);
     } else {
-      const m = L.marker(latLng, { icon: makeIcon(), draggable: true }).addTo(mapRef.current);
-      m.on("dragend", () => {
-        const pos = m.getLatLng();
-        onChangeRef.current(pos.lat, pos.lng);
-      });
+      const m = L.marker(latLng, { icon: makeIcon(), draggable: !readOnly }).addTo(mapRef.current);
+      if (!readOnly) {
+        m.on("dragend", () => {
+          const pos = m.getLatLng();
+          onChangeRef.current?.(pos.lat, pos.lng);
+        });
+      }
       markerRef.current = m;
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [readOnly]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -62,10 +66,12 @@ export function LocationMap({ lat, lng, onCoordinatesChange }: Props) {
     mapRef.current = map;
     placeMarker(L.latLng(lat, lng));
 
-    map.on("click", (e: L.LeafletMouseEvent) => {
-      placeMarker(e.latlng);
-      onChangeRef.current(e.latlng.lat, e.latlng.lng);
-    });
+    if (!readOnly) {
+      map.on("click", (e: L.LeafletMouseEvent) => {
+        placeMarker(e.latlng);
+        onChangeRef.current?.(e.latlng.lat, e.latlng.lng);
+      });
+    }
 
     return () => {
       map.remove();

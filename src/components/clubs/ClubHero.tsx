@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { MapPin, Lock } from "lucide-react";
+import { MapPin, Lock, MessageCircle, ExternalLink } from "lucide-react";
 import { CoverUploadButton, LogoUploadButton } from "./ClubHeroUploadButtons";
 import { ClubNameEditor } from "./ClubNameEditor";
 
@@ -16,6 +16,10 @@ export type ClubHeroClub = {
   city: string | null;
   state: string | null;
   visibility: string;
+  whatsapp?: string | null;
+  instagram?: string | null;
+  facebook?: string | null;
+  youtube?: string | null;
 };
 
 interface ClubHeroProps {
@@ -29,6 +33,13 @@ interface ClubHeroProps {
   variant?: "page" | "card";
   /** Show inline upload buttons for cover and logo. Only pass true for OWNER context. */
   editable?: boolean;
+  /**
+   * Show the WhatsApp/Instagram/Facebook/YouTube pills below the description.
+   * Explicit, independent of `editable` — set by viewer-facing contexts (the
+   * real public page and the admin "Vista previa"), never by admin editing
+   * screens (Dashboard onboarding, Página Pública's modo Editar).
+   */
+  showSocial?: boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -42,11 +53,61 @@ function getInitials(name: string) {
     .toUpperCase();
 }
 
+const PILL_CLASS =
+  "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-black/40 text-white/90 border border-white/10 backdrop-blur-sm hover:bg-black/60 transition-colors";
+
+// Only the networks with a configured value render — no placeholders.
+// Same href logic as the public page's "Contacto" card, just surfaced
+// earlier (right under the description) for quicker access.
+function SocialPills({ club }: { club: Pick<ClubHeroClub, "whatsapp" | "instagram" | "facebook" | "youtube"> }) {
+  if (!club.whatsapp && !club.instagram && !club.facebook && !club.youtube) return null;
+
+  return (
+    <div className="flex flex-wrap gap-2 mt-3">
+      {club.whatsapp && (
+        <a
+          href={`https://wa.me/${club.whatsapp.replace(/[^\d+]/g, "")}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={PILL_CLASS}
+        >
+          <MessageCircle className="w-3.5 h-3.5" />
+          WhatsApp
+        </a>
+      )}
+      {club.instagram && (
+        <a
+          href={club.instagram.startsWith("http") ? club.instagram : `https://instagram.com/${club.instagram.replace(/^@/, "")}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={PILL_CLASS}
+        >
+          <ExternalLink className="w-3.5 h-3.5" />
+          Instagram
+        </a>
+      )}
+      {club.facebook && (
+        <a href={club.facebook} target="_blank" rel="noopener noreferrer" className={PILL_CLASS}>
+          <ExternalLink className="w-3.5 h-3.5" />
+          Facebook
+        </a>
+      )}
+      {club.youtube && (
+        <a href={club.youtube} target="_blank" rel="noopener noreferrer" className={PILL_CLASS}>
+          <ExternalLink className="w-3.5 h-3.5" />
+          YouTube
+        </a>
+      )}
+    </div>
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function ClubHero({ club, actions, variant = "page", editable = false }: ClubHeroProps) {
+export function ClubHero({ club, actions, variant = "page", editable = false, showSocial = false }: ClubHeroProps) {
   const p       = club.primary_color;
   const loc     = [club.city, club.state].filter(Boolean).join(", ");
+  const hasSocial = showSocial && !!(club.whatsapp || club.instagram || club.facebook || club.youtube);
   const isPrivate = club.visibility === "private";
 
   const DEFAULT_COVER = "/img/portada-default.png";
@@ -144,6 +205,11 @@ export function ClubHero({ club, actions, variant = "page", editable = false }: 
                     {club.description}
                   </p>
                 )}
+                {hasSocial && (
+                  <div className="hidden lg:block">
+                    <SocialPills club={club} />
+                  </div>
+                )}
               </div>
 
               {actions && (
@@ -160,6 +226,11 @@ export function ClubHero({ club, actions, variant = "page", editable = false }: 
           <p className="lg:hidden text-sm text-white/65 leading-relaxed -mt-2 mb-6">
             {club.description}
           </p>
+        )}
+        {hasSocial && (
+          <div className="lg:hidden mb-6">
+            <SocialPills club={club} />
+          </div>
         )}
       </div>
     </>

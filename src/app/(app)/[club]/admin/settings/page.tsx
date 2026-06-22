@@ -64,7 +64,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-white">Configuración del club</h1>
         <p className="text-brand-muted mt-1 text-sm">
-          Gestiona la información, apariencia y operación de tu club.
+          Gestiona la ubicación y operación de tu club.
         </p>
       </div>
 

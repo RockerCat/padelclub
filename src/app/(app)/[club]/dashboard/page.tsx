@@ -8,7 +8,6 @@ import {
   ArrowRight,
   Home,
   Settings,
-  ExternalLink,
   AlertTriangle,
   Shield,
   Share2,
@@ -761,30 +760,12 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
   return (
     <div className="p-6 md:p-10">
 
-      {/* ─── Club Hero ────────────────────────────────────────────────────── */}
-      <ClubHero
-        club={club}
-        variant="card"
-        editable={membership.role === "OWNER"}
-        actions={
-          <div className="flex flex-col gap-2">
-            <Link
-              href={`/clubs/${slug}`}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border border-white/10 text-brand-muted hover:text-white hover:border-white/25 transition-colors"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              Ver página pública
-            </Link>
-            <Link
-              href={`/${slug}/admin/settings`}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border border-white/10 text-brand-muted hover:text-white hover:border-white/25 transition-colors"
-            >
-              <Settings className="w-3.5 h-3.5" />
-              Editar perfil
-            </Link>
-          </div>
-        }
-      />
+      {/* ─── Club Hero — only as visual guidance while onboarding is incomplete.
+          Once configured, branding/public profile live exclusively in
+          Página Pública and the Dashboard starts directly with the tabs. ── */}
+      {pendingSetupItems.length > 0 && (
+        <ClubHero club={club} variant="card" editable={membership.role === "OWNER"} />
+      )}
 
       {/* ─── Onboarding wizard ─────────────────────────────────────────── */}
       {membership.role === "OWNER" && (

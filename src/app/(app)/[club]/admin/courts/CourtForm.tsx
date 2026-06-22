@@ -123,6 +123,14 @@ export function CourtForm({
         min={0}
         hint="Las canchas se muestran de menor a mayor orden."
       />
+      <Input
+        name="streaming_url"
+        label="Link de streaming"
+        type="url"
+        defaultValue={court?.streaming_url ?? ""}
+        placeholder="https://..."
+        hint="Enlace a la transmisión en vivo de esta cancha."
+      />
     </div>
   );
 

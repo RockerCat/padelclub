@@ -2,24 +2,22 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Input, LogoUpload } from "@/components/ui";
-import { SettingsModuleModal } from "./SettingsModuleModal";
-import { CoverUploadField } from "@/app/(app)/[club]/dashboard/onboarding/CoverUploadField";
+import { Button } from "@/components/ui";
+import { SettingsModuleModal } from "../settings/SettingsModuleModal";
 import { useClubTheme } from "@/components/layout/ClubThemeProvider";
-import { updateClubName, updateClubColors } from "./actions";
+import { updateClubColors } from "../settings/actions";
 import type { Club } from "@/types/database";
 
-interface ClubInfoModalProps {
+interface BrandingModalProps {
   club: Club;
   onClose: () => void;
 }
 
-// LogoUpload / CoverUploadField self-save on file select — name and colors
-// share the module's single "Guardar cambios" step.
-export function ClubInfoModal({ club, onClose }: ClubInfoModalProps) {
+// Logo y portada se administran exclusivamente desde el Hero (Página
+// Pública) — este modal se enfoca solo en los colores de marca.
+export function BrandingModal({ club, onClose }: BrandingModalProps) {
   const router = useRouter();
   const { setColors } = useClubTheme();
-  const [name, setName] = useState(club.name);
   const [primaryColor, setPrimaryColor] = useState(club.primary_color);
   const [secondaryColor, setSecondaryColor] = useState(club.secondary_color);
   const [error, setError] = useState<string | null>(null);
@@ -38,14 +36,10 @@ export function ClubInfoModal({ club, onClose }: ClubInfoModalProps) {
   async function handleSave() {
     setPending(true);
     setError(null);
-    const [nameResult, colorsResult] = await Promise.all([
-      updateClubName(club.id, name),
-      updateClubColors(club.id, primaryColor, secondaryColor),
-    ]);
+    const colorsResult = await updateClubColors(club.id, primaryColor, secondaryColor);
     setPending(false);
-    const firstError = nameResult.error ?? colorsResult.error;
-    if (firstError) {
-      setError(firstError);
+    if (colorsResult.error) {
+      setError(colorsResult.error);
       return;
     }
     router.refresh();
@@ -54,7 +48,7 @@ export function ClubInfoModal({ club, onClose }: ClubInfoModalProps) {
 
   return (
     <SettingsModuleModal
-      title="Información del club"
+      title="Branding"
       onClose={onClose}
       footer={
         <>
@@ -68,27 +62,6 @@ export function ClubInfoModal({ club, onClose }: ClubInfoModalProps) {
       }
     >
       <div className="flex flex-col gap-5">
-        <div className="flex flex-col sm:flex-row gap-5">
-          <LogoUpload
-            clubId={club.id}
-            clubName={club.name}
-            currentLogoUrl={club.logo_url}
-            primaryColor={primaryColor}
-          />
-          <div className="flex-1">
-            <CoverUploadField clubId={club.id} currentCoverUrl={club.cover_image_url} />
-          </div>
-        </div>
-
-        <Input
-          name="name"
-          label="Nombre"
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Nombre del club"
-        />
-
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-white/80">Color principal</label>

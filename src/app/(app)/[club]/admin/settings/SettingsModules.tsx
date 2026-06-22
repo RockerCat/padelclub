@@ -1,17 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Badge } from "@/components/ui";
-import { Info, Globe, MapPin, Clock, ChevronRight } from "lucide-react";
+import { MapPin, Clock, ChevronRight } from "lucide-react";
 import { durationLabel, getClubDurations } from "@/lib/durations";
 import { buildScheduleSummary, type OperatingHour } from "@/lib/operatingHours";
 import type { Club } from "@/types/database";
-import { ClubInfoModal } from "./ClubInfoModal";
-import { PublicProfileModal } from "./PublicProfileModal";
 import { LocationModal } from "./LocationModal";
 import { OperationModal } from "./OperationModal";
 
-type ModuleKey = "info" | "profile" | "location" | "operation";
+type ModuleKey = "location" | "operation";
 
 interface SettingsModulesProps {
   club: Club;
@@ -56,7 +53,6 @@ function ModuleCard({
 export function SettingsModules({ club, initialHours }: SettingsModulesProps) {
   const [openModal, setOpenModal] = useState<ModuleKey | null>(null);
 
-  const isPublic = club.visibility !== "private";
   const locationLine = [club.city, club.state, club.country].filter(Boolean).join(", ");
   const schedule = buildScheduleSummary(initialHours);
   const allowedDurations = getClubDurations(club.allowed_reservation_durations);
@@ -64,20 +60,6 @@ export function SettingsModules({ club, initialHours }: SettingsModulesProps) {
   return (
     <>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ModuleCard icon={Info} title="Información del club" onClick={() => setOpenModal("info")}>
-          <p className="text-sm text-white/80 truncate">{club.name}</p>
-          <p className="text-xs text-brand-muted">Logo, portada y nombre</p>
-        </ModuleCard>
-
-        <ModuleCard icon={Globe} title="Perfil público" onClick={() => setOpenModal("profile")}>
-          <Badge variant={isPublic ? "success" : "outline"} size="sm" className="self-start mb-1">
-            {isPublic ? "Club público" : "Club privado"}
-          </Badge>
-          <p className="text-xs text-brand-muted truncate">
-            {club.description || "Sin descripción"}
-          </p>
-        </ModuleCard>
-
         <ModuleCard icon={MapPin} title="Ubicación" onClick={() => setOpenModal("location")}>
           <p className="text-sm text-white/80 truncate">{locationLine || "Sin ubicación configurada"}</p>
         </ModuleCard>
@@ -96,8 +78,6 @@ export function SettingsModules({ club, initialHours }: SettingsModulesProps) {
         </ModuleCard>
       </div>
 
-      {openModal === "info" && <ClubInfoModal club={club} onClose={() => setOpenModal(null)} />}
-      {openModal === "profile" && <PublicProfileModal club={club} onClose={() => setOpenModal(null)} />}
       {openModal === "location" && <LocationModal club={club} onClose={() => setOpenModal(null)} />}
       {openModal === "operation" && (
         <OperationModal

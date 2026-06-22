@@ -46,6 +46,7 @@ export interface Database {
           longitude: number | null;
           is_active: boolean;
           allowed_reservation_durations: number[];
+          gallery_image_urls: string[];
           created_at: string;
           updated_at: string;
         };
@@ -72,6 +73,7 @@ export interface Database {
           longitude?: number | null;
           is_active?: boolean;
           allowed_reservation_durations?: number[];
+          gallery_image_urls?: string[];
           created_at?: string;
           updated_at?: string;
         };
@@ -98,6 +100,7 @@ export interface Database {
           longitude?: number | null;
           is_active?: boolean;
           allowed_reservation_durations?: number[];
+          gallery_image_urls?: string[];
           updated_at?: string;
         };
         Relationships: [];
@@ -189,6 +192,7 @@ export interface Database {
           is_indoor: boolean | null;
           is_active: boolean;
           sort_order: number;
+          streaming_url: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -201,6 +205,7 @@ export interface Database {
           is_indoor?: boolean | null;
           is_active?: boolean;
           sort_order?: number;
+          streaming_url?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -211,6 +216,7 @@ export interface Database {
           is_indoor?: boolean | null;
           is_active?: boolean;
           sort_order?: number;
+          streaming_url?: string | null;
           updated_at?: string;
         };
         Relationships: [
@@ -453,6 +459,11 @@ export interface Database {
       claim_invitation: {
         Args: { p_token: string };
         Returns: Json;
+      };
+      // public.count_active_players — anon-accessible aggregate player count
+      count_active_players: {
+        Args: { p_club_id: string };
+        Returns: number;
       };
     };
     Enums: Record<string, never>;

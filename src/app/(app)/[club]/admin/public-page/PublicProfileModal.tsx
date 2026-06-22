@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui";
-import { SettingsModuleModal } from "./SettingsModuleModal";
+import { SettingsModuleModal } from "../settings/SettingsModuleModal";
 import { Step1Identity, type Step1Club } from "@/app/(app)/[club]/dashboard/onboarding/Step1Identity";
 
 const FORM_ID = "settings-public-profile-form";

@@ -251,3 +251,81 @@ export async function saveOperatingHours(
 
   return { success: true };
 }
+
+const MAX_GALLERY_IMAGES = 10;
+
+export async function addGalleryImage(
+  clubId: string,
+  url: string
+): Promise<{ error?: string }> {
+  const supabase = await createClient();
+
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) return { error: "No autenticado." };
+
+  const { data: membership } = await supabase
+    .from("club_members")
+    .select("role")
+    .eq("club_id", clubId)
+    .eq("profile_id", user.id)
+    .eq("is_active", true)
+    .single();
+
+  if (!membership || membership.role !== "OWNER")
+    return { error: "No tienes permiso para editar este club." };
+
+  const { data: club } = await supabase
+    .from("clubs")
+    .select("gallery_image_urls")
+    .eq("id", clubId)
+    .single();
+
+  const current = club?.gallery_image_urls ?? [];
+  if (current.length >= MAX_GALLERY_IMAGES)
+    return { error: `Máximo ${MAX_GALLERY_IMAGES} fotos en la galería.` };
+
+  const { error: updateError } = await supabase
+    .from("clubs")
+    .update({ gallery_image_urls: [...current, url] })
+    .eq("id", clubId);
+
+  if (updateError) return { error: "Error al guardar. Intenta de nuevo." };
+  return {};
+}
+
+export async function removeGalleryImage(
+  clubId: string,
+  url: string
+): Promise<{ error?: string }> {
+  const supabase = await createClient();
+
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) return { error: "No autenticado." };
+
+  const { data: membership } = await supabase
+    .from("club_members")
+    .select("role")
+    .eq("club_id", clubId)
+    .eq("profile_id", user.id)
+    .eq("is_active", true)
+    .single();
+
+  if (!membership || membership.role !== "OWNER")
+    return { error: "No tienes permiso para editar este club." };
+
+  const { data: club } = await supabase
+    .from("clubs")
+    .select("gallery_image_urls")
+    .eq("id", clubId)
+    .single();
+
+  const current = club?.gallery_image_urls ?? [];
+
+  const { error: updateError } = await supabase
+    .from("clubs")
+    .update({ gallery_image_urls: current.filter((u) => u !== url) })
+    .eq("id", clubId);
+
+  if (updateError) return { error: "Error al guardar. Intenta de nuevo." };
+  return {};
+}

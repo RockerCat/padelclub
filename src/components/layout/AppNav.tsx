@@ -17,6 +17,7 @@ import {
   ArrowLeftRight,
   PlusCircle,
   ShieldCheck,
+  Globe,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils/cn";
@@ -81,6 +82,11 @@ function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequest
         href: `/${slug}/admin/reservations`,
         icon: CalendarDays,
         color: "secondary" as const,
+      },
+      {
+        label: "Página Pública",
+        href: `/${slug}/admin/public-page`,
+        icon: Globe,
       },
       {
         label: "Configuración",

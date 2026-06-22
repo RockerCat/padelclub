@@ -35,6 +35,24 @@ async function requireAdminRole(clubId: string) {
   return { supabase, user, error: null };
 }
 
+// ─── Shared field parsing ────────────────────────────────────────────────────
+
+function parseStreamingUrl(formData: FormData): { value: string | null; error?: string } {
+  const raw = (formData.get("streaming_url") as string | null)?.trim() || "";
+  if (!raw) return { value: null };
+
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return { value: null, error: "El link de streaming debe ser una URL http(s) válida." };
+    }
+  } catch {
+    return { value: null, error: "El link de streaming debe ser una URL válida." };
+  }
+
+  return { value: raw };
+}
+
 // ─── createCourt ─────────────────────────────────────────────────────────────
 
 export async function createCourt(
@@ -56,6 +74,9 @@ export async function createCourt(
     return { error: "El nombre debe tener al menos 2 caracteres." };
   }
 
+  const streaming = parseStreamingUrl(formData);
+  if (streaming.error) return { error: streaming.error };
+
   const { error } = await supabase.from("courts").insert({
     club_id: clubId,
     name,
@@ -63,6 +84,7 @@ export async function createCourt(
     surface,
     is_indoor,
     sort_order,
+    streaming_url: streaming.value,
   });
 
   if (error) {
@@ -94,9 +116,12 @@ export async function updateCourt(
     return { error: "El nombre debe tener al menos 2 caracteres." };
   }
 
+  const streaming = parseStreamingUrl(formData);
+  if (streaming.error) return { error: streaming.error };
+
   const { error } = await supabase
     .from("courts")
-    .update({ name, description, surface, is_indoor, sort_order })
+    .update({ name, description, surface, is_indoor, sort_order, streaming_url: streaming.value })
     .eq("id", courtId)
     .eq("club_id", clubId);
 
