@@ -48,7 +48,7 @@ export default async function PublicClubPage({ params }: Props) {
   ]);
 
   const membership       = membershipResult.data as { role: string } | null;
-  const { courts, schedule, playerCount } = publicData;
+  const { courts, schedule, playerCount, news } = publicData;
   const alreadyRequested = joinRequestResult.data != null;
 
   const viewerContext: ViewerContext = membership
@@ -79,6 +79,7 @@ export default async function PublicClubPage({ params }: Props) {
       courts={courts}
       schedule={schedule}
       playerCount={playerCount}
+      news={news}
       viewerContext={viewerContext}
       topBar={topBar}
     />

@@ -18,6 +18,7 @@ import {
   PlusCircle,
   ShieldCheck,
   Globe,
+  Megaphone,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils/cn";
@@ -84,6 +85,11 @@ function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequest
         color: "secondary" as const,
       },
       {
+        label: "Noticias",
+        href: `/${slug}/admin/news`,
+        icon: Megaphone,
+      },
+      {
         label: "Página Pública",
         href: `/${slug}/admin/public-page`,
         icon: Globe,
@@ -113,6 +119,11 @@ function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequest
         icon: Users,
         color: "secondary" as const,
         badgeCount: pendingJoinRequests,
+      },
+      {
+        label: "Noticias",
+        href: `/${slug}/admin/news`,
+        icon: Megaphone,
       }
     );
   } else {

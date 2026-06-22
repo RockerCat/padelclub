@@ -412,6 +412,53 @@ export interface Database {
           },
         ];
       };
+      club_news: {
+        Row: {
+          id: string;
+          club_id: string;
+          title: string;
+          content: string;
+          image_url: string;
+          created_by: string;
+          published_at: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          club_id: string;
+          title: string;
+          content: string;
+          image_url: string;
+          created_by: string;
+          published_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          title?: string;
+          content?: string;
+          image_url?: string;
+          published_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "club_news_club_id_fkey";
+            columns: ["club_id"];
+            isOneToOne: false;
+            referencedRelation: "clubs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "club_news_created_by_fkey";
+            columns: ["created_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -525,3 +572,10 @@ export type ReservationType = Reservation["type"];
 export type ReservationStatus = Reservation["status"];
 
 export type ClubOperatingHour = Tables<"club_operating_hours">;
+
+export type ClubNews = Tables<"club_news">;
+
+// ClubNews with the author's profile joined — used in the admin Noticias list
+export type ClubNewsWithAuthor = ClubNews & {
+  created_by_profile: Pick<Profile, "full_name"> | null;
+};

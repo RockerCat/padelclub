@@ -41,7 +41,7 @@ export default async function PublicPagePage({ params }: PublicPagePageProps) {
   if (!membership) redirect("/unauthorized");
   if (membership.role !== "OWNER") redirect(`/${slug}`);
 
-  const { courts, schedule, playerCount } = await getClubPublicPageData(supabase, club.id);
+  const { courts, schedule, playerCount, news } = await getClubPublicPageData(supabase, club.id);
 
   return (
     <PublicPageSections
@@ -49,6 +49,7 @@ export default async function PublicPagePage({ params }: PublicPagePageProps) {
       courts={courts}
       schedule={schedule}
       playerCount={playerCount}
+      news={news}
       currentUserRole={membership.role}
     />
   );

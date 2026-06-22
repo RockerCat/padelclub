@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { ClubHero, type ClubHeroClub } from "./ClubHero";
 import { GalleryLightbox } from "./GalleryLightbox";
+import { PublicNewsCard } from "./PublicNewsCard";
 import { RequestAccessButton } from "@/app/clubs/[slug]/RequestAccessButton";
 import { getClubEntryPath } from "@/lib/utils/navigation";
 import type { ScheduleGroup } from "@/lib/operatingHours";
@@ -47,6 +48,14 @@ export type Court = {
   streaming_url: string | null;
 };
 
+export type ClubNewsCard = {
+  id: string;
+  title: string;
+  content: string;
+  image_url: string;
+  published_at: string;
+};
+
 export type ViewerContext =
   | { kind: "visitor" }
   | { kind: "pendingRequest"; alreadyRequested: boolean }
@@ -64,6 +73,7 @@ interface ClubPublicViewProps {
   courts: Court[];
   schedule: ScheduleGroup[];
   playerCount: number;
+  news: ClubNewsCard[];
   viewerContext: ViewerContext;
   /** Chrome rendered above the Hero — real page's top bar, or the admin preview banner. */
   topBar?: ReactNode;
@@ -112,7 +122,7 @@ function InfoRow({ Icon, label, value, badge, badgeAmber = false }: {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function ClubPublicView({ club, courts, schedule, playerCount, viewerContext, topBar }: ClubPublicViewProps) {
+export function ClubPublicView({ club, courts, schedule, playerCount, news, viewerContext, topBar }: ClubPublicViewProps) {
   const p            = club.primary_color;
   const isPublic     = club.visibility === "public";
   const locFull      = [club.city, club.state, club.country].filter(Boolean).join(", ");
@@ -305,6 +315,26 @@ export function ClubPublicView({ club, courts, schedule, playerCount, viewerCont
                         </a>
                       </div>
                     </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Noticias recientes */}
+            {news.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-2.5">
+                  <h2 className="text-base font-semibold text-white">📰 Noticias recientes</h2>
+                  <Link
+                    href={`/clubs/${club.slug}/news`}
+                    className="text-xs font-medium text-brand-muted hover:text-white transition-colors shrink-0"
+                  >
+                    Ver todas las noticias
+                  </Link>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {news.map((item) => (
+                    <PublicNewsCard key={item.id} clubSlug={club.slug} news={item} />
                   ))}
                 </div>
               </div>

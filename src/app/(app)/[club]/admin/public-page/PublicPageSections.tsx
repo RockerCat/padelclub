@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui";
 import { Palette, Globe, MapPin, Images, ChevronRight, Pencil, Eye } from "lucide-react";
 import { ClubHero } from "@/components/clubs/ClubHero";
-import { ClubPublicView, type Court } from "@/components/clubs/ClubPublicView";
+import { ClubPublicView, type Court, type ClubNewsCard } from "@/components/clubs/ClubPublicView";
 import type { ScheduleGroup } from "@/lib/operatingHours";
 import type { Club } from "@/types/database";
 import { BrandingModal } from "./BrandingModal";
@@ -21,6 +21,7 @@ interface PublicPageSectionsProps {
   courts: Court[];
   schedule: ScheduleGroup[];
   playerCount: number;
+  news: ClubNewsCard[];
   /** Current viewer's membership role in this same club — drives the disabled CTA in Vista previa. */
   currentUserRole: string;
 }
@@ -60,7 +61,7 @@ function ModuleCard({
   );
 }
 
-export function PublicPageSections({ club, courts, schedule, playerCount, currentUserRole }: PublicPageSectionsProps) {
+export function PublicPageSections({ club, courts, schedule, playerCount, news, currentUserRole }: PublicPageSectionsProps) {
   const [mode, setMode] = useState<Mode>("edit");
   const [openModal, setOpenModal] = useState<ModuleKey | null>(null);
 
@@ -78,6 +79,7 @@ export function PublicPageSections({ club, courts, schedule, playerCount, curren
         courts={courts}
         schedule={schedule}
         playerCount={playerCount}
+        news={news}
         viewerContext={{ kind: "previewMember", role: currentUserRole }}
         topBar={
           <div className="flex items-center justify-between gap-3 rounded-2xl border border-amber-400/20 bg-amber-400/5 px-5 py-3 mb-6 mx-5 mt-5 max-w-5xl lg:mx-auto">
