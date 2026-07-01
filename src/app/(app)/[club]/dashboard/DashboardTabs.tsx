@@ -32,9 +32,9 @@ export function DashboardTabs({ active, proxima, historico, actividad }: Dashboa
     <div>
       <div
         role="tablist"
-        className="inline-flex items-center gap-1 p-1 rounded-2xl bg-brand-surface border border-white/10 mb-6"
+        className="grid grid-cols-3 gap-1 p-1 rounded-2xl bg-brand-surface border border-white/10 mb-4 sm:mb-6 sm:inline-flex sm:w-auto"
       >
-        {DASHBOARD_TABS.map(({ key, label, Icon }) => {
+        {DASHBOARD_TABS.map(({ key, label, mobileLabel, Icon }) => {
           const isActive = active === key;
           return (
             <button
@@ -43,7 +43,7 @@ export function DashboardTabs({ active, proxima, historico, actividad }: Dashboa
               role="tab"
               aria-selected={isActive}
               onClick={() => selectTab(key)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm transition-colors whitespace-nowrap ${
+              className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 px-1.5 py-2 sm:px-4 rounded-xl text-[11px] sm:text-sm transition-colors ${
                 isActive ? "font-semibold" : "text-brand-muted hover:text-white"
               }`}
               style={
@@ -53,7 +53,8 @@ export function DashboardTabs({ active, proxima, historico, actividad }: Dashboa
               }
             >
               <Icon className="w-4 h-4 shrink-0" />
-              {label}
+              <span className="leading-none sm:hidden">{mobileLabel}</span>
+              <span className="hidden sm:inline whitespace-nowrap">{label}</span>
             </button>
           );
         })}

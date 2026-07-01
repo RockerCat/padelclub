@@ -13,7 +13,6 @@ import {
   Share2,
   CalendarClock,
   CalendarRange,
-  Gauge,
   Flame,
   TrendingDown,
   type LucideIcon,
@@ -870,64 +869,41 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
         <DashboardTabs
           active={activeTab}
           proxima={
-          <div className="mb-8">
+          <div className="mb-6 sm:mb-8">
             <h2 className="sr-only">Operación próxima</h2>
 
-            {/* Fila 1 — Hoy + Próximos 7 días */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-              <div className="bg-brand-surface border border-white/10 rounded-2xl p-5">
-                <div className="flex items-center gap-2 mb-4">
-                  <CalendarClock className="w-4 h-4" style={{ color: "var(--club-primary)" }} />
-                  <p className="text-sm font-semibold text-white">Hoy</p>
-                </div>
-                <div className="grid grid-cols-3 gap-3 mb-4">
-                  <MiniStat value={String(todayRows.length)} label="reservas" />
-                  <MiniStat value={formatHours(todayReservedMin)} label="h reservadas" />
-                  <MiniStat value={formatHours(todayFreeMin)} label="h disponibles" />
-                </div>
-                <div className="pt-3 border-t border-white/[0.06]">
-                  <p className="text-[11px] text-brand-muted mb-1">Próxima reserva:</p>
-                  {nextUpcoming ? (
-                    <p className="text-sm font-semibold text-white">
-                      {nextUpcoming.start_time.slice(0, 5)} - {nextUpcomingCourtName}
-                    </p>
-                  ) : (
-                    <p className="text-sm text-brand-muted/70">Sin reservas programadas</p>
-                  )}
-                </div>
+            {/* Hoy — snapshot compacto */}
+            <div className="bg-brand-surface border border-white/10 rounded-2xl p-4 sm:p-5 mb-3 sm:mb-4">
+              <div className="flex items-center gap-2 mb-3">
+                <CalendarClock className="w-4 h-4" style={{ color: "var(--club-primary)" }} />
+                <p className="text-sm font-semibold text-white">Hoy</p>
               </div>
-
-              <div className="bg-brand-surface border border-white/10 rounded-2xl p-5">
-                <div className="flex items-center gap-2 mb-4">
-                  <CalendarRange className="w-4 h-4" style={{ color: "var(--club-secondary)" }} />
-                  <p className="text-sm font-semibold text-white">Próximos 7 días</p>
-                </div>
-                <div className="grid grid-cols-3 gap-3 mb-4">
-                  <MiniStat value={String(futureWeekRows.length)} label="reservas" />
-                  <MiniStat value={formatHours(next7ReservedMin)} label="h reservadas" />
-                  <MiniStat value={formatHours(next7FreeMin)} label="h disponibles" />
-                </div>
-                <div className="pt-3 border-t border-white/[0.06]">
-                  <p className="text-[11px] text-brand-muted mb-1">Ocupación proyectada:</p>
-                  <span className="text-2xl font-bold tabular-nums" style={{ color: next7OccupancyColor }}>
-                    {next7OccupancyPct}%
-                  </span>
-                </div>
+              <div className="grid grid-cols-3 gap-3 mb-3">
+                <MiniStat value={String(todayRows.length)} label="reservas" />
+                <MiniStat value={formatHours(todayReservedMin)} label="h reservadas" />
+                <MiniStat value={formatHours(todayFreeMin)} label="h libres" />
+              </div>
+              <div className="pt-2.5 border-t border-white/[0.06] flex items-center justify-between gap-3">
+                <p className="text-[11px] text-brand-muted shrink-0">Próxima reserva</p>
+                {nextUpcoming ? (
+                  <p className="text-sm font-semibold text-white truncate">
+                    {nextUpcoming.start_time.slice(0, 5)} · {nextUpcomingCourtName}
+                  </p>
+                ) : (
+                  <p className="text-sm text-brand-muted/70">Sin reservas</p>
+                )}
               </div>
             </div>
 
-            {/* Fila 2 — Capacidad semanal (métrica más importante, ancho completo) */}
-            <div className="bg-brand-surface border border-white/10 rounded-2xl p-5 mb-4">
-              <div className="flex items-center gap-2 mb-1">
-                <Gauge className="w-4 h-4" style={{ color: "var(--club-primary)" }} />
-                <p className="text-sm font-semibold text-white">Capacidad semanal</p>
+            {/* Próximos 7 días — reservas + capacidad + ocupación, en una sola tarjeta */}
+            <div className="bg-brand-surface border border-white/10 rounded-2xl p-4 sm:p-5 mb-3 sm:mb-4">
+              <div className="flex items-center gap-2 mb-3">
+                <CalendarRange className="w-4 h-4" style={{ color: "var(--club-secondary)" }} />
+                <p className="text-sm font-semibold text-white">Próximos 7 días</p>
               </div>
-              <p className="text-xs text-brand-muted/70 mb-4">
-                Cuánto espacio te queda por vender en los próximos 7 días.
-              </p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
-                <MiniStat value={String(courts.length)} label="canchas activas" />
-                <MiniStat value={formatHours(next7CapacityMin)} label="h disponibles" />
+              <div className="grid grid-cols-4 gap-2 sm:gap-3 mb-4">
+                <MiniStat value={String(futureWeekRows.length)} label="reservas" />
+                <MiniStat value={String(courts.length)} label="canchas" />
                 <MiniStat value={formatHours(next7ReservedMin)} label="h reservadas" />
                 <MiniStat value={formatHours(next7FreeMin)} label="h libres" />
               </div>
@@ -939,17 +915,18 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
                   />
                 </div>
                 <span
-                  className="text-lg font-bold tabular-nums shrink-0"
+                  className="text-2xl font-bold tabular-nums shrink-0"
                   style={{ color: next7OccupancyColor }}
                 >
                   {next7OccupancyPct}%
                 </span>
               </div>
+              <p className="text-[11px] text-brand-muted/70 mt-1.5">Ocupación proyectada de la capacidad total</p>
             </div>
 
-            {/* Fila 3 — Canchas más ocupadas + Días con menor ocupación */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div className="bg-brand-surface border border-white/10 rounded-2xl p-5">
+            {/* Canchas más ocupadas + Días con menor ocupación */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+              <div className="bg-brand-surface border border-white/10 rounded-2xl p-4 sm:p-5">
                 <div className="flex items-center gap-2 mb-3">
                   <Flame className="w-4 h-4" style={{ color: "var(--club-secondary)" }} />
                   <p className="text-sm font-semibold text-white">Canchas más ocupadas</p>
@@ -958,24 +935,26 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
                 {busiestCourts.length === 0 ? (
                   <p className="text-sm text-brand-muted">Sin canchas activas</p>
                 ) : (
-                  <div className="flex flex-col gap-2.5">
+                  <div className="flex flex-col gap-3">
                     {busiestCourts.map((c) => {
                       const color = c.pct >= 70 ? "#22C55E" : c.pct >= 40 ? "#EAB308" : "#EF4444";
                       return (
-                        <div key={c.id} className="flex items-center gap-3">
-                          <span className="text-xs text-brand-muted w-20 shrink-0 truncate">{c.name}</span>
-                          <div className="flex-1 h-2 rounded-full bg-white/[0.07] overflow-hidden">
+                        <div key={c.id}>
+                          <div className="flex items-center justify-between gap-3 mb-1.5">
+                            <span className="text-sm text-white/90 font-medium truncate">{c.name}</span>
+                            <span
+                              className="text-sm font-bold tabular-nums shrink-0"
+                              style={{ color }}
+                            >
+                              {c.pct}%
+                            </span>
+                          </div>
+                          <div className="h-3.5 rounded-full bg-white/[0.07] overflow-hidden">
                             <div
                               className="h-full rounded-full"
                               style={{ width: `${c.pct}%`, backgroundColor: color }}
                             />
                           </div>
-                          <span
-                            className="text-xs font-semibold tabular-nums w-9 text-right shrink-0"
-                            style={{ color }}
-                          >
-                            {c.pct}%
-                          </span>
                         </div>
                       );
                     })}
@@ -983,7 +962,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
                 )}
               </div>
 
-              <div className="bg-brand-surface border border-white/10 rounded-2xl p-5">
+              <div className="bg-brand-surface border border-white/10 rounded-2xl p-4 sm:p-5">
                 <div className="flex items-center gap-2 mb-3">
                   <TrendingDown className="w-4 h-4" style={{ color: "var(--club-primary)" }} />
                   <p className="text-sm font-semibold text-white">Días con menor ocupación</p>
@@ -996,8 +975,8 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
               </div>
             </div>
 
-            {/* Fila 4 — Proyección por cancha */}
-            <div className="mt-8">
+            {/* Proyección por cancha */}
+            <div className="mt-6 sm:mt-8">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider">
                   Proyección por cancha

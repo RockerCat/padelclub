@@ -34,7 +34,7 @@ export function ClubThemeProvider({
       }}
     >
       <div
-        className="min-h-screen flex"
+        className="min-h-screen flex flex-col md:flex-row"
         style={
           {
             // Override Tailwind brand tokens so all brand-* utilities pick up club colors

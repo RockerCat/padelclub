@@ -24,6 +24,15 @@ import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils/cn";
 import { ClubHeader } from "./ClubHeader";
 
+function getInitials(name: string): string {
+  return name
+    .split(/\s+/)
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
 interface NavItem {
   label: string;
   href?: string;
@@ -314,9 +323,30 @@ export function AppNav({ club, role, membershipCount, pendingJoinRequests = 0 }:
 
       {/* Mobile top bar */}
       <div className="md:hidden flex items-center justify-between px-4 py-3 bg-brand-surface border-b border-white/10 sticky top-0 z-40">
-        <span className="text-sm font-semibold text-white truncate mr-2">
-          {club.name}
-        </span>
+        <div className="flex items-center gap-2.5 min-w-0 mr-2">
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden ring-1 ring-white/10"
+            style={
+              !club.logo_url
+                ? { backgroundColor: `${club.primary_color}22`, color: club.primary_color }
+                : undefined
+            }
+          >
+            {club.logo_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={club.logo_url}
+                alt={`Logo de ${club.name}`}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              getInitials(club.name)
+            )}
+          </div>
+          <span className="text-sm font-semibold text-white truncate">
+            {club.name}
+          </span>
+        </div>
         <button
           onClick={() => setMobileOpen((prev) => !prev)}
           className="p-2 rounded-xl text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors shrink-0"

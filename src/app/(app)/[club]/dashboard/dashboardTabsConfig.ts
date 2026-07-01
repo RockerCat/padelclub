@@ -9,10 +9,15 @@ import { CalendarClock, TrendingUp, Activity, type LucideIcon } from "lucide-rea
 
 export type DashboardTabKey = "proxima" | "historico" | "actividad";
 
-export const DASHBOARD_TABS: Array<{ key: DashboardTabKey; label: string; Icon: LucideIcon }> = [
-  { key: "proxima", label: "Operación Próxima", Icon: CalendarClock },
-  { key: "historico", label: "Rendimiento Histórico", Icon: TrendingUp },
-  { key: "actividad", label: "Actividad Reciente", Icon: Activity },
+export const DASHBOARD_TABS: Array<{
+  key: DashboardTabKey;
+  label: string;
+  mobileLabel: string;
+  Icon: LucideIcon;
+}> = [
+  { key: "proxima", label: "Operación Próxima", mobileLabel: "Próxima", Icon: CalendarClock },
+  { key: "historico", label: "Rendimiento Histórico", mobileLabel: "Histórico", Icon: TrendingUp },
+  { key: "actividad", label: "Actividad Reciente", mobileLabel: "Actividad", Icon: Activity },
 ];
 
 export function resolveDashboardTab(raw: string | undefined): DashboardTabKey {
