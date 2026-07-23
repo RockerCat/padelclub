@@ -5,6 +5,11 @@ import { cancelPendingJoinRequestsForPublicClub } from "@/lib/joinRequests";
 
 export type OnboardingActionState = { success?: boolean; error?: string };
 
+// Named requireOwner for its original onboarding context (only ever run
+// by the club's OWNER, right after creation), but also backs Página
+// Pública's reuse of these same steps (PublicProfileModal, LocationModal)
+// — so ADMIN is allowed too. No practical change for onboarding itself:
+// a brand-new club has no ADMIN yet when this flow runs.
 async function requireOwner(clubId: string) {
   const supabase = await createClient();
   const {
@@ -21,7 +26,7 @@ async function requireOwner(clubId: string) {
     .eq("is_active", true)
     .single();
 
-  if (!membership || membership.role !== "OWNER")
+  if (!membership || !["OWNER", "ADMIN"].includes(membership.role))
     return { supabase: null, error: "No tienes permiso para editar este club." };
 
   return { supabase, error: null };

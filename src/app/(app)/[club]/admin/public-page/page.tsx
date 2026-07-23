@@ -39,7 +39,7 @@ export default async function PublicPagePage({ params }: PublicPagePageProps) {
     .single();
 
   if (!membership) redirect("/unauthorized");
-  if (membership.role !== "OWNER") redirect(`/${slug}`);
+  if (!["OWNER", "ADMIN"].includes(membership.role)) redirect(`/${slug}`);
 
   const { courts, schedule, playerCount, news } = await getClubPublicPageData(supabase, club.id);
 

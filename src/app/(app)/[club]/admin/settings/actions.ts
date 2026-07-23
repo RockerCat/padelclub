@@ -31,7 +31,7 @@ export async function updateClubCover(
     .eq("is_active", true)
     .single();
 
-  if (!membership || membership.role !== "OWNER") {
+  if (!membership || !["OWNER", "ADMIN"].includes(membership.role)) {
     return { error: "No tienes permiso para editar este club." };
   }
 
@@ -67,7 +67,7 @@ export async function updateClubLogo(
     .eq("is_active", true)
     .single();
 
-  if (!membership || membership.role !== "OWNER") {
+  if (!membership || !["OWNER", "ADMIN"].includes(membership.role)) {
     return { error: "No tienes permiso para editar este club." };
   }
 
@@ -100,7 +100,7 @@ export async function updateClubName(
     .eq("is_active", true)
     .single();
 
-  if (!membership || membership.role !== "OWNER")
+  if (!membership || !["OWNER", "ADMIN"].includes(membership.role))
     return { error: "No tienes permiso para editar este club." };
 
   const trimmed = name.trim();
@@ -136,7 +136,7 @@ export async function updateClubColors(
     .eq("is_active", true)
     .single();
 
-  if (!membership || membership.role !== "OWNER")
+  if (!membership || !["OWNER", "ADMIN"].includes(membership.role))
     return { error: "No tienes permiso para editar este club." };
 
   if (!HEX_COLOR_RE.test(primaryColor) || !HEX_COLOR_RE.test(secondaryColor))
@@ -271,7 +271,7 @@ export async function addGalleryImage(
     .eq("is_active", true)
     .single();
 
-  if (!membership || membership.role !== "OWNER")
+  if (!membership || !["OWNER", "ADMIN"].includes(membership.role))
     return { error: "No tienes permiso para editar este club." };
 
   const { data: club } = await supabase
@@ -310,7 +310,7 @@ export async function removeGalleryImage(
     .eq("is_active", true)
     .single();
 
-  if (!membership || membership.role !== "OWNER")
+  if (!membership || !["OWNER", "ADMIN"].includes(membership.role))
     return { error: "No tienes permiso para editar este club." };
 
   const { data: club } = await supabase

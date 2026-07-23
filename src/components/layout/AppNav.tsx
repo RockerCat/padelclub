@@ -133,6 +133,11 @@ function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequest
         label: "Noticias",
         href: `/${slug}/admin/news`,
         icon: Megaphone,
+      },
+      {
+        label: "Página Pública",
+        href: `/${slug}/admin/public-page`,
+        icon: Globe,
       }
     );
   } else {
