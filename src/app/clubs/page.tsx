@@ -7,6 +7,8 @@ import { getClubEntryPath } from "@/lib/utils/navigation";
 import { LogOut, Plus, Compass, CheckCircle2, ShieldCheck } from "lucide-react";
 import { ExploreSection } from "./ExploreSection";
 import type { DirectoryClub, MemberInfo } from "./ExploreSection";
+import { NotificationBell } from "@/components/layout/NotificationBell";
+import { getUnreadNotificationCount, getRecentNotifications } from "@/lib/notifications";
 
 const ROLE_LABELS: Record<string, string> = {
   OWNER: "Propietario",
@@ -43,9 +45,11 @@ export default async function ClubsPage({
   let memberships: MembershipRow[] = [];
   let lastClubId: string | null = null;
   let platformAdmin = false;
+  let notificationCount = 0;
+  let notificationItems: Awaited<ReturnType<typeof getRecentNotifications>> = [];
 
   if (user) {
-    const [membershipsResult, profileResult, isAdmin] = await Promise.all([
+    const [membershipsResult, profileResult, isAdmin, unreadCount, recentNotifications] = await Promise.all([
       supabase
         .from("club_members")
         .select("role, clubs!inner(id, name, slug, logo_url, primary_color)")
@@ -58,10 +62,14 @@ export default async function ClubsPage({
         .eq("id", user.id)
         .single(),
       isPlatformAdmin(),
+      getUnreadNotificationCount(supabase),
+      getRecentNotifications(supabase),
     ]);
     memberships = (membershipsResult.data ?? []) as unknown as MembershipRow[];
     lastClubId = profileResult.data?.last_club_id ?? null;
     platformAdmin = isAdmin;
+    notificationCount = unreadCount;
+    notificationItems = recentNotifications;
   }
 
   const hasClubs      = memberships.length > 0;
@@ -101,6 +109,7 @@ export default async function ClubsPage({
 
           {user ? (
             <div className="flex items-center gap-3 sm:gap-4 min-w-0 shrink-0">
+              <NotificationBell initialCount={notificationCount} initialItems={notificationItems} />
               {platformAdmin && (
                 <Link
                   href="/platform"

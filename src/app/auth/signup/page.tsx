@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { SignupForm, type InviteBranding } from "./SignupForm";
 
 interface SignupPageProps {
-  searchParams: Promise<{ invite?: string }>;
+  searchParams: Promise<{ invite?: string; next?: string }>;
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -44,7 +44,7 @@ function ClubLogoMark({
 }
 
 export default async function SignupPage({ searchParams }: SignupPageProps) {
-  const { invite } = await searchParams;
+  const { invite, next } = await searchParams;
 
   let branding: InviteBranding | null = null;
 
@@ -108,7 +108,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
           </div>
         )}
 
-        <SignupForm inviteToken={invite} branding={branding} />
+        <SignupForm inviteToken={invite} branding={branding} next={next} />
 
         {branding && (
           <p className="text-xs text-brand-muted/40 text-center mt-6">

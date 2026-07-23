@@ -64,18 +64,15 @@ export default async function PlayersPage({ params }: PlayersPageProps) {
         .eq("role", "PLAYER")
         .order("created_at", { ascending: false });
 
-  // Players' second access path on private clubs, pending OWNER/ADMIN
-  // approval. Queried unconditionally (not gated by isPublic) — this is the
-  // exact same club_id-only filter the sidebar badge's
-  // getPendingJoinRequestsCount uses, so the two can never disagree. A
-  // public club has none left to show because saving that change deletes
-  // them (see settings/actions.ts's updateClubVisibility), not because this page
-  // hides the section.
-  const { data: joinRequests } = await supabase
-    .from("club_join_requests")
-    .select("id, created_at, profiles(full_name)")
-    .eq("club_id", club.id)
-    .order("created_at", { ascending: true });
+  // Players' second access path (public and private clubs alike since the
+  // "join a public club instantly" placeholder was removed), pending
+  // OWNER/ADMIN approval. get_club_join_requests also carries the
+  // requester's email (needs auth.users, not reachable from a plain
+  // select) and every past request's status, not just pending ones — the
+  // section below only renders Aprobar/Rechazar for status === "pending".
+  const { data: joinRequests } = await supabase.rpc("get_club_join_requests", {
+    p_club_id: club.id,
+  });
 
   const memberList = (members ?? []) as Parameters<typeof MembersClient>[0]["members"];
   const links = (inviteLinks ?? []) as InviteLink[];
@@ -95,9 +92,11 @@ export default async function PlayersPage({ params }: PlayersPageProps) {
       <MembersClient members={memberList} clubSlug={slug} clubId={club.id} />
 
       {/* Solicitudes de ingreso — más prioritarias operativamente que las
-          invitaciones, por eso van por encima. Gated solo por si hay datos,
-          no por isPublic: un club público ya no debería tener ninguna
-          pendiente (ver updateClubVisibility), así que esta condición sola basta. */}
+          invitaciones, por eso van por encima. Público y privado usan el
+          mismo flujo de solicitud+aprobación, así que esto no depende de
+          isPublic. Incluye historial (aprobadas/rechazadas), no solo
+          pendientes — JoinRequestsSection decide qué acciones mostrar según
+          el status de cada fila. */}
       {requests.length > 0 && (
         <div className="mt-10">
           <JoinRequestsSection clubId={club.id} clubSlug={slug} requests={requests} />

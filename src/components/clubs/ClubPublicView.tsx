@@ -58,7 +58,7 @@ export type ClubNewsCard = {
 
 export type ViewerContext =
   | { kind: "visitor" }
-  | { kind: "pendingRequest"; alreadyRequested: boolean }
+  | { kind: "pendingRequest"; requestStatus: "none" | "pending" | "rejected" }
   | { kind: "member"; role: string }
   /**
    * Admin "Vista previa" only — the current viewer already belongs to this
@@ -75,6 +75,13 @@ interface ClubPublicViewProps {
   playerCount: number;
   news: ClubNewsCard[];
   viewerContext: ViewerContext;
+  /**
+   * True when the visitor arrived via "Unirme al club" → signup/login →
+   * back here (?intent=join-club) and has no request yet — lets
+   * RequestAccessButton submit itself instead of waiting for a second
+   * click, per the join-from-public-page story.
+   */
+  autoJoin?: boolean;
   /** Chrome rendered above the Hero — real page's top bar, or the admin preview banner. */
   topBar?: ReactNode;
 }
@@ -122,7 +129,7 @@ function InfoRow({ Icon, label, value, badge, badgeAmber = false }: {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function ClubPublicView({ club, courts, schedule, playerCount, news, viewerContext, topBar }: ClubPublicViewProps) {
+export function ClubPublicView({ club, courts, schedule, playerCount, news, viewerContext, autoJoin = false, topBar }: ClubPublicViewProps) {
   const p            = club.primary_color;
   const isPublic     = club.visibility === "public";
   const locFull      = [club.city, club.state, club.country].filter(Boolean).join(", ");
@@ -175,16 +182,20 @@ export function ClubPublicView({ club, courts, schedule, playerCount, news, view
       );
     }
     if (viewerContext.kind === "visitor") {
+      // ?intent=join-club rides inside the returnTo path itself (as its own
+      // query string), so login/signup/callback only ever need to carry a
+      // single ?next= — no separate intent param to lose along the way.
+      const joinReturnTo = encodeURIComponent(`/${club.slug}?intent=join-club`);
       return (
         <div className={`flex ${compact ? "flex-row gap-2" : "flex-col sm:flex-row gap-2.5"}`}>
           <Link
-            href={`/auth/signup?next=/clubs/${club.slug}`}
+            href={`/auth/signup?next=${joinReturnTo}`}
             className={`inline-flex items-center justify-center rounded-xl bg-brand-primary text-brand-bg text-sm font-semibold hover:bg-brand-primary/90 transition-colors ${compact ? "px-4 py-2.5" : "px-7 py-3"}`}
           >
             {isPublic ? "Unirme al club" : "Solicitar acceso"}
           </Link>
           <Link
-            href={`/auth/login?next=/clubs/${club.slug}`}
+            href={`/auth/login?next=${joinReturnTo}`}
             className={`inline-flex items-center justify-center rounded-xl border border-white/15 text-white text-sm font-medium hover:bg-white/5 transition-colors ${compact ? "px-4 py-2.5" : "px-7 py-3"}`}
           >
             Entrar
@@ -196,9 +207,9 @@ export function ClubPublicView({ club, courts, schedule, playerCount, news, view
       <RequestAccessButton
         clubId={club.id}
         clubSlug={club.slug}
-        whatsapp={club.whatsapp}
         isPublic={isPublic}
-        alreadyRequested={viewerContext.alreadyRequested}
+        requestStatus={viewerContext.requestStatus}
+        autoSubmit={autoJoin && viewerContext.requestStatus === "none"}
         className={compact ? "!px-4 !py-2.5" : "w-full sm:w-auto"}
       />
     );

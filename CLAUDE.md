@@ -349,3 +349,28 @@ Whenever possible:
 - Prefer direct manipulation of visual assets (logo, cover image, branding) from the dashboard.
 
 Operational workflows remain important, but club identity should always be visible.
+
+---
+
+## Documentation Workflow
+
+This repository keeps two living documents:
+
+- **CLAUDE.md** — the project's permanent context: stack, conventions, development rules, important structure, permissions, core modules, business flows, architecture decisions, standards. It should let a brand-new chat understand immediately how to work on this project.
+- **PROJECT_STATUS.md** — the project's current state: completed features, new capabilities, relevant decisions, implemented modules, pending work, immediate roadmap. It is a status snapshot, not a commit history.
+
+Update either file **only** when:
+
+1. The user explicitly asks for it, or
+2. An important feature or project milestone has just been completed.
+
+Do **not** update them for small fixes, minor UI changes, or one-off corrections — CLAUDE.md only changes when something affects how the project is built (stack, conventions, rules, architecture); PROJECT_STATUS.md only changes when a real feature milestone lands.
+
+When a completed feature does warrant a documentation update, follow this order:
+
+1. Implement the feature first.
+2. Update CLAUDE.md if the change affects architecture/conventions/rules.
+3. Update PROJECT_STATUS.md to reflect the new state.
+4. List both files among the modified files in the response.
+
+If the change doesn't warrant a documentation update, leave both files untouched.

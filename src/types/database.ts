@@ -389,15 +389,31 @@ export interface Database {
           id: string;
           club_id: string;
           profile_id: string;
+          status: "pending" | "approved" | "rejected";
+          approved_at: string | null;
+          approved_by: string | null;
+          rejected_at: string | null;
+          rejected_by: string | null;
           created_at: string;
         };
         Insert: {
           id?: string;
           club_id: string;
           profile_id: string;
+          status?: "pending" | "approved" | "rejected";
+          approved_at?: string | null;
+          approved_by?: string | null;
+          rejected_at?: string | null;
+          rejected_by?: string | null;
           created_at?: string;
         };
-        Update: Record<string, never>;
+        Update: {
+          status?: "pending" | "approved" | "rejected";
+          approved_at?: string | null;
+          approved_by?: string | null;
+          rejected_at?: string | null;
+          rejected_by?: string | null;
+        };
         Relationships: [
           {
             foreignKeyName: "club_join_requests_club_id_fkey";
@@ -462,6 +478,49 @@ export interface Database {
           },
         ];
       };
+      notifications: {
+        Row: {
+          id: string;
+          profile_id: string;
+          club_id: string | null;
+          type: string;
+          title: string;
+          message: string;
+          metadata: Json;
+          read_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          profile_id: string;
+          club_id?: string | null;
+          type: string;
+          title: string;
+          message: string;
+          metadata?: Json;
+          read_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          read_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "notifications_profile_id_fkey";
+            columns: ["profile_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "notifications_club_id_fkey";
+            columns: ["club_id"];
+            isOneToOne: false;
+            referencedRelation: "clubs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -514,6 +573,37 @@ export interface Database {
       count_active_players: {
         Args: { p_club_id: string };
         Returns: number;
+      };
+      // public.create_join_request — self-service join request + notifies
+      // every OWNER/ADMIN of the club
+      create_join_request: {
+        Args: { p_club_id: string };
+        Returns: void;
+      };
+      // public.approve_join_request — atomic approve: inserts club_members,
+      // marks the request approved, notifies the requester
+      approve_join_request: {
+        Args: { p_request_id: string };
+        Returns: void;
+      };
+      // public.reject_join_request — atomic reject: marks the request
+      // rejected, notifies the requester, no membership created
+      reject_join_request: {
+        Args: { p_request_id: string };
+        Returns: void;
+      };
+      // public.get_club_join_requests — admin list view (name + email) for
+      // one club, gated on the caller's role in that specific club
+      get_club_join_requests: {
+        Args: { p_club_id: string };
+        Returns: Array<{
+          id: string;
+          profile_id: string;
+          full_name: string | null;
+          email: string | null;
+          status: "pending" | "approved" | "rejected";
+          created_at: string;
+        }>;
       };
       // public.get_platform_clubs_overview — platform-admin-gated global
       // clubs listing (all clubs, any owner, bypasses RLS internally)

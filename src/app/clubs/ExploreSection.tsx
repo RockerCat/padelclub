@@ -128,7 +128,7 @@ function ClubDirectoryCard({
         </Link>
       ) : (
         <Link
-          href={`/clubs/${club.slug}`}
+          href={`/${club.slug}`}
           className="flex items-center justify-center py-2 rounded-xl text-sm font-medium border border-white/15 text-white hover:border-white/30 hover:bg-white/5 transition-colors"
         >
           {club.visibility === "public" ? "Ver club →" : "Ver detalles →"}

@@ -5,6 +5,11 @@ import { revalidatePath } from "next/cache";
 
 type ActionResult = { error?: string };
 
+// create_join_request (SECURITY DEFINER) validates membership/duplicate
+// state and notifies every OWNER/ADMIN of the club atomically — see
+// migration 20260727000002_join_requests_status.sql. No visibility branch
+// here: public and private clubs go through the same request+approval
+// flow.
 export async function createJoinRequest(clubId: string, clubSlug: string): Promise<ActionResult> {
   const supabase = await createClient();
   const {
@@ -14,37 +19,17 @@ export async function createJoinRequest(clubId: string, clubSlug: string): Promi
 
   if (userError || !user) return { error: "Debes iniciar sesión para solicitar ingreso." };
 
-  // Defense in depth: the UI only shows "Solicitar ingreso" for private
-  // clubs, but a public club lets anyone join directly, so a request here
-  // would never make sense — block it at the source instead of relying
-  // solely on the button being hidden.
-  const { data: club } = await supabase
-    .from("clubs")
-    .select("visibility")
-    .eq("id", clubId)
-    .single();
-
-  if (club?.visibility !== "private") return { error: "Este club no requiere solicitud de ingreso." };
-
-  const { data: existingMembership } = await supabase
-    .from("club_members")
-    .select("id")
-    .eq("club_id", clubId)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .maybeSingle();
-
-  if (existingMembership) return { error: "Ya eres miembro de este club." };
-
-  const { error } = await supabase
-    .from("club_join_requests")
-    .insert({ club_id: clubId, profile_id: user.id });
+  const { error } = await supabase.rpc("create_join_request", { p_club_id: clubId });
 
   if (error) {
-    // Unique violation = a pending request already exists — treat as success.
-    if (error.code !== "23505") return { error: "Error al enviar la solicitud." };
+    if (error.code === "23505") return { error: "Ya eres miembro de este club." };
+    if (error.code === "22023") {
+      return { error: "Tu solicitud anterior fue rechazada. Contacta al club directamente." };
+    }
+    return { error: "Error al enviar la solicitud." };
   }
 
+  revalidatePath(`/${clubSlug}`);
   revalidatePath(`/clubs/${clubSlug}`);
   return {};
 }

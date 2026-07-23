@@ -6,10 +6,26 @@ import { getClubEntryPath } from "@/lib/utils/navigation";
 
 const SLUG_REGEX = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/;
 
+// Top-level static routes — a club with one of these slugs would be
+// permanently unreachable at /[slug] (Next.js always resolves the static
+// route first), so it's blocked at creation time rather than silently
+// producing a dead club.
+const RESERVED_SLUGS = new Set([
+  "auth",
+  "clubs",
+  "platform",
+  "onboarding",
+  "unauthorized",
+  "invite",
+  "api",
+  "notifications",
+]);
+
 export async function checkSlugAvailability(
   slug: string
 ): Promise<{ available: boolean }> {
   if (!slug || slug.length < 3) return { available: false };
+  if (RESERVED_SLUGS.has(slug)) return { available: false };
 
   const supabase = await createClient();
   const { data } = await supabase
@@ -66,6 +82,8 @@ export async function createClub(
     } else if (!SLUG_REGEX.test(slug)) {
       fieldErrors.slug =
         "Solo letras minúsculas, números y guiones. Debe empezar y terminar con letra o número.";
+    } else if (RESERVED_SLUGS.has(slug)) {
+      fieldErrors.slug = "Ese identificador está reservado. Elige otro.";
     }
 
     if (Object.keys(fieldErrors).length > 0) {

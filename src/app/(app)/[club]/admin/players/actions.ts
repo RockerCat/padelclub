@@ -120,9 +120,10 @@ export async function createInvitationLink(
 }
 
 // ─── approveJoinRequest ────────────────────────────────────────────────────────
-// club_members' own "club_members_insert" RLS policy already lets an
-// OWNER/ADMIN insert members for their own club, so approving a join request
-// is a plain insert + delete — no SECURITY DEFINER RPC needed.
+// approve_join_request (SECURITY DEFINER) re-checks the caller's role for
+// this exact club, the request's club_id and its pending status, inserts
+// club_members, marks the request approved and notifies the requester —
+// all atomically. See migration 20260727000002_join_requests_status.sql.
 
 export async function approveJoinRequest(
   clubId: string,
@@ -132,25 +133,13 @@ export async function approveJoinRequest(
   const { supabase, error: authError } = await requireAdminRole(clubId);
   if (authError || !supabase) return { error: authError! };
 
-  const { data: request } = await supabase
-    .from("club_join_requests")
-    .select("profile_id")
-    .eq("id", requestId)
-    .eq("club_id", clubId)
-    .single();
+  const { error } = await supabase.rpc("approve_join_request", { p_request_id: requestId });
 
-  if (!request) return { error: "Solicitud no encontrada." };
-
-  const { error: insertError } = await supabase
-    .from("club_members")
-    .insert({ club_id: clubId, profile_id: request.profile_id, role: "PLAYER", is_active: true });
-
-  // 23505 = unique violation — already a member; proceed to clear the request.
-  if (insertError && insertError.code !== "23505") {
+  if (error) {
+    if (error.code === "P0002") return { error: "Solicitud no encontrada." };
+    if (error.code === "22023") return { error: "Esta solicitud ya fue resuelta." };
     return { error: "Error al aprobar la solicitud." };
   }
-
-  await supabase.from("club_join_requests").delete().eq("id", requestId).eq("club_id", clubId);
 
   revalidatePath(`/${clubSlug}/admin/players`);
   return { success: true };
@@ -166,13 +155,13 @@ export async function rejectJoinRequest(
   const { supabase, error: authError } = await requireAdminRole(clubId);
   if (authError || !supabase) return { error: authError! };
 
-  const { error } = await supabase
-    .from("club_join_requests")
-    .delete()
-    .eq("id", requestId)
-    .eq("club_id", clubId);
+  const { error } = await supabase.rpc("reject_join_request", { p_request_id: requestId });
 
-  if (error) return { error: "Error al rechazar la solicitud." };
+  if (error) {
+    if (error.code === "P0002") return { error: "Solicitud no encontrada." };
+    if (error.code === "22023") return { error: "Esta solicitud ya fue resuelta." };
+    return { error: "Error al rechazar la solicitud." };
+  }
 
   revalidatePath(`/${clubSlug}/admin/players`);
   return { success: true };

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getClubEntryPath } from "@/lib/utils/navigation";
 import { checkProfileIsPlatformAdmin } from "@/lib/platformAdminQuery";
+import { getSafeInternalPath } from "@/lib/utils/safeRedirect";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Button, Card, CardHeader, CardContent, Input } from "@/components/ui";
@@ -11,7 +12,7 @@ import { Button, Card, CardHeader, CardContent, Input } from "@/components/ui";
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const next = searchParams.get("next");
+  const next = getSafeInternalPath(searchParams.get("next"));
   const message = searchParams.get("message");
   const urlError = searchParams.get("error");
 

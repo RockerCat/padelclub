@@ -839,7 +839,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
                 [
                   { label: "Invitar jugadores", sub: "Comparte el enlace de invitación con tu comunidad", href: `/${slug}/admin/players`, Icon: Users, color: "var(--club-primary)", external: false },
                   { label: "Crear primera reserva", sub: "Registra manualmente el primer turno del club", href: `/${slug}/admin/reservations/new`, Icon: CalendarDays, color: "var(--club-secondary)", external: false },
-                  { label: "Ver página pública", sub: "Así es como los jugadores ven tu club", href: `/clubs/${slug}`, Icon: Share2, color: "var(--club-primary)", external: true },
+                  { label: "Ver página pública", sub: "Así es como los jugadores ven tu club", href: `/${slug}`, Icon: Share2, color: "var(--club-primary)", external: true },
                 ] as const
               ).map((step) => (
                 <Link

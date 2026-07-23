@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Copy, Check, MessageCircle } from "lucide-react";
 
 interface ShareClubSectionProps {
@@ -13,9 +13,20 @@ interface ShareClubSectionProps {
 // rather than gatekeeping access through invitation links.
 export function ShareClubSection({ clubName, clubSlug }: ShareClubSectionProps) {
   const [copied, setCopied] = useState(false);
+  // Starts as the relative path (matches SSR output) and upgrades to an
+  // absolute URL once mounted — branching on `typeof window` directly in
+  // the render body causes a hydration mismatch, since it's already true
+  // by the time React hydrates on the client. Same pattern as
+  // PublicPreviewCard.
+  const [origin, setOrigin] = useState<string | null>(null);
 
-  const publicUrl =
-    typeof window !== "undefined" ? `${window.location.origin}/clubs/${clubSlug}` : `/clubs/${clubSlug}`;
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOrigin(window.location.origin);
+  }, []);
+
+  const publicPath = `/${clubSlug}`;
+  const publicUrl = origin ? `${origin}${publicPath}` : publicPath;
 
   const whatsappMessage =
     `🎾 ¡Únete a ${clubName}!\n\n` +

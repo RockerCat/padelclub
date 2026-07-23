@@ -1,7 +1,6 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { cancelPendingJoinRequestsForPublicClub } from "@/lib/joinRequests";
 
 export type OnboardingActionState = { success?: boolean; error?: string };
 
@@ -53,12 +52,6 @@ export async function updateClubIdentity(
     .eq("id", clubId);
 
   if (error) return { error: "Error al guardar. Intenta de nuevo." };
-
-  // Same cleanup as the Settings page's updateClubVisibility — a public club no
-  // longer gates access through join requests.
-  if (visibility === "public") {
-    await cancelPendingJoinRequestsForPublicClub(supabase, clubId);
-  }
 
   return { success: true };
 }

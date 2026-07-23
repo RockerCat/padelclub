@@ -1,0 +1,28 @@
+-- ============================================================
+-- Grant table-level privileges on notifications to authenticated
+-- Mi Pádel Club
+-- ============================================================
+-- Root cause of "the bell always shows empty", confirmed by querying as a
+-- real authenticated user (anon key, real session) instead of assuming:
+--
+--   error: permission denied for table notifications (42501)
+--   hint: Grant the required privileges to the current role with:
+--         GRANT SELECT ON public.notifications TO authenticated;
+--
+-- notifications_select_own / notifications_update_own (RLS policies) only
+-- decide WHICH ROWS a role may touch — they never take effect until the
+-- role also has the underlying table-level GRANT. 20260727000001 created
+-- the table + policies but never granted the table itself, exactly the
+-- same gap club_join_requests had originally (fixed in
+-- 20260620000003_grant_join_requests_authenticated.sql). The app code was
+-- silently swallowing this (getUnreadNotificationCount/getRecentNotifications
+-- never checked `error`, so a permission-denied response was coalesced to
+-- 0 / [] and rendered as "no notifications" instead of surfacing a bug).
+--
+-- No INSERT/DELETE grant: rows are only ever created by the SECURITY
+-- DEFINER functions (create_join_request, approve_join_request,
+-- reject_join_request), which run as the function owner and bypass both
+-- grants and RLS — authenticated users are never meant to insert directly.
+-- ============================================================
+
+GRANT SELECT, UPDATE ON public.notifications TO authenticated;

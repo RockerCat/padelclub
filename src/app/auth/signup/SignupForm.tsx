@@ -7,6 +7,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Button, Card, CardHeader, CardContent, Input } from "@/components/ui";
 import { Mail, ArrowRight } from "lucide-react";
+import { getSafeInternalPath } from "@/lib/utils/safeRedirect";
 
 export type InviteBranding = {
   clubName: string;
@@ -19,10 +20,21 @@ export type InviteBranding = {
 interface SignupFormProps {
   inviteToken?: string;
   branding?: InviteBranding | null;
+  /** e.g. "/alex-club-padel?intent=join-club" — where to land after signup/confirmation, instead of the generic "Crear mi club" welcome screen. Ignored (and the generic flow used) if not a safe in-app path. */
+  next?: string;
 }
 
-export function SignupForm({ inviteToken, branding }: SignupFormProps) {
+export function SignupForm({ inviteToken, branding, next: rawNext }: SignupFormProps) {
   const router = useRouter();
+  const next = getSafeInternalPath(rawNext);
+  // inviteToken keeps its own dedicated redirect target (unchanged
+  // behavior); next is the generic case this story adds — a plain
+  // "/auth/login?next=..." link, same shape either way.
+  const loginHref = inviteToken
+    ? `/auth/login?next=${encodeURIComponent(`/invite/${inviteToken}`)}`
+    : next
+      ? `/auth/login?next=${encodeURIComponent(next)}`
+      : "/auth/login";
 
   const [fullName, setFullName]             = useState("");
   const [email, setEmail]                   = useState("");
@@ -47,7 +59,9 @@ export function SignupForm({ inviteToken, branding }: SignupFormProps) {
       const supabase  = createClient();
       const redirectTo = inviteToken
         ? `${window.location.origin}/auth/callback?next=/invite/${inviteToken}`
-        : undefined;
+        : next
+          ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`
+          : undefined;
 
       const { data, error: authError } = await supabase.auth.signUp({
         email,
@@ -69,7 +83,7 @@ export function SignupForm({ inviteToken, branding }: SignupFormProps) {
             <>
               Este correo ya tiene una cuenta.{" "}
               <Link
-                href={inviteToken ? `/auth/login?next=/invite/${inviteToken}` : "/auth/login"}
+                href={loginHref}
                 className="text-brand-primary hover:underline font-medium"
               >
                 Inicia sesión para continuar.
@@ -93,9 +107,11 @@ export function SignupForm({ inviteToken, branding }: SignupFormProps) {
         return;
       }
 
-      // Session present → email confirmation disabled, user is active immediately
+      // Session present → email confirmation disabled, user is active immediately.
+      // next (e.g. returning to join a club) always wins over the generic
+      // "Crear mi club" welcome screen.
       if (data.session) {
-        router.push("/clubs?welcome=1");
+        router.push(next ?? "/clubs?welcome=1");
         return;
       }
 
@@ -155,7 +171,7 @@ export function SignupForm({ inviteToken, branding }: SignupFormProps) {
             {/* CTA: go to login */}
             {!branding && (
               <Link
-                href={inviteToken ? `/auth/login?next=/invite/${inviteToken}` : "/auth/login"}
+                href={loginHref}
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-primary text-brand-bg text-sm font-semibold hover:bg-brand-primary/90 transition-colors"
               >
                 Ir a iniciar sesión
@@ -254,7 +270,7 @@ export function SignupForm({ inviteToken, branding }: SignupFormProps) {
         <p className="text-center text-sm text-brand-muted mt-6">
           ¿Ya tienes cuenta?{" "}
           <Link
-            href={inviteToken ? `/auth/login?next=/invite/${inviteToken}` : "/auth/login"}
+            href={loginHref}
             className="text-brand-primary hover:underline font-medium"
           >
             Inicia sesión

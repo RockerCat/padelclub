@@ -23,6 +23,9 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils/cn";
 import { ClubHeader } from "./ClubHeader";
+import { NotificationBell } from "./NotificationBell";
+import { JoinRequestsListener } from "./JoinRequestsListener";
+import type { NotificationRow } from "@/lib/notifications";
 
 function getInitials(name: string): string {
   return name
@@ -54,6 +57,8 @@ interface AppNavProps {
   role: "OWNER" | "ADMIN" | "PLAYER";
   membershipCount: number;
   pendingJoinRequests?: number;
+  notificationCount?: number;
+  notificationItems?: NotificationRow[];
 }
 
 // pendingJoinRequests only ever has a meaningful value for OWNER/ADMIN (the
@@ -160,6 +165,8 @@ interface NavContentProps {
   membershipCount: number;
   navItems: NavItem[];
   pathname: string;
+  notificationCount: number;
+  notificationItems: NotificationRow[];
   onLinkClick: () => void;
   onLogout: () => void;
 }
@@ -170,12 +177,19 @@ function NavContent({
   membershipCount,
   navItems,
   pathname,
+  notificationCount,
+  notificationItems,
   onLinkClick,
   onLogout,
 }: NavContentProps) {
   return (
     <nav className="flex flex-col h-full">
-      <ClubHeader club={club} role={role} />
+      <div className="relative">
+        <ClubHeader club={club} role={role} />
+        <div className="absolute top-3 right-3">
+          <NotificationBell initialCount={notificationCount} initialItems={notificationItems} />
+        </div>
+      </div>
 
       {/* Nav items */}
       <ul className="flex-1 p-3 flex flex-col gap-0.5 overflow-y-auto">
@@ -294,7 +308,14 @@ function NavContent({
 
 // ─── AppNav main component ────────────────────────────────────────────────────
 
-export function AppNav({ club, role, membershipCount, pendingJoinRequests = 0 }: AppNavProps) {
+export function AppNav({
+  club,
+  role,
+  membershipCount,
+  pendingJoinRequests = 0,
+  notificationCount = 0,
+  notificationItems = [],
+}: AppNavProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -313,6 +334,11 @@ export function AppNav({ club, role, membershipCount, pendingJoinRequests = 0 }:
 
   return (
     <>
+      {/* Invisible — keeps the Jugadores badge (and the Jugadores page's
+          own list, when that's the active route) live for OWNER/ADMIN.
+          PLAYER never sees that badge, so it doesn't need the subscription. */}
+      {role !== "PLAYER" && <JoinRequestsListener clubId={club.id} />}
+
       {/* Desktop sidebar */}
       <aside className="hidden md:flex flex-col w-64 shrink-0 bg-brand-surface border-r border-white/10 h-screen sticky top-0">
         <NavContent
@@ -321,6 +347,8 @@ export function AppNav({ club, role, membershipCount, pendingJoinRequests = 0 }:
           membershipCount={membershipCount}
           navItems={navItems}
           pathname={pathname}
+          notificationCount={notificationCount}
+          notificationItems={notificationItems}
           onLinkClick={closeMobile}
           onLogout={handleLogout}
         />
@@ -352,17 +380,20 @@ export function AppNav({ club, role, membershipCount, pendingJoinRequests = 0 }:
             {club.name}
           </span>
         </div>
-        <button
-          onClick={() => setMobileOpen((prev) => !prev)}
-          className="p-2 rounded-xl text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors shrink-0"
-          aria-label="Abrir menú"
-        >
-          {mobileOpen ? (
-            <X className="w-5 h-5" />
-          ) : (
-            <Menu className="w-5 h-5" />
-          )}
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          <NotificationBell initialCount={notificationCount} initialItems={notificationItems} />
+          <button
+            onClick={() => setMobileOpen((prev) => !prev)}
+            className="p-2 rounded-xl text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
+            aria-label="Abrir menú"
+          >
+            {mobileOpen ? (
+              <X className="w-5 h-5" />
+            ) : (
+              <Menu className="w-5 h-5" />
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Mobile drawer */}
@@ -381,6 +412,8 @@ export function AppNav({ club, role, membershipCount, pendingJoinRequests = 0 }:
               membershipCount={membershipCount}
               navItems={navItems}
               pathname={pathname}
+              notificationCount={notificationCount}
+              notificationItems={notificationItems}
               onLinkClick={closeMobile}
               onLogout={handleLogout}
             />

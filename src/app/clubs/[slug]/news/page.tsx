@@ -43,7 +43,7 @@ export default async function ClubNewsListPage({ params }: Props) {
       <div className="border-b border-white/8 bg-brand-bg/90 backdrop-blur-sm sticky top-0 z-20">
         <div className="max-w-5xl mx-auto px-5 h-14 flex items-center">
           <Link
-            href={`/clubs/${club.slug}`}
+            href={`/${club.slug}`}
             className="flex items-center gap-1.5 text-sm text-brand-muted hover:text-white transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />

@@ -22,7 +22,7 @@ export function PublicPreviewCard({ clubSlug }: PublicPreviewCardProps) {
     setOrigin(window.location.origin);
   }, []);
 
-  const publicPath = `/clubs/${clubSlug}`;
+  const publicPath = `/${clubSlug}`;
   const publicUrl = origin ? `${origin}${publicPath}` : publicPath;
 
   function handleCopy() {

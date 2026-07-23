@@ -3,7 +3,7 @@
 ## Estado General
 
 * Estado: Validation Gate 1.0
-* Última actualización: Junio 2026
+* Última actualización: Julio 2026
 
 ## Visión
 
@@ -161,7 +161,7 @@ Estado: ✅ MVP funcional
 Ruta:
 
 ```text
-/clubs/[slug]
+/[slug]
 ```
 
 Incluye:
@@ -172,7 +172,7 @@ Incluye:
 * Estado público/privado
 * Información básica
 * Galería placeholder
-* CTA de acceso
+* CTA de acceso ("Unirme al club", con seguimiento de estado de la solicitud)
 * CTA de administración para owners
 
 Pendiente:
@@ -361,6 +361,29 @@ Pendiente:
 
 * Perfil ampliado
 * Historial de actividad
+
+---
+
+# Solicitudes de Ingreso y Notificaciones
+
+Estado:
+
+✅ Completo (extremo a extremo)
+
+Incluye:
+
+* Solicitud de ingreso a un club desde la página pública (`/[slug]`), con auto-envío al llegar con `?intent=join-club` tras signup/login
+* Aprobación/rechazo de solicitudes por OWNER/ADMIN desde Jugadores (`/[club]/admin/players`)
+* Estado de la solicitud visible para el solicitante (pendiente/aprobada/rechazada)
+* Tabla `notifications` + Realtime (Postgres Changes) para actualización en vivo sin recargar
+* Campana de notificaciones (header): contador de no leídas, dropdown con las 5 más recientes, "Ver todas las notificaciones"
+* Animación de recordatorio en la campana mientras existan notificaciones sin leer (respeta `prefers-reduced-motion`)
+* Página `/notifications`: historial completo, paginado ("Cargar más", 20 por página), "Marcar todas como leídas", disponible para cualquier usuario autenticado sin depender de un club activo
+
+Pendiente:
+
+* Notificaciones push (fuera del navegador)
+* Preferencias de notificación por tipo
 
 ---
 

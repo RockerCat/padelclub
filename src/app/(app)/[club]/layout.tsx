@@ -4,6 +4,7 @@ import { AppNav } from "@/components/layout/AppNav";
 import { ClubThemeProvider } from "@/components/layout/ClubThemeProvider";
 import { UpdateLastClub } from "@/components/layout/UpdateLastClub";
 import { getPendingJoinRequestsCount } from "@/lib/joinRequests";
+import { getUnreadNotificationCount, getRecentNotifications } from "@/lib/notifications";
 import type { ClubRole } from "@/types/database";
 
 interface ClubLayoutProps {
@@ -66,13 +67,15 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
   // Count total active memberships (for "Cambiar de club") and pending join
   // requests (for the Jugadores nav badge, OWNER/ADMIN only) side by side —
   // both are cheap head-count queries, no row data fetched.
-  const [{ count }, pendingJoinRequests] = await Promise.all([
+  const [{ count }, pendingJoinRequests, notificationCount, notificationItems] = await Promise.all([
     supabase
       .from("club_members")
       .select("id", { count: "exact", head: true })
       .eq("profile_id", user.id)
       .eq("is_active", true),
     role === "PLAYER" ? Promise.resolve(0) : getPendingJoinRequestsCount(supabase, club.id),
+    getUnreadNotificationCount(supabase),
+    getRecentNotifications(supabase),
   ]);
 
   const membershipCount = count ?? 1;
@@ -88,6 +91,8 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
         role={role}
         membershipCount={membershipCount}
         pendingJoinRequests={pendingJoinRequests}
+        notificationCount={notificationCount}
+        notificationItems={notificationItems}
       />
       <main className="flex-1 min-w-0">{children}</main>
     </ClubThemeProvider>
