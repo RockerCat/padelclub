@@ -26,7 +26,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           ref={ref}
           id={inputId}
           className={cn(
-            "h-10 w-full rounded-xl border bg-white/5 px-3 text-sm text-white placeholder:text-brand-muted/60 transition-colors",
+            // text-base (16px) on mobile prevents Safari iOS from
+            // auto-zooming on focus; md: restores the original desktop size.
+            "h-10 w-full rounded-xl border bg-white/5 px-3 text-base md:text-sm text-white placeholder:text-brand-muted/60 transition-colors",
             "focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50",
             "disabled:opacity-50 disabled:cursor-not-allowed",
             error

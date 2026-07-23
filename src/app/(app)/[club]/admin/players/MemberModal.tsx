@@ -139,7 +139,7 @@ export function MemberModal({ member, clubId, clubSlug, onClose }: MemberModalPr
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value as PlayerCategory)}
-                  className="w-40 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20"
+                  className="w-40 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20"
                 >
                   {PLAYER_CATEGORIES.map((c) => (
                     <option key={c} value={c} className="bg-[#001A24]">

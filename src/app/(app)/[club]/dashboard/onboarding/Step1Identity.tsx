@@ -58,7 +58,7 @@ export function Step1Identity({ club, onNext, formId, hideStepHint = false }: St
               defaultValue={club.description ?? ""}
               placeholder="Breve descripción de tu club para que los jugadores lo conozcan…"
               rows={3}
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-brand-muted/60 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20 resize-none"
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-base md:text-sm text-white placeholder:text-brand-muted/60 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20 resize-none"
             />
             {!hideStepHint && (
               <p className="text-xs text-brand-muted/60">

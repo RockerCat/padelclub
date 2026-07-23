@@ -82,7 +82,7 @@ export function Step5Court({ clubId, clubSlug, formId, alreadyHasCourt, onNext }
               name="surface"
               value={surface}
               onChange={(e) => setSurface(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20"
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20"
             >
               {SURFACE_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value} className="bg-[#001A24]">

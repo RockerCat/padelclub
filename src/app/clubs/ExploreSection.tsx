@@ -174,7 +174,7 @@ export function ExploreSection({ clubs, memberMap, isAuthenticated }: ExploreSec
             placeholder="Buscar por nombre, ciudad o departamento"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-brand-surface border border-white/10 text-sm text-white placeholder:text-brand-muted/60 focus:outline-none focus:border-white/30 transition-colors"
+            className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-brand-surface border border-white/10 text-base md:text-sm text-white placeholder:text-brand-muted/60 focus:outline-none focus:border-white/30 transition-colors"
           />
         </div>
       )}

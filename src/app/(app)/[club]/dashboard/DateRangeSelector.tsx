@@ -12,7 +12,7 @@ interface DateRangeSelectorProps {
 }
 
 const dateInputClass =
-  "h-9 rounded-lg border border-white/10 bg-white/5 px-2 text-sm text-white transition-colors focus:outline-none focus:ring-1 focus:ring-brand-primary/50 focus:border-brand-primary/50";
+  "h-9 rounded-lg border border-white/10 bg-white/5 px-2 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-1 focus:ring-brand-primary/50 focus:border-brand-primary/50";
 
 export function DateRangeSelector({ value, customFrom, customTo, dateRangeLabel }: DateRangeSelectorProps) {
   const router = useRouter();
@@ -61,7 +61,7 @@ export function DateRangeSelector({ value, customFrom, customTo, dateRangeLabel 
         <select
           value={showCustomPicker ? "custom" : value}
           onChange={(e) => handleSelectChange(e.target.value)}
-          className="h-9 rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white transition-colors focus:outline-none focus:ring-1 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20"
+          className="h-9 rounded-xl border border-white/10 bg-white/5 px-3 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-1 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20"
         >
           {DASHBOARD_RANGE_PRESETS.map((opt) => (
             <option key={opt.value} value={opt.value} className="bg-[#001A24]">

@@ -23,7 +23,7 @@ interface OperatingHoursFormProps {
 }
 
 const timeSelectClass =
-  "h-9 w-[90px] rounded-lg border bg-white/5 px-2 text-sm text-white transition-colors focus:outline-none focus:ring-1 focus:ring-brand-primary/50 focus:border-brand-primary/50 disabled:opacity-30 disabled:cursor-not-allowed";
+  "h-9 w-[90px] rounded-lg border bg-white/5 px-2 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-1 focus:ring-brand-primary/50 focus:border-brand-primary/50 disabled:opacity-30 disabled:cursor-not-allowed";
 
 function TimeSelect({
   value,
