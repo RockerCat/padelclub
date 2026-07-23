@@ -216,7 +216,7 @@ export default async function AdminReservationsPage({
   return (
     <div className="p-6 md:p-10">
       <h1 className="text-2xl font-bold text-white mb-6">Reservaciones</h1>
-      <PendingRequestsSection requests={pendingRequests} clubId={club.id} />
+      <PendingRequestsSection requests={pendingRequests} clubId={club.id} clubSlug={slug} />
       <WeekCalendar
         weekDays={weekDays}
         weekLabel={weekLabel}

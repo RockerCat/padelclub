@@ -1,9 +1,11 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { updateReservation, cancelReservation } from "../actions";
+import { updateReservation, cancelReservation, getAvailableSlots } from "../actions";
 import { ReservationForm } from "../ReservationForm";
 import { CancelButton } from "./CancelButton";
+import { PendingReservationReview } from "./PendingReservationReview";
 import { getClubDurations } from "@/lib/durations";
+import { buildDayGrid } from "@/lib/courtAvailability";
 
 interface EditReservationPageProps {
   params: Promise<{ club: string; id: string }>;
@@ -19,7 +21,9 @@ type ReservationDetail = {
   title: string | null;
   notes: string | null;
   status: string;
-  courts: { name: string } | null;
+  created_at: string;
+  created_by: string;
+  courts: { name: string; surface: string | null; is_indoor: boolean | null } | null;
   reservation_players: Array<{ profile_id: string }>;
 };
 
@@ -67,8 +71,8 @@ export default async function EditReservationPage({
     .from("reservations")
     .select(
       `
-      id, court_id, date, start_time, duration_minutes, type, title, notes, status,
-      courts(name),
+      id, court_id, date, start_time, duration_minutes, type, title, notes, status, created_at, created_by,
+      courts(name, surface, is_indoor),
       reservation_players(profile_id)
     `
     )
@@ -82,6 +86,43 @@ export default async function EditReservationPage({
 
   if (reservation.status === "cancelled") {
     redirect(`/${slug}/admin/reservations`);
+  }
+
+  // A pending request gets the dedicated review screen (court card +
+  // availability timeline + approve/reject) instead of the generic edit
+  // form below — this is the "official" screen a reservation-request
+  // notification links to (see notify_reservation_request_created).
+  if (reservation.status === "pending") {
+    const [{ data: playerProfile }, availableSlots] = await Promise.all([
+      supabase.from("profiles").select("full_name").eq("id", reservation.created_by).maybeSingle(),
+      getAvailableSlots(club.id, reservation.court_id, reservation.date, reservation.duration_minutes, reservationId),
+    ]);
+
+    const grid = buildDayGrid(availableSlots.openMins, availableSlots.closeMins, reservation.duration_minutes);
+
+    return (
+      <PendingReservationReview
+        clubId={club.id}
+        clubSlug={slug}
+        reservation={{
+          id: reservation.id,
+          date: reservation.date,
+          start_time: reservation.start_time,
+          duration_minutes: reservation.duration_minutes,
+          status: reservation.status,
+          created_at: reservation.created_at,
+          playerName: playerProfile?.full_name ?? null,
+        }}
+        court={{
+          id: reservation.court_id,
+          name: reservation.courts?.name ?? "—",
+          surface: reservation.courts?.surface ?? null,
+          is_indoor: reservation.courts?.is_indoor ?? null,
+        }}
+        grid={grid}
+        slots={availableSlots.slots}
+      />
+    );
   }
 
   const [courtsResult, membersResult] = await Promise.all([

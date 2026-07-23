@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, X, Clock } from "lucide-react";
+import Link from "next/link";
+import { Check, X, Clock, Eye } from "lucide-react";
 import { approvePendingReservation, rejectPendingReservation } from "./actions";
 import type { PendingActionResult } from "./actions";
 import { durationLabel } from "@/lib/durations";
@@ -39,10 +40,12 @@ function Spinner() {
 function PendingCard({
   request,
   clubId,
+  clubSlug,
   onDone,
 }: {
   request: PendingRequest;
   clubId: string;
+  clubSlug: string;
   onDone: () => void;
 }) {
   const [isApproving, startApprove] = useTransition();
@@ -85,7 +88,14 @@ function PendingCard({
             {start} – {end} · {durationLabel(request.duration_minutes)}
           </p>
         </div>
-        <div className="flex gap-2 shrink-0">
+        <div className="flex flex-wrap gap-2 shrink-0">
+          <Link
+            href={`/${clubSlug}/admin/reservations/${request.id}`}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border border-white/20 text-brand-muted hover:text-white hover:border-white/40 transition-colors"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            Revisar
+          </Link>
           <button
             onClick={handleReject}
             disabled={isPending}
@@ -114,9 +124,11 @@ function PendingCard({
 export function PendingRequestsSection({
   requests,
   clubId,
+  clubSlug,
 }: {
   requests: PendingRequest[];
   clubId: string;
+  clubSlug: string;
 }) {
   const router = useRouter();
 
@@ -137,6 +149,7 @@ export function PendingRequestsSection({
             key={req.id}
             request={req}
             clubId={clubId}
+            clubSlug={clubSlug}
             onDone={() => router.refresh()}
           />
         ))}

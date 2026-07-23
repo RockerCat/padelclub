@@ -100,20 +100,42 @@ export async function requestReservation(
     }
   }
 
-  const { error: insertError } = await supabase.from("reservations").insert({
-    club_id: clubId,
-    court_id: courtId,
-    created_by: user.id,
-    date,
-    start_time: startTime.length === 5 ? `${startTime}:00` : startTime,
-    duration_minutes: durationMinutes,
-    type: "match",
-    status: "pending",
-  });
+  const { data: reservation, error: insertError } = await supabase
+    .from("reservations")
+    .insert({
+      club_id: clubId,
+      court_id: courtId,
+      created_by: user.id,
+      date,
+      start_time: startTime.length === 5 ? `${startTime}:00` : startTime,
+      duration_minutes: durationMinutes,
+      type: "match",
+      status: "pending",
+    })
+    .select("id")
+    .single();
 
-  if (insertError) {
+  if (insertError || !reservation) {
     console.error("requestReservation:", insertError);
     return { error: "Error al enviar la solicitud. Intenta nuevamente." };
+  }
+
+  const { error: notifyError } = await supabase.rpc("notify_reservation_request_created", {
+    p_reservation_id: reservation.id,
+  });
+  // Notifying admins is best-effort — the reservation request itself already
+  // succeeded and must not be rolled back, and the player must never see a
+  // false failure, over a notification-only error. Logged with enough
+  // context to diagnose (reservation/club ids, Postgrest error code) without
+  // including player-identifying data.
+  if (notifyError) {
+    console.error("[requestReservation] notify_reservation_request_created RPC failed", {
+      reservationId: reservation.id,
+      userId: user.id,
+      clubId,
+      code: notifyError.code,
+      message: notifyError.message,
+    });
   }
 
   return { success: true };

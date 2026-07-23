@@ -7,7 +7,7 @@ export type NotificationRow = {
   type: string;
   title: string;
   message: string;
-  metadata: { destination?: string; join_request_id?: string; club_slug?: string; [key: string]: unknown } | null;
+  metadata: { destination?: string; join_request_id?: string; reservation_id?: string; club_slug?: string; [key: string]: unknown } | null;
   read_at: string | null;
   created_at: string;
   clubs: { slug: string; name: string } | null;
@@ -90,6 +90,12 @@ export function hrefForNotification(n: NotificationRow): string | null {
   }
   if (n.type === "join_request_rejected") {
     return "/clubs";
+  }
+  if (n.type === "reservation_request_created") {
+    // metadata.destination (set at creation, see 20260801000001) always
+    // resolves this directly to the review screen — this branch is only a
+    // safety net for a row that somehow lost its metadata.
+    return n.clubs ? `/${n.clubs.slug}/admin/reservations` : null;
   }
   return null;
 }

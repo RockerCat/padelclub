@@ -678,6 +678,12 @@ export interface Database {
         Args: { p_user_id: string; p_full_name: string };
         Returns: void;
       };
+      // public.notify_reservation_request_created — notifies every
+      // OWNER/ADMIN of the club about a new pending reservation request
+      notify_reservation_request_created: {
+        Args: { p_reservation_id: string };
+        Returns: void;
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

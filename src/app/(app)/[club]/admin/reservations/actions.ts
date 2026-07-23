@@ -393,13 +393,24 @@ function minsToTime(m: number): string {
   return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 }
 
+export type AvailableSlotsResult = {
+  slots: string[];
+  closed: boolean;
+  // Present whenever the day is open — lets a caller rebuild the same day
+  // grid (buildDayGrid in CourtAvailabilityTimeline) without a second
+  // operating-hours query. Existing callers that only destructure
+  // {slots, closed} are unaffected.
+  openMins?: number;
+  closeMins?: number;
+};
+
 export async function getAvailableSlots(
   clubId: string,
   courtId: string,
   date: string,
   durationMinutes: number,
   excludeReservationId?: string
-): Promise<{ slots: string[]; closed: boolean }> {
+): Promise<AvailableSlotsResult> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -469,7 +480,7 @@ export async function getAvailableSlots(
     });
   });
 
-  return { slots: available, closed: false };
+  return { slots: available, closed: false, openMins, closeMins };
 }
 
 // ─── getReservationForEdit ────────────────────────────────────────────────────
