@@ -70,11 +70,13 @@ function computeAvailability(
 ): {
   availability: Record<string, Record<string, string[]>>;
   closedDates: string[];
+  openingMinsByDate: Record<string, number>;
   closingMinsByDate: Record<string, number>;
   blockedByDate: BlockedByDate;
 } {
   const availability: Record<string, Record<string, string[]>> = {};
   const closedDates: string[] = [];
+  const openingMinsByDate: Record<string, number> = {};
   const closingMinsByDate: Record<string, number> = {};
   const blockedByDate: BlockedByDate = {};
 
@@ -95,6 +97,7 @@ function computeAvailability(
 
     const openMins = timeToMinutes(hours.opens_at);
     const closeMins = timeToMinutes(hours.closes_at);
+    openingMinsByDate[date] = openMins;
     closingMinsByDate[date] = closeMins;
 
     // Base slots: 30-min aligned, fit the minimum allowed duration before close
@@ -131,7 +134,7 @@ function computeAvailability(
     }
   }
 
-  return { availability, closedDates, closingMinsByDate, blockedByDate };
+  return { availability, closedDates, openingMinsByDate, closingMinsByDate, blockedByDate };
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -184,7 +187,7 @@ export default async function PlayerReservationsPage({
   const [courtsRes, reservationsRes, opHoursRes, myReservationsRes] = await Promise.all([
     supabase
       .from("courts")
-      .select("id, name")
+      .select("id, name, surface, is_indoor")
       .eq("club_id", club.id)
       .eq("is_active", true)
       .order("sort_order", { ascending: true }),
@@ -259,7 +262,7 @@ export default async function PlayerReservationsPage({
   const minDuration = Math.min(...allowedDurations);
 
   // ─── Compute availability ─────────────────────────────────────────────────────
-  const { availability, closedDates, closingMinsByDate, blockedByDate } = computeAvailability(
+  const { availability, closedDates, openingMinsByDate, closingMinsByDate, blockedByDate } = computeAvailability(
     courts,
     weekDates,
     opHours,
@@ -274,7 +277,7 @@ export default async function PlayerReservationsPage({
     : weekDays[0].date;
 
   return (
-    <div className="p-6 md:p-10 max-w-2xl">
+    <div className="p-6 md:p-10 max-w-4xl">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-white">Disponibilidad</h1>
         <p className="text-sm text-brand-muted mt-1">{club.name}</p>
@@ -298,6 +301,7 @@ export default async function PlayerReservationsPage({
           clubId={club.id}
           defaultSelectedDate={defaultSelectedDate}
           allowedDurations={allowedDurations}
+          openingMinsByDate={openingMinsByDate}
           closingMinsByDate={closingMinsByDate}
           blockedByDate={blockedByDate}
           myReservations={myReservations}

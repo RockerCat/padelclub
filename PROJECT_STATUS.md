@@ -108,10 +108,6 @@ Acceso a:
 * Solicitud de reservas
 * Clubes a los que pertenece
 
-Pendiente:
-
-* Rediseño completo de experiencia basada en disponibilidad
-
 ---
 
 # Estado Actual del Producto
@@ -174,6 +170,10 @@ Incluye:
 * Galería placeholder
 * CTA de acceso ("Unirme al club", con seguimiento de estado de la solicitud)
 * CTA de administración para owners
+* Header global para usuarios autenticados (branding MiPadelClub + nombre + campana de notificaciones + logout), reemplazando la navegación "Explorar clubes"
+* Visitantes sin sesión ven un header público mínimo (solo branding + "Iniciar sesión")
+* Un PLAYER que ya es miembro del club ya no es redirigido automáticamente al entrar a `/[slug]`: ve la página pública con su propio CTA ("Entrar al club →"); solo OWNER/ADMIN se redirigen a su área operativa
+* Si su solicitud de ingreso es aprobada/rechazada mientras está en la página, el estado se actualiza en vivo vía Realtime (sin recargar ni redirigir)
 
 Pendiente:
 
@@ -286,6 +286,8 @@ Incluye:
 * Disponibilidad por cancha
 * Horarios configurables
 * Duraciones configurables
+* Disponibilidad de PLAYER rediseñada (`/[club]/reservations`): tarjetas de día con indicador visual de disponibilidad, selector de duración compacto, tarjetas de cancha (con la ilustración real reutilizada de gestión de canchas) y timeline segmentado en dos franjas (Mañana / Tarde y noche) con hora explícita por bloque
+* Grid de dos columnas para las tarjetas de cancha en desktop, una columna en mobile
 
 Duraciones soportadas:
 
@@ -379,6 +381,9 @@ Incluye:
 * Campana de notificaciones (header): contador de no leídas, dropdown con las 5 más recientes, "Ver todas las notificaciones"
 * Animación de recordatorio en la campana mientras existan notificaciones sin leer (respeta `prefers-reduced-motion`)
 * Página `/notifications`: historial completo, paginado ("Cargar más", 20 por página), "Marcar todas como leídas", disponible para cualquier usuario autenticado sin depender de un club activo
+* Acciones "Aprobar"/"Rechazar" directamente desde la notificación de solicitud de ingreso (campana y `/notifications`), reutilizando las mismas server actions de Jugadores — sin lógica de aprobación duplicada; estado final ("Aprobada"/"Rechazada") visible in-place sin navegar
+* La notificación de aprobación navega al club real (`/{clubSlug}`) en vez del listado genérico `/clubs`; el destino se guarda en la metadata desde el momento de la aprobación
+* Corregido: aprobar una solicitud ya no redirige automáticamente al jugador a Reservaciones — permanece en la ruta donde estaba
 
 Pendiente:
 
@@ -400,8 +405,6 @@ Pendiente:
 ## Reservaciones
 
 * Flujo final de aprobación
-* Mejoras de disponibilidad
-* Experiencia móvil
 
 ## Club Profile
 

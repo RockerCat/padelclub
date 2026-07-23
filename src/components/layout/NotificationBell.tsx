@@ -13,6 +13,7 @@ import {
   type NotificationRow,
 } from "@/lib/notifications";
 import { markNotificationRead, markAllNotificationsRead } from "@/lib/notificationActions";
+import { JoinRequestNotificationActions } from "./JoinRequestNotificationActions";
 
 interface NotificationBellProps {
   initialCount: number;
@@ -285,15 +286,18 @@ export function NotificationBell({ initialCount, initialItems }: NotificationBel
     return () => window.removeEventListener("resize", onResize);
   }, [open]);
 
+  function markRead(n: NotificationRow) {
+    if (n.read_at) return;
+    setItems((prev) => prev.map((i) => (i.id === n.id ? { ...i, read_at: new Date().toISOString() } : i)));
+    setCount((c) => Math.max(0, c - 1));
+    startMarking(async () => {
+      await markNotificationRead(n.id);
+    });
+  }
+
   function handleItemClick(n: NotificationRow) {
     setOpen(false);
-    if (!n.read_at) {
-      setItems((prev) => prev.map((i) => (i.id === n.id ? { ...i, read_at: new Date().toISOString() } : i)));
-      setCount((c) => Math.max(0, c - 1));
-      startMarking(async () => {
-        await markNotificationRead(n.id);
-      });
-    }
+    markRead(n);
     const href = hrefForNotification(n);
     if (href) router.push(href);
   }
@@ -341,10 +345,17 @@ export function NotificationBell({ initialCount, initialItems }: NotificationBel
         <ul className="flex flex-col divide-y divide-white/5">
           {visibleItems.map((n) => (
             <li key={n.id}>
-              <button
-                type="button"
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() => handleItemClick(n)}
-                className={`w-full text-left px-4 py-3 hover:bg-white/5 transition-colors ${!n.read_at ? "bg-brand-primary/5" : ""}`}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleItemClick(n);
+                  }
+                }}
+                className={`w-full text-left px-4 py-3 hover:bg-white/5 transition-colors cursor-pointer ${!n.read_at ? "bg-brand-primary/5" : ""}`}
               >
                 <div className="flex items-start gap-2">
                   {!n.read_at && (
@@ -354,9 +365,14 @@ export function NotificationBell({ initialCount, initialItems }: NotificationBel
                     <p className="text-sm font-medium text-white">{n.title}</p>
                     <p className="text-xs text-brand-muted mt-0.5">{n.message}</p>
                     <p className="text-[11px] text-brand-muted/60 mt-1">{formatRelativeNotificationTime(n.created_at)}</p>
+                    {n.type === "join_request_created" && (
+                      <div className="mt-2">
+                        <JoinRequestNotificationActions notification={n} onResolved={() => markRead(n)} />
+                      </div>
+                    )}
                   </div>
                 </div>
-              </button>
+              </div>
             </li>
           ))}
         </ul>

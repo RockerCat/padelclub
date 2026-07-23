@@ -10,6 +10,7 @@ import {
   type NotificationRow,
 } from "@/lib/notifications";
 import { markNotificationRead, markAllNotificationsRead } from "@/lib/notificationActions";
+import { JoinRequestNotificationActions } from "@/components/layout/JoinRequestNotificationActions";
 
 interface NotificationsListClientProps {
   initialItems: NotificationRow[];
@@ -50,13 +51,16 @@ export function NotificationsListClient({ initialItems, initialHasMore, pageSize
     });
   }
 
+  function markRead(n: NotificationRow) {
+    if (n.read_at) return;
+    setItems((prev) => prev.map((i) => (i.id === n.id ? { ...i, read_at: new Date().toISOString() } : i)));
+    startMarking(async () => {
+      await markNotificationRead(n.id);
+    });
+  }
+
   function handleItemClick(n: NotificationRow) {
-    if (!n.read_at) {
-      setItems((prev) => prev.map((i) => (i.id === n.id ? { ...i, read_at: new Date().toISOString() } : i)));
-      startMarking(async () => {
-        await markNotificationRead(n.id);
-      });
-    }
+    markRead(n);
     const href = hrefForNotification(n);
     if (href) router.push(href);
   }
@@ -83,10 +87,17 @@ export function NotificationsListClient({ initialItems, initialHasMore, pageSize
         <ul className="flex flex-col gap-2">
           {items.map((n) => (
             <li key={n.id}>
-              <button
-                type="button"
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() => handleItemClick(n)}
-                className={`w-full text-left px-4 sm:px-5 py-4 rounded-2xl border border-white/10 bg-brand-surface hover:border-white/20 transition-colors ${!n.read_at ? "bg-brand-primary/5 border-brand-primary/20" : ""}`}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleItemClick(n);
+                  }
+                }}
+                className={`w-full text-left px-4 sm:px-5 py-4 rounded-2xl border border-white/10 bg-brand-surface hover:border-white/20 transition-colors cursor-pointer ${!n.read_at ? "bg-brand-primary/5 border-brand-primary/20" : ""}`}
               >
                 <div className="flex items-start gap-3">
                   <span
@@ -105,9 +116,14 @@ export function NotificationsListClient({ initialItems, initialHasMore, pageSize
                     {n.clubs && (
                       <p className="text-xs text-brand-muted/60 mt-1.5">{n.clubs.name}</p>
                     )}
+                    {n.type === "join_request_created" && (
+                      <div className="mt-2.5">
+                        <JoinRequestNotificationActions notification={n} onResolved={() => markRead(n)} />
+                      </div>
+                    )}
                   </div>
                 </div>
-              </button>
+              </div>
             </li>
           ))}
         </ul>

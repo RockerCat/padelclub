@@ -81,7 +81,14 @@ export function hrefForNotification(n: NotificationRow): string | null {
   if (n.type === "join_request_created") {
     return n.clubs ? `/${n.clubs.slug}/admin/players` : null;
   }
-  if (n.type === "join_request_approved" || n.type === "join_request_rejected") {
+  if (n.type === "join_request_approved") {
+    // New rows carry metadata.destination (caught above). Historical rows
+    // predating that still resolve correctly via the clubs(slug,name) join —
+    // club_id was always set on this notification type, so this is never a
+    // name/text-based guess. Only a genuinely missing club falls back.
+    return n.clubs ? `/${n.clubs.slug}` : "/clubs";
+  }
+  if (n.type === "join_request_rejected") {
     return "/clubs";
   }
   return null;

@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   MapPin, MessageCircle, ExternalLink,
   LayoutGrid, Clock, Camera, Trophy, CalendarDays, Navigation, Users, Video,
 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import { ClubHero, type ClubHeroClub } from "./ClubHero";
 import { GalleryLightbox } from "./GalleryLightbox";
 import { PublicNewsCard } from "./PublicNewsCard";
@@ -127,9 +128,118 @@ function InfoRow({ Icon, label, value, badge, badgeAmber = false }: {
   );
 }
 
+function CtaBlock({ club, p, isPublic, isAdmin, viewerContext, autoJoin, compact = false }: {
+  club: ClubPublicViewClub; p: string; isPublic: boolean; isAdmin: boolean;
+  viewerContext: ViewerContext; autoJoin: boolean; compact?: boolean;
+}) {
+  if (viewerContext.kind === "member") {
+    return (
+      <Link
+        href={getClubEntryPath(club.slug, viewerContext.role)}
+        className={`inline-flex items-center justify-center rounded-xl text-sm font-semibold transition-colors ${compact ? "px-5 py-2.5" : "px-7 py-3"}`}
+        style={{ backgroundColor: `${p}22`, color: p, border: `1px solid ${p}44` }}
+      >
+        {isAdmin ? "Administrar club →" : "Entrar al club →"}
+      </Link>
+    );
+  }
+  if (viewerContext.kind === "previewMember") {
+    const label =
+      viewerContext.role === "OWNER" ? "Ya eres propietario"
+      : viewerContext.role === "ADMIN" ? "Ya perteneces a este club"
+      : "Ya eres miembro";
+    return (
+      <span
+        className={`inline-flex items-center justify-center rounded-xl text-sm font-semibold cursor-default select-none ${compact ? "px-5 py-2.5" : "px-7 py-3"}`}
+        style={{ backgroundColor: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.45)", border: "1px solid rgba(255,255,255,0.1)" }}
+      >
+        {label}
+      </span>
+    );
+  }
+  if (viewerContext.kind === "visitor") {
+    // ?intent=join-club rides inside the returnTo path itself (as its own
+    // query string), so login/signup/callback only ever need to carry a
+    // single ?next= — no separate intent param to lose along the way.
+    const joinReturnTo = encodeURIComponent(`/${club.slug}?intent=join-club`);
+    return (
+      <div className={`flex ${compact ? "flex-row gap-2" : "flex-col sm:flex-row gap-2.5"}`}>
+        <Link
+          href={`/auth/signup?next=${joinReturnTo}`}
+          className={`inline-flex items-center justify-center rounded-xl bg-brand-primary text-brand-bg text-sm font-semibold hover:bg-brand-primary/90 transition-colors ${compact ? "px-4 py-2.5" : "px-7 py-3"}`}
+        >
+          {isPublic ? "Unirme al club" : "Solicitar acceso"}
+        </Link>
+        <Link
+          href={`/auth/login?next=${joinReturnTo}`}
+          className={`inline-flex items-center justify-center rounded-xl border border-white/15 text-white text-sm font-medium hover:bg-white/5 transition-colors ${compact ? "px-4 py-2.5" : "px-7 py-3"}`}
+        >
+          Entrar
+        </Link>
+      </div>
+    );
+  }
+  return (
+    <RequestAccessButton
+      clubId={club.id}
+      clubSlug={club.slug}
+      isPublic={isPublic}
+      requestStatus={viewerContext.requestStatus}
+      autoSubmit={autoJoin && viewerContext.requestStatus === "none"}
+      className={compact ? "!px-4 !py-2.5" : "w-full sm:w-auto"}
+    />
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function ClubPublicView({ club, courts, schedule, playerCount, news, viewerContext, autoJoin = false, topBar }: ClubPublicViewProps) {
+export function ClubPublicView({ club, courts, schedule, playerCount, news, viewerContext: initialViewerContext, autoJoin = false, topBar }: ClubPublicViewProps) {
+  // Local override so an approval/rejection landing while this exact tab is
+  // open updates the CTA in place — never a navigation, never a reload.
+  // Only ever moves away from the server-computed initialViewerContext, and
+  // only for the one transition this page can observe live (pendingRequest →
+  // member/rejected); a fresh SSR render already reflects reality otherwise.
+  const [liveViewerContext, setLiveViewerContext] = useState<ViewerContext | null>(null);
+  const viewerContext = liveViewerContext ?? initialViewerContext;
+
+  useEffect(() => {
+    // Nothing to watch for a visitor or an already-resolved member — only a
+    // still-pending requester can have their own status flip while they're
+    // sitting on this exact page.
+    if (initialViewerContext.kind !== "pendingRequest") return;
+
+    const supabase = createClient();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
+
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (cancelled || !user) return;
+      channel = supabase
+        .channel(`club_join_request:${club.id}:${user.id}`)
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "club_join_requests", filter: `profile_id=eq.${user.id}` },
+          (payload) => {
+            const row = payload.new as { club_id: string; status: string };
+            if (row.club_id !== club.id) return;
+            if (row.status === "approved") {
+              // approve_join_request always assigns role PLAYER — see
+              // supabase/migrations/20260727000002_join_requests_status.sql.
+              setLiveViewerContext({ kind: "member", role: "PLAYER" });
+            } else if (row.status === "rejected") {
+              setLiveViewerContext({ kind: "pendingRequest", requestStatus: "rejected" });
+            }
+          }
+        )
+        .subscribe();
+    });
+
+    return () => {
+      cancelled = true;
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [initialViewerContext.kind, club.id]);
+
   const p            = club.primary_color;
   const isPublic     = club.visibility === "public";
   const locFull      = [club.city, club.state, club.country].filter(Boolean).join(", ");
@@ -155,66 +265,6 @@ export function ClubPublicView({ club, courts, schedule, playerCount, news, view
       ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([club.address, locFull].filter(Boolean).join(", "))}`
       : null;
 
-  function CtaBlock({ compact = false }: { compact?: boolean }) {
-    if (viewerContext.kind === "member") {
-      return (
-        <Link
-          href={getClubEntryPath(club.slug, viewerContext.role)}
-          className={`inline-flex items-center justify-center rounded-xl text-sm font-semibold transition-colors ${compact ? "px-5 py-2.5" : "px-7 py-3"}`}
-          style={{ backgroundColor: `${p}22`, color: p, border: `1px solid ${p}44` }}
-        >
-          {isAdmin ? "Administrar club →" : "Entrar al club →"}
-        </Link>
-      );
-    }
-    if (viewerContext.kind === "previewMember") {
-      const label =
-        viewerContext.role === "OWNER" ? "Ya eres propietario"
-        : viewerContext.role === "ADMIN" ? "Ya perteneces a este club"
-        : "Ya eres miembro";
-      return (
-        <span
-          className={`inline-flex items-center justify-center rounded-xl text-sm font-semibold cursor-default select-none ${compact ? "px-5 py-2.5" : "px-7 py-3"}`}
-          style={{ backgroundColor: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.45)", border: "1px solid rgba(255,255,255,0.1)" }}
-        >
-          {label}
-        </span>
-      );
-    }
-    if (viewerContext.kind === "visitor") {
-      // ?intent=join-club rides inside the returnTo path itself (as its own
-      // query string), so login/signup/callback only ever need to carry a
-      // single ?next= — no separate intent param to lose along the way.
-      const joinReturnTo = encodeURIComponent(`/${club.slug}?intent=join-club`);
-      return (
-        <div className={`flex ${compact ? "flex-row gap-2" : "flex-col sm:flex-row gap-2.5"}`}>
-          <Link
-            href={`/auth/signup?next=${joinReturnTo}`}
-            className={`inline-flex items-center justify-center rounded-xl bg-brand-primary text-brand-bg text-sm font-semibold hover:bg-brand-primary/90 transition-colors ${compact ? "px-4 py-2.5" : "px-7 py-3"}`}
-          >
-            {isPublic ? "Unirme al club" : "Solicitar acceso"}
-          </Link>
-          <Link
-            href={`/auth/login?next=${joinReturnTo}`}
-            className={`inline-flex items-center justify-center rounded-xl border border-white/15 text-white text-sm font-medium hover:bg-white/5 transition-colors ${compact ? "px-4 py-2.5" : "px-7 py-3"}`}
-          >
-            Entrar
-          </Link>
-        </div>
-      );
-    }
-    return (
-      <RequestAccessButton
-        clubId={club.id}
-        clubSlug={club.slug}
-        isPublic={isPublic}
-        requestStatus={viewerContext.requestStatus}
-        autoSubmit={autoJoin && viewerContext.requestStatus === "none"}
-        className={compact ? "!px-4 !py-2.5" : "w-full sm:w-auto"}
-      />
-    );
-  }
-
   const showBottomCta = viewerContext.kind === "visitor" || viewerContext.kind === "pendingRequest";
 
   return (
@@ -223,7 +273,7 @@ export function ClubPublicView({ club, courts, schedule, playerCount, news, view
       {topBar}
 
       {/* ── Hero ────────────────────────────────────────────────────────────── */}
-      <ClubHero club={club} variant="page" actions={<CtaBlock compact />} showSocial />
+      <ClubHero club={club} variant="page" actions={<CtaBlock club={club} p={p} isPublic={isPublic} isAdmin={isAdmin} viewerContext={viewerContext} autoJoin={autoJoin} compact />} showSocial />
 
       {/* ── Stats row ────────────────────────────────────────────────────────── */}
       <div className="max-w-5xl mx-auto px-5 pb-6">
@@ -403,7 +453,7 @@ export function ClubPublicView({ club, courts, schedule, playerCount, news, view
                 <p className="text-sm text-brand-muted mb-4">
                   {isPublic ? "Únete al club y comienza a reservar canchas." : "Solicita acceso. Un administrador revisará tu solicitud."}
                 </p>
-                <CtaBlock />
+                <CtaBlock club={club} p={p} isPublic={isPublic} isAdmin={isAdmin} viewerContext={viewerContext} autoJoin={autoJoin} />
               </div>
             )}
 
@@ -534,7 +584,7 @@ export function ClubPublicView({ club, courts, schedule, playerCount, news, view
                 <p className="text-sm text-brand-muted mb-4">
                   {isPublic ? "Únete al club y comienza a reservar canchas." : "Solicita acceso. Un administrador revisará tu solicitud."}
                 </p>
-                <CtaBlock />
+                <CtaBlock club={club} p={p} isPublic={isPublic} isAdmin={isAdmin} viewerContext={viewerContext} autoJoin={autoJoin} />
               </div>
             )}
 

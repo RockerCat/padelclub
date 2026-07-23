@@ -352,6 +352,22 @@ Operational workflows remain important, but club identity should always be visib
 
 ---
 
+## Notifications & Live-Update Principles
+
+There is one notification system: bell, unread badge, dropdown and `/notifications`.
+
+Reuse it everywhere a user can see notifications, including the public club page (`/[slug]`) for authenticated visitors.
+
+Never duplicate notification queries, Realtime subscriptions, or read/unread logic per surface.
+
+Actions triggerable from a notification (e.g. approving a join request) must reuse the same server action already used elsewhere (e.g. the Jugadores screen) — never a second implementation of the same business rule.
+
+A member should never be force-redirected away from a page they are actively viewing because of a background change (an admin action, a Realtime event). Prefer updating the current view in place; reserve redirects for fresh navigations.
+
+A PLAYER who already belongs to a club is not redirected away from that club's public page (`/[slug]`) — only OWNER/ADMIN are sent to their operational area. Players choose when to continue into Reservations.
+
+---
+
 ## Documentation Workflow
 
 This repository keeps two living documents:
