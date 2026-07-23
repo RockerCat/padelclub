@@ -366,7 +366,7 @@ export function OnboardingWizard({
               <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#082735] p-6">
                 <p className="text-base font-bold text-white">¿Deseas continuar más tarde?</p>
                 <p className="text-sm text-brand-muted/70 mt-2">
-                  Puedes empezar a usar PadelClub ahora mismo.
+                  Puedes empezar a usar MiPadelClub ahora mismo.
                 </p>
                 <p className="text-sm text-brand-muted/70 mt-2">
                   La información que estás omitiendo podrá completarse más adelante desde el

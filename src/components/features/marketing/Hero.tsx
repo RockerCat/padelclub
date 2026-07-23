@@ -147,7 +147,7 @@ function ProductMockup() {
 }
 
 const WA_URL =
-  "https://wa.me/573173672033?text=Hola%2C%20quiero%20conocer%20m%C3%A1s%20sobre%20PadelClub%20para%20mi%20club%20de%20p%C3%A1del.";
+  "https://wa.me/573173672033?text=Hola%2C%20quiero%20conocer%20m%C3%A1s%20sobre%20MiPadelClub%20para%20mi%20club%20de%20p%C3%A1del.";
 
 // ─── Feature highlights ───────────────────────────────────────────────────────
 

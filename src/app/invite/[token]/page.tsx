@@ -96,7 +96,7 @@ function Layout({
           <div className="text-center mb-8">
             <Link href="/">
               <span className="text-3xl font-black tracking-tight text-white">
-                Padel<span className="text-brand-primary">Club</span>
+                <span className="text-brand-primary" style={{ fontSize: "0.78em", letterSpacing: "-0.04em" }}>Mi</span>Padel<span className="text-brand-primary">Club</span>
               </span>
             </Link>
           </div>
@@ -106,7 +106,7 @@ function Layout({
 
         {branding && (
           <p className="text-xs text-brand-muted/40 text-center mt-6">
-            Powered by PadelClub
+            Powered by MiPadelClub
           </p>
         )}
       </div>

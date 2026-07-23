@@ -48,7 +48,7 @@ export function RequestAccessButton({
       return (
         <div className="w-full rounded-xl border border-white/10 bg-white/5 px-5 py-4 text-sm text-brand-muted text-center flex flex-col gap-1">
           <span className="text-white font-medium">¡Casi listo!</span>
-          <span>Próximamente podrás unirte directamente desde PadelClub.</span>
+          <span>Próximamente podrás unirte directamente desde MiPadelClub.</span>
           {whatsapp && (
             <span>
               Por ahora contacta al club por{" "}

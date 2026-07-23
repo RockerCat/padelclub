@@ -101,7 +101,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
           <div className="text-center mb-8">
             <Link href="/" className="inline-block">
               <span className="text-3xl font-black tracking-tight text-white">
-                Padel<span className="text-brand-primary">Club</span>
+                <span className="text-brand-primary" style={{ fontSize: "0.78em", letterSpacing: "-0.04em" }}>Mi</span>Padel<span className="text-brand-primary">Club</span>
               </span>
             </Link>
             <p className="text-brand-muted text-sm mt-2">Crea tu cuenta</p>
@@ -112,7 +112,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
 
         {branding && (
           <p className="text-xs text-brand-muted/40 text-center mt-6">
-            Powered by PadelClub
+            Powered by MiPadelClub
           </p>
         )}
       </div>

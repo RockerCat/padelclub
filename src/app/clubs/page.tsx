@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { isPlatformAdmin } from "@/lib/platformAdmin";
 import { Badge } from "@/components/ui";
 import { getClubEntryPath } from "@/lib/utils/navigation";
-import { LogOut, Plus, Compass, CheckCircle2 } from "lucide-react";
+import { LogOut, Plus, Compass, CheckCircle2, ShieldCheck } from "lucide-react";
 import { ExploreSection } from "./ExploreSection";
 import type { DirectoryClub, MemberInfo } from "./ExploreSection";
 
@@ -41,9 +42,10 @@ export default async function ClubsPage({
 
   let memberships: MembershipRow[] = [];
   let lastClubId: string | null = null;
+  let platformAdmin = false;
 
   if (user) {
-    const [membershipsResult, profileResult] = await Promise.all([
+    const [membershipsResult, profileResult, isAdmin] = await Promise.all([
       supabase
         .from("club_members")
         .select("role, clubs!inner(id, name, slug, logo_url, primary_color)")
@@ -55,9 +57,11 @@ export default async function ClubsPage({
         .select("last_club_id")
         .eq("id", user.id)
         .single(),
+      isPlatformAdmin(),
     ]);
     memberships = (membershipsResult.data ?? []) as unknown as MembershipRow[];
     lastClubId = profileResult.data?.last_club_id ?? null;
+    platformAdmin = isAdmin;
   }
 
   const hasClubs      = memberships.length > 0;
@@ -91,28 +95,39 @@ export default async function ClubsPage({
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
           <Link href="/">
             <span className="text-lg font-black tracking-tight text-white">
-              Padel<span className="text-brand-primary">Club</span>
+              <span className="text-brand-primary" style={{ fontSize: "0.78em", letterSpacing: "-0.04em" }}>Mi</span>Padel<span className="text-brand-primary">Club</span>
             </span>
           </Link>
 
           {user ? (
-            <form
-              action={async () => {
-                "use server";
-                const { createClient: createServerClient } = await import("@/lib/supabase/server");
-                const sb = await createServerClient();
-                await sb.auth.signOut();
-                redirect("/");
-              }}
-            >
-              <button
-                type="submit"
-                className="inline-flex items-center gap-2 text-sm text-brand-muted hover:text-white transition-colors"
+            <div className="flex items-center gap-4">
+              {platformAdmin && (
+                <Link
+                  href="/platform"
+                  className="inline-flex items-center gap-1.5 text-sm text-brand-muted hover:text-white transition-colors"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  Platform Admin
+                </Link>
+              )}
+              <form
+                action={async () => {
+                  "use server";
+                  const { createClient: createServerClient } = await import("@/lib/supabase/server");
+                  const sb = await createServerClient();
+                  await sb.auth.signOut();
+                  redirect("/");
+                }}
               >
-                <LogOut className="w-4 h-4" />
-                Salir
-              </button>
-            </form>
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 text-sm text-brand-muted hover:text-white transition-colors"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Salir
+                </button>
+              </form>
+            </div>
           ) : (
             <div className="flex items-center gap-2">
               <Link
@@ -240,7 +255,7 @@ export default async function ClubsPage({
                     </div>
 
                     <div>
-                      <p className="text-base font-semibold text-white mb-1.5">Bienvenido a PadelClub</p>
+                      <p className="text-base font-semibold text-white mb-1.5">Bienvenido a MiPadelClub</p>
                       <p className="text-sm text-brand-muted">Todavía no perteneces a ningún club.</p>
                     </div>
 

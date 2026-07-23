@@ -15,7 +15,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const supabase = await createClient();
 
   const { data: club } = await supabase.from("clubs").select("id").eq("slug", slug).eq("is_active", true).single();
-  if (!club) return { title: "Noticia no encontrada | PadelClub" };
+  if (!club) return { title: "Noticia no encontrada | MiPadelClub" };
 
   const { data: news } = await supabase
     .from("club_news")
@@ -23,10 +23,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     .eq("id", newsId)
     .eq("club_id", club.id)
     .single();
-  if (!news) return { title: "Noticia no encontrada | PadelClub" };
+  if (!news) return { title: "Noticia no encontrada | MiPadelClub" };
 
   return {
-    title: `${news.title} | PadelClub`,
+    title: `${news.title} | MiPadelClub`,
     description: news.content.slice(0, 150),
   };
 }

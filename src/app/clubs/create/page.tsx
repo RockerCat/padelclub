@@ -20,7 +20,7 @@ export default async function CreateClubPage() {
         <div className="text-center mb-8">
           <Link href="/">
             <span className="text-3xl font-black tracking-tight text-white">
-              Padel<span className="text-brand-primary">Club</span>
+              <span className="text-brand-primary" style={{ fontSize: "0.78em", letterSpacing: "-0.04em" }}>Mi</span>Padel<span className="text-brand-primary">Club</span>
             </span>
           </Link>
           <p className="text-brand-muted text-sm mt-2">Nuevo club</p>

@@ -431,7 +431,7 @@ export function ClubPublicView({ club, courts, schedule, playerCount, news, view
                     </div>
                   </div>
                 )}
-                <InfoRow Icon={CalendarDays} label="Reservas" value="Online vía PadelClub" />
+                <InfoRow Icon={CalendarDays} label="Reservas" value="Online vía MiPadelClub" />
                 <InfoRow Icon={Trophy} label="Ranking" value="En construcción" badge="Pronto" badgeAmber />
               </div>
             </div>

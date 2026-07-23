@@ -8,7 +8,7 @@ export default function NotFound() {
         {/* Logo */}
         <Link href="/" className="inline-block mb-10">
           <span className="text-3xl font-black tracking-tight text-white">
-            Padel<span className="text-brand-primary">Club</span>
+            <span className="text-brand-primary" style={{ fontSize: "0.78em", letterSpacing: "-0.04em" }}>Mi</span>Padel<span className="text-brand-primary">Club</span>
           </span>
         </Link>
 

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getClubEntryPath } from "@/lib/utils/navigation";
+import { checkProfileIsPlatformAdmin } from "@/lib/platformAdminQuery";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Button, Card, CardHeader, CardContent, Input } from "@/components/ui";
@@ -62,6 +63,14 @@ export function LoginForm() {
       // Get the logged-in user's id to determine destination
       const { data: { user } } = await supabase.auth.getUser();
 
+      // Platform admins land on /platform instead of the club selector —
+      // this is orthogonal to club_members.role, so it takes priority over
+      // (and skips) the membership-based branching below.
+      if (await checkProfileIsPlatformAdmin(supabase, user!.id)) {
+        router.push("/platform");
+        return;
+      }
+
       const { data: memberships } = await supabase
         .from("club_members")
         .select("role, clubs!inner(id, slug)")
@@ -96,7 +105,7 @@ export function LoginForm() {
       <div className="text-center mb-8">
         <Link href="/" className="inline-block">
           <span className="text-3xl font-black tracking-tight text-white">
-            Padel<span className="text-brand-primary">Club</span>
+            <span className="text-brand-primary" style={{ fontSize: "0.78em", letterSpacing: "-0.04em" }}>Mi</span>Padel<span className="text-brand-primary">Club</span>
           </span>
         </Link>
         <p className="text-brand-muted text-sm mt-2">Accede a tu club</p>

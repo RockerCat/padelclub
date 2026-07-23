@@ -112,6 +112,7 @@ export interface Database {
           avatar_url: string | null;
           phone: string | null;
           last_club_id: string | null;
+          is_platform_admin: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -121,6 +122,7 @@ export interface Database {
           avatar_url?: string | null;
           phone?: string | null;
           last_club_id?: string | null;
+          is_platform_admin?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -129,6 +131,7 @@ export interface Database {
           avatar_url?: string | null;
           phone?: string | null;
           last_club_id?: string | null;
+          is_platform_admin?: boolean;
           updated_at?: string;
         };
         Relationships: [
@@ -511,6 +514,58 @@ export interface Database {
       count_active_players: {
         Args: { p_club_id: string };
         Returns: number;
+      };
+      // public.get_platform_clubs_overview — platform-admin-gated global
+      // clubs listing (all clubs, any owner, bypasses RLS internally)
+      get_platform_clubs_overview: {
+        Args: Record<string, never>;
+        Returns: Array<{
+          id: string;
+          name: string;
+          slug: string;
+          logo_url: string | null;
+          visibility: string;
+          is_active: boolean;
+          created_at: string;
+          owner_name: string | null;
+          owner_email: string | null;
+          player_count: number;
+          court_count: number;
+        }>;
+      };
+      // public.get_platform_club_detail — single-club stats for the
+      // platform-admin club detail screen
+      get_platform_club_detail: {
+        Args: { p_club_id: string };
+        Returns: Array<{
+          id: string;
+          name: string;
+          slug: string;
+          logo_url: string | null;
+          visibility: string;
+          is_active: boolean;
+          created_at: string;
+          owner_name: string | null;
+          owner_email: string | null;
+          admin_count: number;
+          player_count: number;
+          reservation_count: number;
+          news_count: number;
+          court_count: number;
+        }>;
+      };
+      // public.get_platform_users_overview — platform-admin-gated global
+      // users listing with their club memberships/roles
+      get_platform_users_overview: {
+        Args: Record<string, never>;
+        Returns: Array<{
+          id: string;
+          full_name: string | null;
+          email: string | null;
+          is_platform_admin: boolean;
+          created_at: string;
+          memberships: Array<{ club_name: string; club_slug: string; role: string }>;
+        }>;
       };
     };
     Enums: Record<string, never>;

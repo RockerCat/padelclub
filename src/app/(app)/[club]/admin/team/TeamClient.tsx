@@ -187,7 +187,7 @@ export function TeamClient({
       <ConfirmDialog
         open={confirmTarget != null}
         title="Remover del equipo"
-        message={`${confirmTarget?.profiles?.full_name ?? "Este administrador"} dejará de formar parte del equipo administrativo del club.\n\nPodrá seguir utilizando su cuenta personal en PadelClub, pero perderá acceso administrativo a este club.`}
+        message={`${confirmTarget?.profiles?.full_name ?? "Este administrador"} dejará de formar parte del equipo administrativo del club.\n\nPodrá seguir utilizando su cuenta personal en MiPadelClub, pero perderá acceso administrativo a este club.`}
         confirmLabel="Remover"
         confirmVariant="danger"
         loading={removing}

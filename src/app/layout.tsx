@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PadelClub",
+  title: "MiPadelClub",
   description: "Tu club. Tu comunidad. Tu juego.",
 };
 

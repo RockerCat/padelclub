@@ -18,13 +18,14 @@ function Brand() {
     <Link href="/" className="flex items-center gap-2.5 lg:gap-3 shrink-0">
       <Image
         src="/branding/logo-icon.png"
-        alt="PadelClub"
+        alt="MiPadelClub"
         width={48}
         height={48}
         className="h-9 w-9 sm:h-10 sm:w-10 lg:h-12 lg:w-12 object-contain"
         priority
       />
       <span className="text-xl sm:text-2xl lg:text-3xl font-extrabold tracking-tight leading-none select-none">
+        <span className="text-brand-primary" style={{ fontSize: "0.78em", letterSpacing: "-0.04em" }}>Mi</span>
         <span className="text-white">Padel</span>
         <span className="text-brand-primary">Club</span>
       </span>

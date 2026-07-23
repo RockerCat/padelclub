@@ -13,8 +13,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const supabase = await createClient();
   const { data } = await supabase.from("clubs").select("name").eq("slug", slug).eq("is_active", true).single();
-  if (!data) return { title: "Club no encontrado | PadelClub" };
-  return { title: `Noticias de ${data.name} | PadelClub` };
+  if (!data) return { title: "Club no encontrado | MiPadelClub" };
+  return { title: `Noticias de ${data.name} | MiPadelClub` };
 }
 
 export default async function ClubNewsListPage({ params }: Props) {
