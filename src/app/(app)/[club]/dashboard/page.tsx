@@ -187,22 +187,22 @@ function CourtOccupancyGrid({
       : columnCount === 2
       ? "grid-cols-1 lg:grid-cols-2"
       : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3";
-  const illustrationWidthClass = columnCount === 3 ? "w-[200px]" : "w-[260px]";
+  // Desktop-only: illustration column width + the 2-col grid template that
+  // places it. Mobile stays a single column, so these classes are inert
+  // there — the card's own grid falls back to its default 1-col stacking.
+  const courtCardColsClass = columnCount === 3 ? "sm:grid-cols-[200px_1fr]" : "sm:grid-cols-[260px_1fr]";
+  const illustrationSmWidthClass = columnCount === 3 ? "sm:w-[200px]" : "sm:w-[260px]";
 
   return (
     <div className={`grid ${gridClass} gap-4`}>
       {items.map((c) => (
         <div
           key={c.id}
-          className="bg-brand-surface border border-white/10 rounded-2xl p-4 flex gap-4"
+          className={`bg-brand-surface border border-white/10 rounded-2xl p-4 grid grid-cols-1 ${courtCardColsClass} gap-x-4 gap-y-4 sm:gap-y-0`}
         >
-          <div className={`relative shrink-0 ${illustrationWidthClass}`}>
-            <div className="absolute top-1 left-1 z-10 flex gap-1.5" />
-            <CourtIllustration surface={c.surface} className="w-full" />
-          </div>
-
-          <div className="flex-1 min-w-0 flex flex-col justify-center">
-            <p className="text-base font-semibold text-white uppercase tracking-wide truncate">
+          {/* Nombre, superficie, % ocupación, barra — mobile: 1º · desktop: columna derecha, fila 1 */}
+          <div className="min-w-0 flex flex-col justify-center sm:col-start-2 sm:row-start-1">
+            <p className="text-base font-semibold text-white uppercase tracking-wide break-words sm:truncate">
               {c.name}
             </p>
             <p className="text-xs text-brand-muted/60 mt-0.5">{getSurfaceLabel(c.surface)}</p>
@@ -222,25 +222,34 @@ function CourtOccupancyGrid({
                 />
               </div>
             </div>
+          </div>
 
-            <div className="mt-3 pt-3 border-t border-white/[0.06]">
-              <p className="text-[11px] text-brand-muted mb-1">Próximo turno:</p>
-              {c.nextSlot ? (
-                <div className="flex items-start gap-1.5">
-                  <Clock className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: c.color }} />
-                  <div>
-                    <p className="text-sm font-semibold text-white leading-tight">
-                      {c.nextSlot.startTime} - {c.nextSlot.endTime}
-                    </p>
-                    <p className="text-sm font-semibold text-white leading-tight">
-                      {c.nextSlot.playerName}
-                    </p>
-                  </div>
+          {/* Ilustración — mobile: 2º, ancho completo con tope · desktop: columna izquierda, ambas filas */}
+          <div
+            className={`relative w-full max-w-[240px] mx-auto shrink-0 sm:mx-0 sm:max-w-none ${illustrationSmWidthClass} sm:col-start-1 sm:row-start-1 sm:row-span-2 sm:self-center`}
+          >
+            <div className="absolute top-1 left-1 z-10 flex gap-1.5" />
+            <CourtIllustration surface={c.surface} className="w-full" />
+          </div>
+
+          {/* Próximo turno — mobile: 3º · desktop: columna derecha, fila 2 */}
+          <div className="min-w-0 pt-3 border-t border-white/[0.06] sm:col-start-2 sm:row-start-2">
+            <p className="text-[11px] text-brand-muted mb-1">Próximo turno:</p>
+            {c.nextSlot ? (
+              <div className="flex items-start gap-1.5">
+                <Clock className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: c.color }} />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white leading-tight whitespace-nowrap">
+                    {c.nextSlot.startTime} - {c.nextSlot.endTime}
+                  </p>
+                  <p className="text-sm font-semibold text-white leading-tight line-clamp-2">
+                    {c.nextSlot.playerName}
+                  </p>
                 </div>
-              ) : (
-                <p className="text-sm text-brand-muted/70">{noSlotLabel}</p>
-              )}
-            </div>
+              </div>
+            ) : (
+              <p className="text-sm text-brand-muted/70">{noSlotLabel}</p>
+            )}
           </div>
         </div>
       ))}
