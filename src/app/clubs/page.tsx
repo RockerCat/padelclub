@@ -92,22 +92,22 @@ export default async function ClubsPage({
 
       {/* ── Top bar ─────────────────────────────────────────────────────────── */}
       <div className="border-b border-white/10 bg-brand-bg/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
-          <Link href="/">
-            <span className="text-lg font-black tracking-tight text-white">
+        <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
+          <Link href="/" className="shrink-0">
+            <span className="text-lg font-black tracking-tight text-white whitespace-nowrap">
               <span className="text-brand-primary" style={{ fontSize: "0.78em", letterSpacing: "-0.04em" }}>Mi</span>Padel<span className="text-brand-primary">Club</span>
             </span>
           </Link>
 
           {user ? (
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 sm:gap-4 min-w-0 shrink-0">
               {platformAdmin && (
                 <Link
                   href="/platform"
-                  className="inline-flex items-center gap-1.5 text-sm text-brand-muted hover:text-white transition-colors"
+                  className="inline-flex items-center gap-1.5 text-sm text-brand-muted hover:text-white transition-colors shrink-0"
                 >
-                  <ShieldCheck className="w-4 h-4" />
-                  Platform Admin
+                  <ShieldCheck className="w-4 h-4 shrink-0" />
+                  <span className="hidden sm:inline">Platform Admin</span>
                 </Link>
               )}
               <form
@@ -118,12 +118,13 @@ export default async function ClubsPage({
                   await sb.auth.signOut();
                   redirect("/");
                 }}
+                className="shrink-0"
               >
                 <button
                   type="submit"
-                  className="inline-flex items-center gap-2 text-sm text-brand-muted hover:text-white transition-colors"
+                  className="inline-flex items-center gap-2 text-sm text-brand-muted hover:text-white transition-colors whitespace-nowrap"
                 >
-                  <LogOut className="w-4 h-4" />
+                  <LogOut className="w-4 h-4 shrink-0" />
                   Salir
                 </button>
               </form>
@@ -210,7 +211,7 @@ export default async function ClubsPage({
 
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-sm font-semibold text-white truncate">{club.name}</span>
+                                <span className="text-sm font-semibold text-white truncate min-w-0">{club.name}</span>
                                 {isLast && (
                                   <span className="text-[10px] text-brand-muted bg-white/5 border border-white/10 px-1.5 py-0.5 rounded-md shrink-0">
                                     Último usado

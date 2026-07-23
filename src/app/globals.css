@@ -15,6 +15,10 @@ html,
 body {
   background-color: #001A24;
   color: #ffffff;
+  /* Safety net only — the actual overflow source must be fixed at the
+     element level. Doesn't clip position:fixed modals (they're sized to
+     the viewport already) and doesn't disable pinch-to-zoom. */
+  overflow-x: hidden;
 }
 
 @keyframes fade-in-up {
