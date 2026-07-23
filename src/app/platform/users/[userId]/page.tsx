@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Lock } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui";
+import { UserActionsPanel } from "./UserActionsPanel";
 
 interface PageProps {
   params: Promise<{ userId: string }>;
@@ -22,15 +23,26 @@ function formatDate(iso: string) {
   });
 }
 
+function formatDateTime(iso: string) {
+  return new Date(iso).toLocaleString("es-MX", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export default async function PlatformUserDetailPage({ params }: PageProps) {
   const { userId } = await params;
   const supabase = await createClient();
 
-  // No dedicated single-user RPC yet — the overview already carries
-  // everything this placeholder needs. A richer detail (activity,
-  // actions) is a later story, per the spec for this screen.
-  const { data, error } = await supabase.rpc("get_platform_users_overview");
-  const user = data?.find((u) => u.id === userId);
+  const [{ data: rows, error }, { data: currentUser }] = await Promise.all([
+    supabase.rpc("get_platform_user_detail", { p_user_id: userId }),
+    supabase.auth.getUser(),
+  ]);
+
+  const user = rows?.[0];
 
   if (!user && !error) notFound();
 
@@ -52,6 +64,7 @@ export default async function PlatformUserDetailPage({ params }: PageProps) {
 
       {user && (
         <>
+          {/* ── Información general ─────────────────────────────────── */}
           <div className="bg-brand-surface border border-white/10 rounded-2xl p-6 mb-6">
             <h1 className="text-xl font-bold text-white">{user.full_name ?? "Sin nombre"}</h1>
             <p className="text-sm text-brand-muted">{user.email ?? "—"}</p>
@@ -59,12 +72,32 @@ export default async function PlatformUserDetailPage({ params }: PageProps) {
               <Badge variant={user.is_platform_admin ? "primary" : "outline"} size="sm">
                 {user.is_platform_admin ? "Platform Admin" : "Usuario"}
               </Badge>
-              <span className="text-xs text-brand-muted">
-                Registrado el {formatDate(user.created_at)}
-              </span>
+              <Badge variant={user.is_banned ? "danger" : "success"} size="sm">
+                {user.is_banned ? "Suspendido" : "Activo"}
+              </Badge>
             </div>
           </div>
 
+          {/* ── Información adicional ───────────────────────────────── */}
+          <div className="bg-brand-surface border border-white/10 rounded-2xl p-6 mb-6">
+            <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-3">
+              Información adicional
+            </h2>
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+              <div>
+                <dt className="text-brand-muted">Fecha de registro</dt>
+                <dd className="text-white">{formatDate(user.created_at)}</dd>
+              </div>
+              <div>
+                <dt className="text-brand-muted">Último inicio de sesión</dt>
+                <dd className="text-white">
+                  {user.last_sign_in_at ? formatDateTime(user.last_sign_in_at) : "Nunca"}
+                </dd>
+              </div>
+            </dl>
+          </div>
+
+          {/* ── Clubes y roles ───────────────────────────────────────── */}
           <div className="bg-brand-surface border border-white/10 rounded-2xl p-6 mb-6">
             <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-3">
               Clubes y roles
@@ -86,10 +119,14 @@ export default async function PlatformUserDetailPage({ params }: PageProps) {
             )}
           </div>
 
-          <div className="flex items-center gap-2 text-sm text-brand-muted bg-white/5 border border-white/10 rounded-xl px-4 py-3">
-            <Lock className="w-3.5 h-3.5 shrink-0" />
-            El detalle completo (actividad, acciones) se implementará en una historia posterior.
-          </div>
+          {/* ── Acciones ─────────────────────────────────────────────── */}
+          <UserActionsPanel
+            userId={user.id}
+            initialName={user.full_name ?? ""}
+            initialEmail={user.email ?? ""}
+            initialBanned={user.is_banned}
+            isSelf={user.id === currentUser.user?.id}
+          />
         </>
       )}
     </div>

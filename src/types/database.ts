@@ -567,6 +567,27 @@ export interface Database {
           memberships: Array<{ club_name: string; club_slug: string; role: string }>;
         }>;
       };
+      // public.get_platform_user_detail — single-user detail for
+      // /platform/users/[userId], including auth-derived read-only fields
+      get_platform_user_detail: {
+        Args: { p_user_id: string };
+        Returns: Array<{
+          id: string;
+          full_name: string | null;
+          email: string | null;
+          is_platform_admin: boolean;
+          created_at: string;
+          last_sign_in_at: string | null;
+          is_banned: boolean;
+          memberships: Array<{ club_name: string; club_slug: string; role: string }>;
+        }>;
+      };
+      // public.update_platform_user_name — platform-admin-gated rename,
+      // touches profiles.full_name only
+      update_platform_user_name: {
+        Args: { p_user_id: string; p_full_name: string };
+        Returns: void;
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
