@@ -13,7 +13,7 @@ import {
   type NotificationRow,
 } from "@/lib/notifications";
 import { markNotificationRead, markAllNotificationsRead } from "@/lib/notificationActions";
-import { JoinRequestNotificationActions } from "./JoinRequestNotificationActions";
+import { JoinRequestNotificationActions, ResolvedNotificationBadge } from "./JoinRequestNotificationActions";
 
 interface NotificationBellProps {
   initialCount: number;
@@ -368,6 +368,11 @@ export function NotificationBell({ initialCount, initialItems }: NotificationBel
                     {n.type === "join_request_created" && (
                       <div className="mt-2">
                         <JoinRequestNotificationActions notification={n} onResolved={() => markRead(n)} />
+                      </div>
+                    )}
+                    {n.type === "reservation_request_created" && n.resolved_status && (
+                      <div className="mt-2">
+                        <ResolvedNotificationBadge status={n.resolved_status} />
                       </div>
                     )}
                   </div>

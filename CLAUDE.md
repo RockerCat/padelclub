@@ -366,6 +366,20 @@ A member should never be force-redirected away from a page they are actively vie
 
 A PLAYER who already belongs to a club is not redirected away from that club's public page (`/[slug]`) — only OWNER/ADMIN are sent to their operational area. Players choose when to continue into Reservations.
 
+Whether a request (join request, reservation request) has been resolved is shared state, visible identically to every notified OWNER/ADMIN. Whether a specific notification has been read is per-user state. Never use one to represent the other — do not infer "resolved" from "read", and do not mark other recipients' notifications as read as a side effect of one recipient resolving the underlying request.
+
+---
+
+## Reservation Pricing Principles
+
+A club's reservation price is always a fixed amount configured explicitly for each tariff rule and each duration the club offers — never a rate multiplied by duration. A rule decides which tariff bucket applies (club, court, days, hours); the amount for a given duration is configured separately and explicitly for that bucket.
+
+The reservation's start time alone determines which tariff rule applies. A reservation is never split across two tariff rules even if it extends past the rule's end time.
+
+Price is always resolved server-side, through one shared resolution function, at the moment a reservation is requested. No caller may pass a price, rate, or currency into a mutation and have it trusted.
+
+A missing price for the requested duration is a normal, explicit outcome, not an error to fall back from — it blocks the reservation request until an OWNER configures that duration's price.
+
 ---
 
 ## Documentation Workflow

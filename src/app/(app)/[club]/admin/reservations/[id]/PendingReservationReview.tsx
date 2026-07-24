@@ -18,7 +18,17 @@ export type PendingReservationDetail = {
   status: string;
   created_at: string;
   playerName: string | null;
+  // Frozen at request time (reservations.price_amount/price_currency) —
+  // shown as-is here, same value and same source for OWNER and ADMIN
+  // alike (this page has no role-differentiated query or branch). Never
+  // recalculated: null means no tariff was applicable at request time.
+  price_amount: number | null;
+  price_currency: string | null;
 };
+
+function formatCurrency(amount: number, currency: string): string {
+  return new Intl.NumberFormat("es-CO", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
+}
 
 const WEEKDAY = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 const MONTH = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
@@ -137,6 +147,14 @@ export function PendingReservationReview({
             <span className="text-brand-muted">Duración</span>
             <span className="text-white font-medium text-right">{durationLabel(reservation.duration_minutes)}</span>
           </div>
+          {reservation.price_amount != null && reservation.price_currency && (
+            <div className="flex justify-between text-sm gap-4">
+              <span className="text-brand-muted">Valor</span>
+              <span className="text-white font-medium text-right">
+                {formatCurrency(reservation.price_amount, reservation.price_currency)}
+              </span>
+            </div>
+          )}
           <div className="flex justify-between text-sm gap-4">
             <span className="text-brand-muted">Estado</span>
             <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${statusCfg.className}`}>

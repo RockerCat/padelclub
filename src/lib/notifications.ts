@@ -9,6 +9,12 @@ export type NotificationRow = {
   message: string;
   metadata: { destination?: string; join_request_id?: string; reservation_id?: string; club_slug?: string; [key: string]: unknown } | null;
   read_at: string | null;
+  // Shared business-entity resolution (join request / reservation request
+  // approved or rejected by ANY authorized recipient) — distinct from
+  // read_at, which stays per-user. Null for notification types with no
+  // resolution concept (e.g. join_request_approved itself).
+  resolved_status: "approved" | "rejected" | null;
+  resolved_at: string | null;
   created_at: string;
   clubs: { slug: string; name: string } | null;
 };
@@ -45,7 +51,7 @@ export async function getRecentNotifications(
 ): Promise<NotificationRow[]> {
   const { data, error } = await supabase
     .from("notifications")
-    .select("id, club_id, type, title, message, metadata, read_at, created_at, clubs(slug, name)")
+    .select("id, club_id, type, title, message, metadata, read_at, resolved_status, resolved_at, created_at, clubs(slug, name)")
     .order("created_at", { ascending: false })
     .limit(limit);
 
@@ -63,7 +69,7 @@ export async function getNotificationsPaginated(
 ): Promise<{ items: NotificationRow[]; hasMore: boolean }> {
   const { data, error } = await supabase
     .from("notifications")
-    .select("id, club_id, type, title, message, metadata, read_at, created_at, clubs(slug, name)")
+    .select("id, club_id, type, title, message, metadata, read_at, resolved_status, resolved_at, created_at, clubs(slug, name)")
     .order("created_at", { ascending: false })
     .range(offset, offset + limit);
 

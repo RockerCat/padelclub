@@ -121,7 +121,7 @@ export default async function AdminReservationsPage({
       .eq("is_active", true),
     supabase
       .from("reservations")
-      .select("id, date, start_time, duration_minutes, court_id, created_by, courts(name)")
+      .select("id, date, start_time, duration_minutes, court_id, created_by, price_amount, price_currency, courts(name)")
       .eq("club_id", club.id)
       .eq("status", "pending")
       .gte("date", todayStr)
@@ -137,6 +137,8 @@ export default async function AdminReservationsPage({
     duration_minutes: number;
     court_id: string;
     created_by: string;
+    price_amount: number | null;
+    price_currency: string | null;
     courts: { name: string } | null;
   };
   const rawPending = (pendingRes.data ?? []) as unknown as RawPending[];
@@ -155,6 +157,8 @@ export default async function AdminReservationsPage({
     duration_minutes: r.duration_minutes,
     courtName: r.courts?.name ?? "—",
     playerName: profileMap.get(r.created_by) ?? null,
+    price_amount: r.price_amount,
+    price_currency: r.price_currency,
   }));
 
   const rawCourts = courtsRes.data ?? [];

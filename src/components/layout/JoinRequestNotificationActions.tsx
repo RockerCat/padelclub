@@ -16,6 +16,22 @@ interface JoinRequestNotificationActionsProps {
   onResolved?: () => void;
 }
 
+// Shared visual for "this business entity was already resolved" — used both
+// here (join requests, which also show Aprobar/Rechazar until resolved) and
+// for reservation-request notifications (which never show inline actions,
+// only this badge once resolved_status is set). One badge, one place.
+export function ResolvedNotificationBadge({ status }: { status: ResolvedStatus }) {
+  return (
+    <span
+      className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-medium shrink-0 ${
+        status === "approved" ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"
+      }`}
+    >
+      {status === "approved" ? "Aprobada" : "Rechazada"}
+    </span>
+  );
+}
+
 // Aprobar/Rechazar for a pending join-request notification. Reuses
 // approveJoinRequest/rejectJoinRequest as-is (admin/players/actions.ts) — no
 // parallel approval logic, same RPCs, same notification-to-requester side
@@ -23,6 +39,16 @@ interface JoinRequestNotificationActionsProps {
 // join_request_id (added to metadata by create_join_request as of migration
 // 20260729000001); older notifications without it render nothing here and
 // fall back to their previous click-to-navigate behavior untouched.
+//
+// notification.resolved_status is shared across every recipient's own copy
+// of this notification (20260803000001_shared_notification_resolution.sql)
+// — checked FIRST, before any action is even attempted, so an admin who
+// never clicked anything (another admin resolved it) still sees the
+// correct badge as soon as their own row is updated and Realtime/refetch
+// brings it in. The local `resolved` state below only covers the instant
+// after THIS admin's own click, before that round-trip lands, plus the
+// genuine simultaneous-click race (caught via the existing "ya fue
+// resuelta" fallback) — it is not the source of truth.
 export function JoinRequestNotificationActions({ notification, onResolved }: JoinRequestNotificationActionsProps) {
   const requestId = notification.metadata?.join_request_id;
   const clubId = notification.club_id;
@@ -35,6 +61,10 @@ export function JoinRequestNotificationActions({ notification, onResolved }: Joi
 
   if (notification.type !== "join_request_created" || typeof requestId !== "string" || !clubId || !clubSlug) {
     return null;
+  }
+
+  if (notification.resolved_status) {
+    return <ResolvedNotificationBadge status={notification.resolved_status} />;
   }
 
   // Re-bound as explicitly-typed consts: the narrowing from the guard above
@@ -85,15 +115,7 @@ export function JoinRequestNotificationActions({ notification, onResolved }: Joi
   }
 
   if (resolved) {
-    return (
-      <span
-        className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-medium shrink-0 ${
-          resolved === "approved" ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"
-        }`}
-      >
-        {resolved === "approved" ? "Aprobada" : "Rechazada"}
-      </span>
-    );
+    return <ResolvedNotificationBadge status={resolved} />;
   }
 
   // stopPropagation at the wrapper: these rows live inside a clickable

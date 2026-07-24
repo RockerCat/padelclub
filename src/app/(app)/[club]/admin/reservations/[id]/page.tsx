@@ -23,6 +23,8 @@ type ReservationDetail = {
   status: string;
   created_at: string;
   created_by: string;
+  price_amount: number | null;
+  price_currency: string | null;
   courts: { name: string; surface: string | null; is_indoor: boolean | null } | null;
   reservation_players: Array<{ profile_id: string }>;
 };
@@ -72,6 +74,7 @@ export default async function EditReservationPage({
     .select(
       `
       id, court_id, date, start_time, duration_minutes, type, title, notes, status, created_at, created_by,
+      price_amount, price_currency,
       courts(name, surface, is_indoor),
       reservation_players(profile_id)
     `
@@ -112,6 +115,8 @@ export default async function EditReservationPage({
           status: reservation.status,
           created_at: reservation.created_at,
           playerName: playerProfile?.full_name ?? null,
+          price_amount: reservation.price_amount,
+          price_currency: reservation.price_currency,
         }}
         court={{
           id: reservation.court_id,

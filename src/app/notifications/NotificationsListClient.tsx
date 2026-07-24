@@ -10,7 +10,7 @@ import {
   type NotificationRow,
 } from "@/lib/notifications";
 import { markNotificationRead, markAllNotificationsRead } from "@/lib/notificationActions";
-import { JoinRequestNotificationActions } from "@/components/layout/JoinRequestNotificationActions";
+import { JoinRequestNotificationActions, ResolvedNotificationBadge } from "@/components/layout/JoinRequestNotificationActions";
 
 interface NotificationsListClientProps {
   initialItems: NotificationRow[];
@@ -119,6 +119,11 @@ export function NotificationsListClient({ initialItems, initialHasMore, pageSize
                     {n.type === "join_request_created" && (
                       <div className="mt-2.5">
                         <JoinRequestNotificationActions notification={n} onResolved={() => markRead(n)} />
+                      </div>
+                    )}
+                    {n.type === "reservation_request_created" && n.resolved_status && (
+                      <div className="mt-2.5">
+                        <ResolvedNotificationBadge status={n.resolved_status} />
                       </div>
                     )}
                   </div>

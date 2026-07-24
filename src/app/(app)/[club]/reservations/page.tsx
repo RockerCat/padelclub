@@ -54,6 +54,11 @@ export type MyReservation = {
   status: "pending" | "confirmed" | "cancelled";
   court_id: string;
   courtName: string;
+  // Frozen at request time (see requestReservation) — null for reservations
+  // predating the pricing engine, or when no tariff applied. Never a live
+  // recalculation: this is exactly what was charged when requested.
+  price_amount: number | null;
+  price_currency: string | null;
 };
 
 // Blocked windows per date per court: [startMins, endMins][]
@@ -204,7 +209,7 @@ export default async function PlayerReservationsPage({
       .eq("club_id", club.id),
     supabase
       .from("reservations")
-      .select("id, date, start_time, duration_minutes, status, court_id, courts(name)")
+      .select("id, date, start_time, duration_minutes, status, court_id, price_amount, price_currency, courts(name)")
       .eq("club_id", club.id)
       .eq("created_by", user.id)
       .gte("date", todayStr)
@@ -224,6 +229,8 @@ export default async function PlayerReservationsPage({
     duration_minutes: number;
     status: string;
     court_id: string;
+    price_amount: number | null;
+    price_currency: string | null;
     courts: { name: string } | null;
   };
   const myReservations: MyReservation[] = ((myReservationsRes.data ?? []) as unknown as RawMyRow[]).map(
@@ -235,6 +242,8 @@ export default async function PlayerReservationsPage({
       status: r.status as MyReservation["status"],
       court_id: r.court_id,
       courtName: r.courts?.name ?? "—",
+      price_amount: r.price_amount,
+      price_currency: r.price_currency,
     })
   );
 

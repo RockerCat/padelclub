@@ -247,6 +247,14 @@ export interface Database {
           status: "confirmed" | "cancelled" | "pending";
           cancelled_at: string | null;
           cancelled_by: string | null;
+          // Frozen price fields (20260802000002) — NULL for every
+          // reservation until a future phase wires resolveReservationPrice
+          // into the creation/edit/approval flows. Never backfilled, never
+          // defaulted to 0.
+          price_amount: number | null;
+          price_currency: string | null;
+          pricing_rule_id: string | null;
+          price_calculated_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -264,6 +272,10 @@ export interface Database {
           status?: "confirmed" | "cancelled" | "pending";
           cancelled_at?: string | null;
           cancelled_by?: string | null;
+          price_amount?: number | null;
+          price_currency?: string | null;
+          pricing_rule_id?: string | null;
+          price_calculated_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -278,9 +290,120 @@ export interface Database {
           status?: "confirmed" | "cancelled" | "pending";
           cancelled_at?: string | null;
           cancelled_by?: string | null;
+          price_amount?: number | null;
+          price_currency?: string | null;
+          pricing_rule_id?: string | null;
+          price_calculated_at?: string | null;
           updated_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "reservations_pricing_rule_id_fkey";
+            columns: ["pricing_rule_id"];
+            isOneToOne: false;
+            referencedRelation: "club_pricing_rules";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      club_pricing_rules: {
+        Row: {
+          id: string;
+          club_id: string;
+          court_id: string | null;
+          name: string;
+          days_of_week: number[];
+          start_time: string;
+          end_time: string;
+          // Legacy as of 20260803000002 — DROP NOT NULL applied; new rules
+          // never populate it (see club_pricing_rule_prices, the real
+          // source of truth for price now). Historical rows keep their
+          // value until a later phase removes the column entirely.
+          price_per_hour: number | null;
+          currency: string;
+          display_order: number;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          club_id: string;
+          court_id?: string | null;
+          name: string;
+          days_of_week: number[];
+          start_time: string;
+          end_time: string;
+          price_per_hour?: number | null;
+          currency?: string;
+          display_order?: number;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          court_id?: string | null;
+          name?: string;
+          days_of_week?: number[];
+          start_time?: string;
+          end_time?: string;
+          price_per_hour?: number | null;
+          currency?: string;
+          display_order?: number;
+          is_active?: boolean;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "club_pricing_rules_club_id_fkey";
+            columns: ["club_id"];
+            isOneToOne: false;
+            referencedRelation: "clubs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "club_pricing_rules_court_id_fkey";
+            columns: ["court_id"];
+            isOneToOne: false;
+            referencedRelation: "courts";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      club_pricing_rule_prices: {
+        Row: {
+          id: string;
+          pricing_rule_id: string;
+          duration_minutes: number;
+          price_amount: number;
+          currency: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          pricing_rule_id: string;
+          duration_minutes: number;
+          price_amount: number;
+          currency?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          duration_minutes?: number;
+          price_amount?: number;
+          currency?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "club_pricing_rule_prices_pricing_rule_id_fkey";
+            columns: ["pricing_rule_id"];
+            isOneToOne: false;
+            referencedRelation: "club_pricing_rules";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       club_operating_hours: {
         Row: {
@@ -488,6 +611,11 @@ export interface Database {
           message: string;
           metadata: Json;
           read_at: string | null;
+          // Shared across every notification pointing at the same
+          // join_request_id/reservation_id — never the per-user read
+          // state. See 20260803000001_shared_notification_resolution.sql.
+          resolved_status: "approved" | "rejected" | null;
+          resolved_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -499,10 +627,14 @@ export interface Database {
           message: string;
           metadata?: Json;
           read_at?: string | null;
+          resolved_status?: "approved" | "rejected" | null;
+          resolved_at?: string | null;
           created_at?: string;
         };
         Update: {
           read_at?: string | null;
+          resolved_status?: "approved" | "rejected" | null;
+          resolved_at?: string | null;
         };
         Relationships: [
           {
@@ -684,6 +816,32 @@ export interface Database {
         Args: { p_reservation_id: string };
         Returns: void;
       };
+      // public.resolve_reservation_request_notifications — marks every
+      // reservation_request_created notification for this reservation as
+      // resolved (shared across all OWNER/ADMIN recipients), called right
+      // after approvePendingReservation/rejectPendingReservation succeed
+      resolve_reservation_request_notifications: {
+        Args: { p_reservation_id: string; p_status: string };
+        Returns: void;
+      };
+      // public.upsert_pricing_rule_with_prices — atomic create/edit of a
+      // pricing rule together with its per-duration prices (child rows).
+      // p_rule_id NULL creates; otherwise updates. p_prices is a jsonb
+      // array of {duration_minutes, price_amount, currency}.
+      upsert_pricing_rule_with_prices: {
+        Args: {
+          p_rule_id: string | null;
+          p_club_id: string;
+          p_court_id: string | null;
+          p_name: string;
+          p_days_of_week: number[];
+          p_start_time: string;
+          p_end_time: string;
+          p_display_order: number;
+          p_prices: Json;
+        };
+        Returns: string;
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
@@ -710,6 +868,8 @@ export type Club = Tables<"clubs">;
 export type Profile = Tables<"profiles">;
 export type ClubMember = Tables<"club_members">;
 export type InvitationLink = Tables<"invitation_links">;
+export type PricingRule = Tables<"club_pricing_rules">;
+export type PricingRulePrice = Tables<"club_pricing_rule_prices">;
 
 export type ClubRole = ClubMember["role"];
 export type InvitationRole = InvitationLink["role"];

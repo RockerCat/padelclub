@@ -4,12 +4,19 @@ import { useState, useEffect, useActionState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, X, Check, CalendarOff, Clock } from "lucide-react";
-import { requestReservation } from "./actions";
+import { requestReservation, getReservationPriceQuote } from "./actions";
 import type { RequestFormState } from "./actions";
+import type { ResolveReservationPriceResult } from "@/lib/reservationPricing";
 import type { MyReservation } from "./page";
 import { durationOptions, durationLabel } from "@/lib/durations";
 import { AvailabilityLegend, CourtAvailabilityCard } from "@/components/courts/CourtAvailabilityTimeline";
 import { timeToMins, addMinutes, buildDayGrid } from "@/lib/courtAvailability";
+
+// Shared by the price summary in the request modal and the frozen price
+// shown on already-created requests — one formatting rule, not two.
+function formatCurrency(amount: number, currency: string): string {
+  return new Intl.NumberFormat("es-CO", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -211,6 +218,11 @@ function NextReservationCard({
       <p className="text-sm text-brand-muted mt-1">
         {start} – {end} · {reservation.courtName} · {durationLabel(reservation.duration_minutes)}
       </p>
+      {reservation.price_amount != null && reservation.price_currency && (
+        <p className="text-sm text-white font-medium mt-1">
+          {formatCurrency(reservation.price_amount, reservation.price_currency)}
+        </p>
+      )}
       {reservation.status === "pending" && (
         <p className="text-xs text-amber-400/70 mt-2">
           El administrador la confirmará pronto.
@@ -272,6 +284,12 @@ function MyReservationsSection({ reservations }: { reservations: MyReservation[]
                         <span className="text-brand-muted">{r.courtName}</span>
                         <span className="text-brand-muted/60">·</span>
                         <span className="text-brand-muted">{durationLabel(r.duration_minutes)}</span>
+                        {r.price_amount != null && r.price_currency && (
+                          <>
+                            <span className="text-brand-muted/60">·</span>
+                            <span className="text-white font-medium">{formatCurrency(r.price_amount, r.price_currency)}</span>
+                          </>
+                        )}
                       </div>
                     </div>
                   );
@@ -308,6 +326,37 @@ function RequestModal({
     requestReservation.bind(null, clubId),
     {},
   );
+
+  // requestKey identifies the exact (courtId, date, startTime, duration)
+  // combination a quote belongs to. priceState only ever gets written from
+  // the effect's async .then() callback (never synchronously in the effect
+  // body), so the render right after any dependency change already sees
+  // priceState.key !== requestKey — the previous quote is treated as stale
+  // immediately, with no separate "invalidate" setState call needed.
+  const requestKey = `${clubId}|${courtId}|${date}|${startTime}|${duration}`;
+  const [priceState, setPriceState] = useState<{ key: string; result: ResolveReservationPriceResult | null }>({
+    key: "",
+    result: null,
+  });
+  const priceLoading = priceState.key !== requestKey;
+  const priceQuote = priceLoading ? null : priceState.result;
+
+  // Re-quotes on every change to courtId/date/startTime/duration (courtId/
+  // date/startTime are stable for this modal's lifetime — the parent
+  // remounts it via a fresh `key` whenever any of those change — but
+  // duration changes here directly). The `cancelled` flag discards a
+  // response that resolves after a newer request was already made — same
+  // pattern already used by getAvailableSlots in ReservationForm.tsx.
+  // resolveReservationPrice stays the only source of truth: no day-of-week/
+  // franja/priority/rate math is repeated here.
+  useEffect(() => {
+    let cancelled = false;
+    getReservationPriceQuote(clubId, courtId, date, startTime, duration).then((result) => {
+      if (cancelled) return;
+      setPriceState({ key: requestKey, result });
+    });
+    return () => { cancelled = true; };
+  }, [clubId, courtId, date, startTime, duration, requestKey]);
 
   useEffect(() => {
     if (state?.success) onSuccess();
@@ -398,6 +447,37 @@ function RequestModal({
             <span className="text-white font-medium">{startTime} a {endTime}</span>
           </p>
 
+          {/* Price summary — always the server's resolveReservationPrice
+              result, never computed here. Re-requested on every duration
+              change (see effect above). */}
+          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 flex flex-col gap-1.5">
+            {priceLoading ? (
+              <div className="flex items-center gap-2 text-xs text-brand-muted py-0.5">
+                <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin shrink-0" />
+                Calculando precio…
+              </div>
+            ) : priceQuote?.matched ? (
+              <>
+                <div className="flex justify-between text-xs">
+                  <span className="text-brand-muted">Tarifa aplicada</span>
+                  <span className="text-white font-medium">{priceQuote.ruleName}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-brand-muted">Duración</span>
+                  <span className="text-white font-medium">{durationLabel(priceQuote.durationMinutes)}</span>
+                </div>
+                <div className="flex justify-between text-sm pt-1.5 mt-0.5 border-t border-white/10">
+                  <span className="text-brand-muted font-medium">Valor de la reserva</span>
+                  <span className="font-bold" style={{ color: "var(--club-primary, #B7E000)" }}>
+                    {formatCurrency(priceQuote.finalPrice, priceQuote.currency)}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <p className="text-xs text-brand-muted text-center">Precio no disponible para este horario.</p>
+            )}
+          </div>
+
           {state?.error && (
             <p className="text-sm text-red-400 text-center bg-red-400/5 border border-red-400/20 rounded-xl px-3 py-2">
               {state.error}
@@ -406,7 +486,7 @@ function RequestModal({
 
           <button
             type="submit"
-            disabled={pending}
+            disabled={pending || priceLoading || !priceQuote?.matched}
             className="w-full py-3 rounded-xl font-semibold text-sm transition-opacity disabled:opacity-50"
             style={{ backgroundColor: "var(--club-primary, #B7E000)", color: "#001A24" }}
           >

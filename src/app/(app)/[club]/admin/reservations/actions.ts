@@ -566,6 +566,26 @@ export async function approvePendingReservation(
     return { error: "Error al confirmar la reserva. Intenta nuevamente." };
   }
 
+  // Shares this outcome across every OWNER/ADMIN's own
+  // reservation_request_created notification for this reservation (not
+  // just the resolver's own) — a plain client UPDATE can't reach other
+  // recipients' rows (notifications_update_own is profile_id-scoped), so
+  // this goes through a SECURITY DEFINER RPC instead. Best-effort: the
+  // reservation is already confirmed and must never be rolled back over a
+  // notification-sync failure.
+  const { error: resolveErr } = await supabase.rpc("resolve_reservation_request_notifications", {
+    p_reservation_id: reservationId,
+    p_status: "approved",
+  });
+  if (resolveErr) {
+    console.error("[approvePendingReservation] resolve_reservation_request_notifications failed:", {
+      reservationId,
+      clubId,
+      code: resolveErr.code,
+      message: resolveErr.message,
+    });
+  }
+
   return { success: true };
 }
 
@@ -599,6 +619,21 @@ export async function rejectPendingReservation(
   if (updateErr) {
     console.error("[rejectPendingReservation]", updateErr);
     return { error: "Error al rechazar la solicitud. Intenta nuevamente." };
+  }
+
+  // See approvePendingReservation — same shared-resolution RPC, same
+  // best-effort convention.
+  const { error: resolveErr } = await supabase.rpc("resolve_reservation_request_notifications", {
+    p_reservation_id: reservationId,
+    p_status: "rejected",
+  });
+  if (resolveErr) {
+    console.error("[rejectPendingReservation] resolve_reservation_request_notifications failed:", {
+      reservationId,
+      clubId,
+      code: resolveErr.code,
+      message: resolveErr.message,
+    });
   }
 
   return { success: true };

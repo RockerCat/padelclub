@@ -8,8 +8,48 @@ import {
 } from "@/lib/operatingHours";
 import type { OperatingHour } from "@/lib/operatingHours";
 import { getClubDurations } from "@/lib/durations";
+import { resolveReservationPrice } from "@/lib/reservationPricing";
+import type { ResolveReservationPriceResult } from "@/lib/reservationPricing";
 
 export type RequestFormState = { error?: string; success?: boolean };
+
+// ─── getReservationPriceQuote ─────────────────────────────────────────────────
+// Read-only Server Action — same pattern as getAvailableSlots (admin/
+// reservations/actions.ts): called directly from the client component like a
+// normal async function, no API route, no service role exposed to the
+// browser. The client never reconstructs day-of-week/franja/priority/price
+// math itself — this just forwards to the one calculation engine
+// (resolveReservationPrice) using the caller's own RLS-scoped session, so an
+// unauthenticated or non-member caller naturally gets zero rows back
+// (club_pricing_rules_select_member), never a price.
+export async function getReservationPriceQuote(
+  clubId: string,
+  courtId: string,
+  date: string,
+  startTime: string,
+  durationMinutes: number
+): Promise<ResolveReservationPriceResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return {
+      matched: false,
+      reason: "missing_pricing_rule",
+      ruleId: null,
+      ruleName: null,
+      durationMinutes,
+      priceAmount: null,
+      finalPrice: null,
+      currency: null,
+      calculatedAt: new Date().toISOString(),
+    };
+  }
+
+  return resolveReservationPrice(supabase, { clubId, courtId, date, startTime, durationMinutes });
+}
 
 export async function requestReservation(
   clubId: string,
@@ -52,12 +92,18 @@ export async function requestReservation(
     return { error: "Esta duración no está permitida para este club." };
   }
 
-  const today = new Date().toISOString().split("T")[0];
-  if (date < today) return { error: "No puedes reservar en una fecha pasada." };
+  // Local calendar date (getFullYear/getMonth/getDate), never
+  // toISOString() — that converts to UTC first, so near a UTC offset
+  // boundary (e.g. after ~19:00 in UTC-5) it silently rolls over to
+  // "tomorrow" while now.getHours()/getMinutes() below still read local
+  // time, comparing two different days as if they were the same one.
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
-  if (date === today) {
+  if (date < todayStr) return { error: "No puedes reservar en una fecha pasada." };
+
+  if (date === todayStr) {
     const [h, m] = startTime.split(":").map(Number);
-    const now = new Date();
     if (h * 60 + m <= now.getHours() * 60 + now.getMinutes()) {
       return { error: "El horario seleccionado ya pasó." };
     }
@@ -100,6 +146,23 @@ export async function requestReservation(
     }
   }
 
+  // Price is resolved fresh here, server-side, right before the insert —
+  // never trusted from the client (the form never even submits a price
+  // field). A PLAYER request with no applicable tariff is not created at
+  // all: this is a new-request gate only, it must never affect historical
+  // reservations that already have their 4 price fields NULL (those rows
+  // are never touched by this function).
+  const priceResult = await resolveReservationPrice(supabase, {
+    clubId,
+    courtId,
+    date,
+    startTime,
+    durationMinutes,
+  });
+  if (!priceResult.matched) {
+    return { error: "No hay una tarifa configurada para este horario. Contacta al club para continuar con la reserva." };
+  }
+
   const { data: reservation, error: insertError } = await supabase
     .from("reservations")
     .insert({
@@ -111,6 +174,10 @@ export async function requestReservation(
       duration_minutes: durationMinutes,
       type: "match",
       status: "pending",
+      price_amount: priceResult.finalPrice,
+      price_currency: priceResult.currency,
+      pricing_rule_id: priceResult.ruleId,
+      price_calculated_at: priceResult.calculatedAt,
     })
     .select("id")
     .single();

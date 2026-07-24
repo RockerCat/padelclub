@@ -1,12 +1,15 @@
 // Shared constants and helpers for reservation durations.
 // Single source of truth for both admin and player forms.
 
+// Limited to {60, 90, 120} — matches both clubs.allowed_reservation_durations'
+// CHECK constraint (20260802000003_restrict_allowed_durations.sql) and the
+// pricing engine's proportional calculation (×1, ×1.5, ×2). Never re-add
+// 150/180 here without widening that CHECK first, or the UI would offer a
+// duration the database rejects on insert.
 export const DURATION_CATALOG = [
   { minutes: 60, label: "1 hora" },
   { minutes: 90, label: "1 h 30 min" },
   { minutes: 120, label: "2 horas" },
-  { minutes: 150, label: "2 h 30 min" },
-  { minutes: 180, label: "3 horas" },
 ] as const;
 
 export type AllowedMinutes = (typeof DURATION_CATALOG)[number]["minutes"];

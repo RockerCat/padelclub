@@ -24,18 +24,27 @@ export function AllowedDurationsForm({ clubId, initialDurations }: AllowedDurati
     if (state.success) router.refresh();
   }, [state.success, router]);
 
+  // Plain, unguarded toggle — every duration behaves identically, including
+  // whichever one happens to be the last one checked. The set is allowed to
+  // become empty; that's handled below by hasSelection (error + disabled
+  // submit), never by disabling the checkbox itself.
   function toggle(minutes: number) {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(minutes)) {
-        if (next.size === 1) return prev; // must keep at least one
-        next.delete(minutes);
-      } else {
-        next.add(minutes);
-      }
+      if (next.has(minutes)) next.delete(minutes);
+      else next.add(minutes);
       return next;
     });
   }
+
+  // The only rule is "at least one selected", derived fresh from `selected`
+  // on every render — never from a disabled checkbox. A disabled <input>
+  // is excluded from FormData on submit even while still rendered as
+  // checked (that mismatch was the actual bug: the last remaining duration
+  // looked checked but never reached the server, so `durations` arrived
+  // empty and the save was rejected).
+  const hasSelection = selected.size > 0;
+  const EMPTY_SELECTION_ERROR = "Selecciona al menos una duración.";
 
   return (
     <div>
@@ -45,18 +54,13 @@ export function AllowedDurationsForm({ clubId, initialDurations }: AllowedDurati
       <form action={action} className="flex flex-col gap-4">
           {DURATION_CATALOG.map(({ minutes, label }) => {
             const isChecked = selected.has(minutes);
-            const isLast = selected.size === 1 && isChecked;
             return (
-              <label
-                key={minutes}
-                className={`flex items-center gap-3 cursor-pointer group ${isLast ? "opacity-50 cursor-not-allowed" : ""}`}
-              >
+              <label key={minutes} className="flex items-center gap-3 cursor-pointer group">
                 <input
                   type="checkbox"
                   name="durations"
                   value={String(minutes)}
                   checked={isChecked}
-                  disabled={isLast}
                   onChange={() => toggle(minutes)}
                   className="w-4 h-4 rounded accent-brand-primary cursor-pointer"
                 />
@@ -67,7 +71,17 @@ export function AllowedDurationsForm({ clubId, initialDurations }: AllowedDurati
             );
           })}
 
-          {state?.error && (
+          {!hasSelection && (
+            <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
+              {EMPTY_SELECTION_ERROR}
+            </p>
+          )}
+
+          {/* A stale state.error from a previous empty-selection submit must
+              never linger once the user has re-checked something — only
+              show a server error here when it's not that same message
+              (which hasSelection above already covers, always freshly). */}
+          {state?.error && state.error !== EMPTY_SELECTION_ERROR && (
             <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
               {state.error}
             </p>
@@ -82,7 +96,7 @@ export function AllowedDurationsForm({ clubId, initialDurations }: AllowedDurati
           <div className="pt-1">
             <button
               type="submit"
-              disabled={pending}
+              disabled={pending || !hasSelection}
               className="h-10 px-5 rounded-xl text-sm font-semibold transition-opacity disabled:opacity-50"
               style={{ backgroundColor: "var(--club-primary, #B7E000)", color: "#001A24" }}
             >

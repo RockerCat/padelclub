@@ -2,7 +2,8 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { DAY_NAMES, validateOperatingHours, type OperatingHour } from "@/lib/operatingHours";
-import { DURATION_CATALOG } from "@/lib/durations";
+import { DURATION_CATALOG, getClubDurations, durationLabel } from "@/lib/durations";
+import { roundToCents } from "@/lib/reservationPricing";
 
 export type UpdateAllowedDurationsState = { success?: boolean; error?: string };
 
@@ -178,15 +179,25 @@ export async function updateAllowedDurations(
   }
 
   const raw = formData.getAll("durations").map((v) => parseInt(v as string, 10));
-  const durations = raw.filter((d) => VALID_DURATION_MINUTES.includes(d));
 
-  if (durations.length === 0) {
+  if (raw.length === 0) {
     return { error: "Selecciona al menos una duración." };
   }
+  if (raw.some((d) => !VALID_DURATION_MINUTES.includes(d))) {
+    return { error: "Duración no válida." };
+  }
+  if (new Set(raw).size !== raw.length) {
+    return { error: "No se puede repetir la misma duración." };
+  }
+
+  // Any non-empty subset of {60, 90, 120} is valid — no duration is
+  // mandatory, none gets special treatment. Sorted before persisting so
+  // the stored order is always consistent regardless of submission order.
+  const durations = [...raw].sort((a, b) => a - b);
 
   const { error: updateError } = await supabase
     .from("clubs")
-    .update({ allowed_reservation_durations: durations.sort((a, b) => a - b) })
+    .update({ allowed_reservation_durations: durations })
     .eq("id", clubId);
 
   if (updateError) {
@@ -195,6 +206,201 @@ export async function updateAllowedDurations(
   }
 
   return { success: true };
+}
+
+// ─── Pricing rules (Tarifas) ──────────────────────────────────────────────────
+// Commercial policy, same restriction as updateAllowedDurations/
+// saveOperatingHours above: OWNER-only, never ADMIN. RLS already enforces
+// this at the database level (club_pricing_rules_insert_owner/_update_owner)
+// — this app-layer check exists only to return a clear message instead of a
+// raw Postgrest permission error.
+
+export type PricingRuleFormState = { success?: boolean; error?: string };
+
+async function requirePricingOwner(clubId: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !user) return { supabase: null, error: "No autenticado." };
+
+  const { data: membership } = await supabase
+    .from("club_members")
+    .select("role")
+    .eq("club_id", clubId)
+    .eq("profile_id", user.id)
+    .eq("is_active", true)
+    .single();
+
+  if (!membership || membership.role !== "OWNER") {
+    return { supabase: null, error: "Solo el propietario puede modificar las tarifas." };
+  }
+
+  return { supabase, error: null };
+}
+
+function timeToMins(t: string): number {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function parsePricingForm(formData: FormData) {
+  const name = ((formData.get("name") as string | null) ?? "").trim();
+  const daysRaw = formData.getAll("days_of_week").map((v) => parseInt(v as string, 10));
+  const days_of_week = [...new Set(daysRaw)].filter((d) => Number.isInteger(d) && d >= 0 && d <= 6).sort((a, b) => a - b);
+  const start_time = ((formData.get("start_time") as string | null) ?? "").trim();
+  const end_time = ((formData.get("end_time") as string | null) ?? "").trim();
+  const currency = ((formData.get("currency") as string | null) ?? "").trim() || "COP";
+  const courtIdRaw = ((formData.get("court_id") as string | null) ?? "").trim();
+  const court_id = courtIdRaw === "" ? null : courtIdRaw;
+  const display_order = parseInt((formData.get("display_order") as string | null) ?? "0", 10);
+
+  return { name, days_of_week, start_time, end_time, currency, court_id, display_order: Number.isFinite(display_order) ? display_order : 0 };
+}
+
+// Mirrors the DB CHECK constraints in club_pricing_rules exactly (same
+// bounds, same "00:00 end_time means end-of-day" rule) so a form mistake
+// surfaces here with a clear message instead of a raw Postgrest error —
+// never a second source of truth for what's "valid", just an earlier,
+// friendlier check of the same rules. Price is validated separately by
+// parsePrices below — it isn't one of this rule's own scalar fields
+// anymore, it's a set of child rows.
+function validatePricingForm(f: ReturnType<typeof parsePricingForm>): string | null {
+  if (!f.name) return "El nombre es obligatorio.";
+  if (f.days_of_week.length === 0) return "Selecciona al menos un día.";
+  if (!f.start_time || !f.end_time) return "Selecciona hora de inicio y de fin.";
+  const isMidnightEnd = f.end_time.slice(0, 5) === "00:00";
+  if (!isMidnightEnd && timeToMins(f.end_time) <= timeToMins(f.start_time)) {
+    return "La hora de fin debe ser posterior a la de inicio (usa 00:00 para medianoche).";
+  }
+  if (!f.currency) return "La moneda es obligatoria.";
+  if (f.display_order < 0) return "El orden debe ser mayor o igual a 0.";
+  return null;
+}
+
+type ParsedPrice = { duration_minutes: number; price_amount: number; currency: string };
+
+// One price field per duration the CLUB currently allows — re-derived
+// server-side from clubs.allowed_reservation_durations, never trusted from
+// which inputs the client happened to render. Every one of those
+// durations is mandatory: a rule can never be saved with a missing price
+// for a duration the club offers, and a price submitted for a duration
+// the club does NOT currently allow is rejected outright rather than
+// silently accepted or dropped.
+function parsePrices(formData: FormData, allowedDurations: number[], currency: string): { prices: ParsedPrice[] } | { error: string } {
+  const prices: ParsedPrice[] = [];
+  for (const minutes of allowedDurations) {
+    const raw = formData.get(`price_${minutes}`);
+    if (raw === null || raw === "") {
+      return { error: `Ingresa el precio para ${durationLabel(minutes)}.` };
+    }
+    const amount = parseFloat(raw as string);
+    if (!Number.isFinite(amount) || amount < 0) {
+      return { error: `El precio de ${durationLabel(minutes)} debe ser mayor o igual a 0.` };
+    }
+    prices.push({ duration_minutes: minutes, price_amount: roundToCents(amount), currency });
+  }
+  return { prices };
+}
+
+function pricingErrorMessage(error: { code?: string; message?: string }): string {
+  if (error.code === "23514") return "Los datos no cumplen las reglas de validación (revisa días, horario o precio).";
+  if (error.code === "23P01") return "Esta franja se solapa con una regla activa existente para el mismo alcance y día.";
+  console.error("[pricingRules]", error);
+  return "Error al guardar la tarifa. Intenta de nuevo.";
+}
+
+export async function createPricingRule(
+  clubId: string,
+  _prevState: PricingRuleFormState,
+  formData: FormData
+): Promise<PricingRuleFormState> {
+  const { supabase, error: authError } = await requirePricingOwner(clubId);
+  if (authError || !supabase) return { error: authError! };
+
+  const parsed = parsePricingForm(formData);
+  const validationError = validatePricingForm(parsed);
+  if (validationError) return { error: validationError };
+
+  const { data: club } = await supabase.from("clubs").select("allowed_reservation_durations").eq("id", clubId).single();
+  const allowedDurations = getClubDurations(club?.allowed_reservation_durations);
+
+  const pricesResult = parsePrices(formData, allowedDurations, parsed.currency);
+  if ("error" in pricesResult) return { error: pricesResult.error };
+
+  // Atomic: rule + all its per-duration prices, or nothing — see
+  // upsert_pricing_rule_with_prices (20260803000002).
+  const { error: rpcError } = await supabase.rpc("upsert_pricing_rule_with_prices", {
+    p_rule_id: null,
+    p_club_id: clubId,
+    p_court_id: parsed.court_id,
+    p_name: parsed.name,
+    p_days_of_week: parsed.days_of_week,
+    p_start_time: parsed.start_time.length === 5 ? `${parsed.start_time}:00` : parsed.start_time,
+    p_end_time: parsed.end_time.length === 5 ? `${parsed.end_time}:00` : parsed.end_time,
+    p_display_order: parsed.display_order,
+    p_prices: pricesResult.prices,
+  });
+
+  if (rpcError) return { error: pricingErrorMessage(rpcError) };
+  return { success: true };
+}
+
+export async function updatePricingRule(
+  clubId: string,
+  ruleId: string,
+  _prevState: PricingRuleFormState,
+  formData: FormData
+): Promise<PricingRuleFormState> {
+  const { supabase, error: authError } = await requirePricingOwner(clubId);
+  if (authError || !supabase) return { error: authError! };
+
+  const parsed = parsePricingForm(formData);
+  const validationError = validatePricingForm(parsed);
+  if (validationError) return { error: validationError };
+
+  const { data: club } = await supabase.from("clubs").select("allowed_reservation_durations").eq("id", clubId).single();
+  const allowedDurations = getClubDurations(club?.allowed_reservation_durations);
+
+  const pricesResult = parsePrices(formData, allowedDurations, parsed.currency);
+  if ("error" in pricesResult) return { error: pricesResult.error };
+
+  // Atomic: rule update + prices upserted + stale-duration prices removed
+  // (the club no longer allows them) — all in one RPC call, never several
+  // independent client round trips that could leave a half-saved rule.
+  const { error: rpcError } = await supabase.rpc("upsert_pricing_rule_with_prices", {
+    p_rule_id: ruleId,
+    p_club_id: clubId,
+    p_court_id: parsed.court_id,
+    p_name: parsed.name,
+    p_days_of_week: parsed.days_of_week,
+    p_start_time: parsed.start_time.length === 5 ? `${parsed.start_time}:00` : parsed.start_time,
+    p_end_time: parsed.end_time.length === 5 ? `${parsed.end_time}:00` : parsed.end_time,
+    p_display_order: parsed.display_order,
+    p_prices: pricesResult.prices,
+  });
+
+  if (rpcError) return { error: pricingErrorMessage(rpcError) };
+  return { success: true };
+}
+
+export async function togglePricingRuleActive(
+  clubId: string,
+  ruleId: string,
+  isActive: boolean
+): Promise<{ error?: string }> {
+  const { supabase, error: authError } = await requirePricingOwner(clubId);
+  if (authError || !supabase) return { error: authError };
+
+  const { error: updateError } = await supabase
+    .from("club_pricing_rules")
+    .update({ is_active: isActive })
+    .eq("id", ruleId)
+    .eq("club_id", clubId);
+
+  if (updateError) return { error: pricingErrorMessage(updateError) };
+  return {};
 }
 
 export async function saveOperatingHours(

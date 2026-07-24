@@ -15,6 +15,11 @@ export type PendingRequest = {
   duration_minutes: number;
   courtName: string;
   playerName: string | null;
+  // Frozen at request time (reservations.price_amount/price_currency) —
+  // shown as-is, never recalculated here. Null for requests predating the
+  // pricing engine or with no tariff applicable at request time.
+  price_amount: number | null;
+  price_currency: string | null;
 };
 
 const WEEKDAY = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
@@ -23,6 +28,10 @@ const MONTH = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "o
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
   return `${WEEKDAY[d.getDay()]} ${d.getDate()} ${MONTH[d.getMonth()]}`;
+}
+
+function formatCurrency(amount: number, currency: string): string {
+  return new Intl.NumberFormat("es-CO", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
 }
 
 function calcEndTime(startTime: string, durationMinutes: number): string {
@@ -87,6 +96,11 @@ function PendingCard({
           <p className="text-sm text-brand-muted">
             {start} – {end} · {durationLabel(request.duration_minutes)}
           </p>
+          {request.price_amount != null && request.price_currency && (
+            <p className="text-sm text-white font-medium mt-0.5">
+              Valor: {formatCurrency(request.price_amount, request.price_currency)}
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap gap-2 shrink-0">
           <Link
