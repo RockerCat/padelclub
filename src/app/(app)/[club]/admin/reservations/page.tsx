@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 import type { CalendarReservation, CalendarCourt, WeekDay } from "./WeekCalendar";
 import { PendingRequestsSection } from "./PendingRequestsSection";
 import type { PendingRequest } from "./PendingRequestsSection";
-import { RejectedReservationsSection } from "./RejectedReservationsSection";
 import type { RejectedReservation } from "./RejectedReservationsSection";
 import { ReservationsViewSwitcher } from "./ReservationsViewSwitcher";
 import { DEFAULT_OPERATING_HOURS } from "@/lib/operatingHours";
@@ -398,7 +397,6 @@ export default async function AdminReservationsPage({
     <div className="p-6 md:p-10">
       <h1 className="text-2xl font-bold text-white mb-6">Reservaciones</h1>
       <PendingRequestsSection requests={pendingRequests} clubId={club.id} clubSlug={slug} />
-      <RejectedReservationsSection reservations={rejectedReservations} clubSlug={slug} />
       <ReservationsViewSwitcher
         weekCalendarProps={{
           weekDays,
@@ -432,6 +430,7 @@ export default async function AdminReservationsPage({
           closingMinsByDate,
           closedDates,
           minDuration,
+          rejectedReservations,
         }}
       />
     </div>

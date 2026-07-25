@@ -436,7 +436,12 @@ export function ClubPublicView({ club, courts, schedule, playerCount, news, view
               </div>
             )}
 
-            {/* Bottom CTA — mobile + tablet only */}
+            {/* Bottom CTA — mobile + tablet only. autoJoin is not forwarded
+                to this CtaBlock (nor the desktop one below): both are
+                mounted simultaneously alongside the hero CtaBlock above
+                (only CSS toggles which is visible), so passing autoJoin
+                here too would fire three concurrent createJoinRequest
+                calls for the same click/return-from-signup. */}
             {showBottomCta && (
               <div
                 className="lg:hidden rounded-2xl p-6 text-center"
@@ -453,7 +458,7 @@ export function ClubPublicView({ club, courts, schedule, playerCount, news, view
                 <p className="text-sm text-brand-muted mb-4">
                   {isPublic ? "Únete al club y comienza a reservar canchas." : "Solicita acceso. Un administrador revisará tu solicitud."}
                 </p>
-                <CtaBlock club={club} p={p} isPublic={isPublic} isAdmin={isAdmin} viewerContext={viewerContext} autoJoin={autoJoin} />
+                <CtaBlock club={club} p={p} isPublic={isPublic} isAdmin={isAdmin} viewerContext={viewerContext} autoJoin={false} />
               </div>
             )}
 
@@ -584,7 +589,7 @@ export function ClubPublicView({ club, courts, schedule, playerCount, news, view
                 <p className="text-sm text-brand-muted mb-4">
                   {isPublic ? "Únete al club y comienza a reservar canchas." : "Solicita acceso. Un administrador revisará tu solicitud."}
                 </p>
-                <CtaBlock club={club} p={p} isPublic={isPublic} isAdmin={isAdmin} viewerContext={viewerContext} autoJoin={autoJoin} />
+                <CtaBlock club={club} p={p} isPublic={isPublic} isAdmin={isAdmin} viewerContext={viewerContext} autoJoin={false} />
               </div>
             )}
 

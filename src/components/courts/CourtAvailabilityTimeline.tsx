@@ -23,14 +23,21 @@ export type SlotRange = { startTime: string; duration: number };
 
 // Purely a rendering tint layered on top of whatever the real
 // available/occupied state already is — never a third availability value.
-// "approved" paints an already-occupied slot green (the player's own
-// confirmed reservation); "rejected" paints a slot soft-red whether it's
-// occupied or free again (rejecting a request always frees the slot, so a
-// rejected block's ticks are typically still bookable — this tint must
-// never disable that); "pending" paints an already-occupied slot amber (the
-// player's own pending request still blocks that slot for new requests,
-// same as "approved"). Used by the player's activity-panel selection.
-export type ContextRange = SlotRange & { tone: "approved" | "rejected" | "pending" };
+// "approved" paints an already-occupied slot a fixed green #00FF00 (the
+// player's own confirmed reservation, and Agenda's own "Partido"
+// reservations) — this exact color is hardcoded, never the club's own
+// --color-brand-primary theme token, so every club's Agenda/player screen
+// shows the same "confirmed" color regardless of branding. "rejected" paints
+// a slot soft-red whether it's occupied or free again (rejecting a request
+// always frees the slot, so a rejected block's ticks are typically still
+// bookable — this tint must never disable that); "pending" paints an
+// already-occupied slot amber (the player's own pending request still blocks
+// that slot for new requests, same as "approved") — also fixed, never
+// club-themed. "class"/"block" are Agenda-only, painting a confirmed "Clase"/
+// "Bloqueo" reservation light-blue/lilac instead of green — never used by the
+// player screen, also fixed colors. Used by the player's activity-panel
+// selection and by Agenda's per-type reservation tint.
+export type ContextRange = SlotRange & { tone: "approved" | "rejected" | "pending" | "class" | "block" };
 
 // ─── Availability Legend ──────────────────────────────────────────────────────
 // Shared once above the court card(s) (not repeated per card) — each state
@@ -78,7 +85,7 @@ export function AvailabilityLegend({
       {showConfirmedState && (
         <>
           <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-[4px] border border-brand-primary bg-brand-primary/15" />
+            <span className="w-3 h-3 rounded-[4px] border border-[#00FF00] bg-[#00FF00]/15" />
             Confirmada
           </span>
           <span className="flex items-center gap-1.5">
@@ -96,7 +103,7 @@ export function AvailabilityLegend({
       {showPlayerRequestStates && (
         <>
           <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-[4px] border border-brand-primary bg-brand-primary/15" />
+            <span className="w-3 h-3 rounded-[4px] border border-[#00FF00] bg-[#00FF00]/15" />
             Aprobada
           </span>
           <span className="flex items-center gap-1.5">
@@ -164,9 +171,14 @@ const TIMELINE_ROW_HEIGHT_CLASSES = "max-h-[92px] overflow-y-auto lg:max-h-none 
 // Render-only priority when more than one of the player's own reservations
 // lands on the same slot (see generalContextRanges below) — lower wins.
 // Never used to alter any real data or status, purely which color paints on
-// top when ranges collide.
+// top when ranges collide. "class"/"block" share "approved"'s tier — a given
+// tick only ever belongs to one confirmed reservation, so they never
+// actually compete against each other, only (like "approved") against a
+// same-slot "pending"/"rejected" tint.
 const CONTEXT_TONE_PRIORITY: Record<ContextRange["tone"], number> = {
   approved: 0,
+  class: 0,
+  block: 0,
   pending: 1,
   rejected: 2,
 };
@@ -456,7 +468,7 @@ export function CourtAvailabilityCard({
   // contextRange (an individual selection) always wins when present;
   // otherwise falls back to whichever of generalContextRanges covers this
   // tick, highest-priority tone first when more than one does.
-  function contextTone(tick: string): "approved" | "rejected" | "pending" | null {
+  function contextTone(tick: string): ContextRange["tone"] | null {
     const tickMins = timeToMins(tick);
     if (contextStart !== null && contextEnd !== null) {
       return tickMins >= contextStart && tickMins < contextEnd ? contextRange!.tone : null;
@@ -519,8 +531,16 @@ export function CourtAvailabilityCard({
                     ? "bg-amber-400/20 border-amber-400 text-amber-300"
                     : tone === "approved"
                     ? clickable
-                      ? "bg-brand-primary/15 border-brand-primary text-brand-primary hover:brightness-110 cursor-pointer"
-                      : "bg-brand-primary/15 border-brand-primary text-brand-primary cursor-not-allowed"
+                      ? "bg-[#00FF00]/15 border-[#00FF00] text-[#00FF00] hover:brightness-110 cursor-pointer"
+                      : "bg-[#00FF00]/15 border-[#00FF00] text-[#00FF00] cursor-not-allowed"
+                    : tone === "class"
+                    ? clickable
+                      ? "bg-sky-400/15 border-sky-400 text-sky-300 hover:brightness-110 cursor-pointer"
+                      : "bg-sky-400/15 border-sky-400 text-sky-300 cursor-not-allowed"
+                    : tone === "block"
+                    ? clickable
+                      ? "bg-violet-400/15 border-violet-400 text-violet-300 hover:brightness-110 cursor-pointer"
+                      : "bg-violet-400/15 border-violet-400 text-violet-300 cursor-not-allowed"
                     : tone === "rejected"
                     ? clickable
                       ? "bg-red-400/10 border-red-400/50 text-red-200 hover:border-brand-primary hover:bg-brand-primary/10 cursor-pointer"
@@ -599,7 +619,7 @@ export function CourtAvailabilityCard({
         <p
           className={`text-xs font-semibold rounded-lg px-2.5 py-1.5 text-center border ${
             contextRange.tone === "approved"
-              ? "text-brand-primary bg-brand-primary/10 border-brand-primary/20"
+              ? "text-[#00FF00] bg-[#00FF00]/10 border-[#00FF00]/20"
               : contextRange.tone === "rejected"
               ? "text-red-300 bg-red-400/10 border-red-400/30"
               : "text-amber-300 bg-amber-400/10 border-amber-400/30"

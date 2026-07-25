@@ -348,6 +348,8 @@ Whenever possible:
 - Avoid forcing owners to navigate deep configuration screens for common branding tasks.
 - Prefer direct manipulation of visual assets (logo, cover image, branding) from the dashboard.
 
+The club's own configured color is for identity/branding surfaces only — buttons, links, accents. Never use it to represent a reservation's status. Reservation state colors (confirmed, pending, and per-type tints such as class/block) are fixed and independent of any club's configured color, so they read identically across every club.
+
 Operational workflows remain important, but club identity should always be visible.
 
 ---
@@ -375,6 +377,14 @@ Whether a request (join request, reservation request) has been resolved is share
 A reservation's `status` communicates why it is not currently active: `pending` (awaiting OWNER/ADMIN review), `confirmed`, `cancelled` (a confirmed reservation later cancelled), or `rejected` (a pending request the club declined). `cancelled` and `rejected` are never interchangeable — they are different events, with different audiences and different notifications, even though both end a reservation.
 
 A rejection always carries a reason, chosen from one shared, server-validated catalog (never a free-form reason trusted from the client alone, never a second copy of the catalog). The requesting player is always notified of a rejection and its reason, the same way every other reservation notification is delivered.
+
+---
+
+## Club Membership Principles
+
+A public club's join is instant: no `club_join_requests` row, no OWNER/ADMIN approval, membership created directly with role PLAYER. A private club's join always goes through the existing request+approval flow. Which one applies is decided by re-reading the club's real visibility on the server at the moment of the join action — never trusted from a client-supplied flag, which only ever drives button copy.
+
+A club member can never be deactivated while they hold at least one reservation — as creator/holder or as an added participant — whose real end time (date + start_time + duration) has not yet passed and whose status is still active (`pending` or `confirmed`). This check runs server-side, immediately before the membership update, scoped to the exact club and profile being deactivated — never from reservation data already loaded in the UI.
 
 ---
 

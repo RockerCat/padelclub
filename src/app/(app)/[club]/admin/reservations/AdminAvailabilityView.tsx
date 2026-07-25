@@ -12,6 +12,8 @@ import { ReservationTicketPanel, TYPE_LABELS } from "./ReservationTicketPanel";
 import type { TicketPanelState } from "./ReservationTicketPanel";
 import type { CalendarReservation, CalendarCourt } from "./WeekCalendar";
 import type { PendingRequest } from "./PendingRequestsSection";
+import { RejectedReservationsSection } from "./RejectedReservationsSection";
+import type { RejectedReservation } from "./RejectedReservationsSection";
 
 // "Agenda" — the OWNER/ADMIN default Reservaciones view: one day, every
 // court, every 30-minute block always visible (never filtered down to just
@@ -40,6 +42,7 @@ interface AdminAvailabilityViewProps {
   closingMinsByDate: Record<string, number>;
   closedDates: string[];
   minDuration: number;
+  rejectedReservations: RejectedReservation[];
 }
 
 // Hover tooltip only lists this many names before falling back to "+N
@@ -144,6 +147,7 @@ export function AdminAvailabilityView({
   closingMinsByDate,
   closedDates,
   minDuration,
+  rejectedReservations,
 }: AdminAvailabilityViewProps) {
   const router = useRouter();
   const [selectedDate, setSelectedDate] = useState(
@@ -270,16 +274,21 @@ export function AdminAvailabilityView({
   }
 
   // Same green "approved" tone the player screen already uses for its own
-  // confirmed reservation — reused here for every real confirmed
+  // confirmed reservation — reused here for every real confirmed "Partido"
   // reservation on this court/date, so Agenda's occupied ticks read as
-  // unmistakably "booked" instead of the faint generic striped look.
-  // "block" reservations (club closures/maintenance) are excluded on
-  // purpose — they keep the plain striped "Bloqueada" look (point 1 of the
-  // spec: a block must stay visually distinct from a real reservation).
+  // unmistakably "booked" instead of the faint generic striped look. "Clase"
+  // paints light-blue ("class" tone) and "Bloqueo" paints lilac ("block"
+  // tone) instead — same mechanism, different tint per reservation type, so
+  // every type is identifiable at a glance without touching size, layout or
+  // any other Agenda behavior.
   function confirmedRangesFor(courtId: string): ContextRange[] {
     return reservations
-      .filter((r) => r.court_id === courtId && r.date === selectedDate && r.type !== "block")
-      .map((r) => ({ startTime: r.start_time.slice(0, 5), duration: r.duration_minutes, tone: "approved" as const }));
+      .filter((r) => r.court_id === courtId && r.date === selectedDate)
+      .map((r) => ({
+        startTime: r.start_time.slice(0, 5),
+        duration: r.duration_minutes,
+        tone: r.type === "class" ? ("class" as const) : r.type === "block" ? ("block" as const) : ("approved" as const),
+      }));
   }
 
   // Slightly dims a confirmed (non-block) reservation once it's over —
@@ -329,9 +338,13 @@ export function AdminAvailabilityView({
 
   // Desktop hover/focus tooltip content for an occupied tick — the same
   // confirmed/pending data already looked up above, just formatted for
-  // display instead of a single aria-label line. Null for a block
-  // reservation or any occupied tick with no real reservation behind it
-  // (CourtAvailabilityCard then renders no tooltip at all for that tick).
+  // display instead of a single aria-label line. Same component for every
+  // type (Partido/Clase/Bloqueo) — never a second tooltip implementation;
+  // a block reservation always has no players (effectivePlayersFor returns
+  // [] for it), so it renders ConfirmedTooltipContent's existing "Sin
+  // jugadores asignados" branch. Null only for an occupied tick with no
+  // real reservation behind it (CourtAvailabilityCard then renders no
+  // tooltip at all for that tick).
   function occupiedTooltipFor(courtId: string) {
     // Render-prop, not a component definition — same shape as
     // occupiedLabelFor/occupiedAriaLabelFor above, just returning JSX
@@ -341,7 +354,6 @@ export function AdminAvailabilityView({
     return (startTime: string) => {
       const confirmed = findConfirmed(courtId, startTime);
       if (confirmed) {
-        if (confirmed.type === "block") return null;
         return <ConfirmedTooltipContent reservation={confirmed} players={effectivePlayersFor(confirmed)} />;
       }
       const pending = findPending(courtId, startTime);
@@ -422,6 +434,21 @@ export function AdminAvailabilityView({
               onSelectOccupied={(startTime) => handleSelectOccupied(court.id, startTime)}
             />
           ))}
+        </div>
+      )}
+
+      {/* "Reservas rechazadas" — lives here (below every court card), never
+          above the Agenda/Semana switcher, so it never competes with the
+          date nav/calendar/court grid for top-of-screen space. Rendered only
+          inside AdminAvailabilityView (not WeekCalendar) so it appears
+          exactly once and only for Agenda — ReservationsViewSwitcher keeps
+          both views mounted and toggles visibility via CSS, so this section
+          is simply hidden (not unmounted) while Semana is active, same
+          mechanism that already preserves its own expanded/collapsed state
+          across tab switches. */}
+      {rejectedReservations.length > 0 && (
+        <div className="mt-8">
+          <RejectedReservationsSection reservations={rejectedReservations} clubSlug={clubSlug} />
         </div>
       )}
 

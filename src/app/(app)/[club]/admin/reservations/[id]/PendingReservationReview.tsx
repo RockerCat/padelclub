@@ -52,7 +52,7 @@ function formatCreatedAt(iso: string): string {
 
 const STATUS_LABEL: Record<string, { label: string; className: string }> = {
   pending: { label: "Pendiente de aprobación", className: "bg-amber-400/10 border-amber-400/20 text-amber-400" },
-  confirmed: { label: "Confirmada", className: "bg-brand-primary/10 border-brand-primary/20 text-brand-primary" },
+  confirmed: { label: "Confirmada", className: "bg-[#00FF00]/10 border-[#00FF00]/20 text-[#00FF00]" },
   cancelled: { label: "Cancelada", className: "bg-white/[0.03] border-white/5 text-brand-muted" },
   rejected: { label: "Rechazada", className: "bg-red-400/10 border-red-400/20 text-red-400" },
 };

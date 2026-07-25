@@ -422,7 +422,7 @@ export function ReservationTicketPanel({
                 <Row
                   label="Estado"
                   value={
-                    <span className="inline-flex items-center gap-1.5 text-brand-primary">
+                    <span className="inline-flex items-center gap-1.5 text-[#00FF00]">
                       <Check className="w-3.5 h-3.5" />
                       Confirmada
                     </span>

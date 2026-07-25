@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { createJoinRequest } from "./actions";
 
 interface Props {
@@ -27,17 +28,35 @@ export function RequestAccessButton({
   autoSubmit = false,
   className = "",
 }: Props) {
+  const router = useRouter();
   const [sent, setSent] = useState(requestStatus === "pending");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const autoSubmitted = useRef(false);
+  // Synchronous guard against a fast double-click/double-Enter firing a
+  // second submission before React re-renders with the transition's
+  // `pending` (which drives the button's own `disabled`) — the server
+  // action is itself idempotent, but this keeps a duplicate request from
+  // ever leaving the client in the first place.
+  const submitting = useRef(false);
 
   function handleRequestJoin() {
+    if (submitting.current) return;
+    submitting.current = true;
     setError(null);
     startTransition(async () => {
       const result = await createJoinRequest(clubId, clubSlug);
+      submitting.current = false;
       if (result.error) {
         setError(result.error);
+        return;
+      }
+      // Public club: join_public_club already created/confirmed the active
+      // membership — go straight to the real dashboard for that role/club
+      // instead of showing the "solicitud enviada" copy, which only applies
+      // to the private request+approval flow below.
+      if (result.redirectTo) {
+        router.push(result.redirectTo);
         return;
       }
       setSent(true);

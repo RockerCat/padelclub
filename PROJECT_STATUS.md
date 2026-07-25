@@ -3,7 +3,7 @@
 ## Estado General
 
 * Estado: Validation Gate 1.0
-* Última actualización: 24 de julio de 2026 (Agenda OWNER/ADMIN, filtro por cancha en Semana, rechazo de solicitudes con motivo, Home del jugador, identidad en el sidebar)
+* Última actualización: 25 de julio de 2026 (color por tipo de reserva y colores de estado fijos en Agenda, reubicación de Reservas rechazadas, corrección del ingreso directo a clubes públicos con notificación a OWNER/ADMIN, regla de bloqueo de desactivación de jugadores con reservas activas, "Partidos jugados" real en el detalle del miembro)
 
 ## Visión
 
@@ -343,6 +343,8 @@ Configurables por club (subconjunto no vacío de las anteriores; un club puede o
 * Slots ocupados muestran el nombre real del jugador (no iniciales ni títulos truncados), con truncado por CSS y tooltip al pasar el mouse/foco (solo dispositivos con puntero fino, con retardo de apertura/cierre) mostrando el detalle completo
 * Participantes resueltos de forma consistente aunque la reserva venga de una solicitud aprobada (que nunca puebla `reservation_players`): se usa como participante efectivo al jugador que creó la solicitud, resuelto contra la lista de miembros ya cargada — nunca una query nueva, y nunca se muestra a un OWNER/ADMIN creador como si fuera jugador
 * Navegación de fechas (`DayRangeNav`, componente compartido con la vista del PLAYER) aprovecha el ancho disponible en desktop mostrando más días sin detección de ancho por JS (variantes de 7/10/14 días conmutadas por breakpoint CSS)
+* Cada tipo de reserva tiene su propio color en los bloques de Agenda (Partido: verde, Clase: azul celeste, Bloqueo: lila), reutilizando el mismo tooltip existente para los tres tipos; el color de "Confirmada"/"Aprobada" (verde) y de "Clase"/"Bloqueo" ahora es un valor fijo en toda la plataforma, ya no depende del color de marca configurado por cada club (antes tomaba el `--color-brand-primary` del club, lo que hacía que "confirmada" se viera de un color distinto según el club)
+* "Reservas rechazadas" se movió de la parte superior de la pantalla (antes visible en ambas vistas) a debajo del grid de canchas, únicamente dentro de Agenda — Semana ya no la muestra, sin duplicarla al alternar entre vistas (se mantiene montada una sola vez, oculta por CSS junto con el resto de Agenda)
 
 **Filtro por cancha en Semana:**
 
@@ -458,6 +460,8 @@ Incluye:
 * Membresías
 * Roles
 * Multi-club
+* Un jugador con al menos una reservación activa (pendiente o confirmada) cuya hora de finalización real (fecha + hora de inicio + duración) todavía no pasó no puede ser desactivado — se valida server-side, justo antes de actualizar la membresía, tanto por reservas creadas por el jugador como por reservas donde fue agregado como participante (contadas una sola vez). Bloqueos de cancha, clases (fuera de esta regla salvo que también sean partido), reservas canceladas/rechazadas/finalizadas y reservas de otros clubes nunca bloquean la desactivación
+* "Partidos jugados" en el detalle del miembro ahora muestra el número real (o `0`), calculado en el momento desde `reservations`/`reservation_players` (partido, confirmado, ya finalizado, sin duplicar cuando el jugador es creador y participante a la vez) — antes era un `—` fijo sin ninguna consulta detrás
 
 Pendiente:
 
@@ -485,6 +489,8 @@ Incluye:
 * La notificación de aprobación navega al club real (`/{clubSlug}`) en vez del listado genérico `/clubs`; el destino se guarda en la metadata desde el momento de la aprobación
 * Corregido: aprobar una solicitud ya no redirige automáticamente al jugador a Reservaciones — permanece en la ruta donde estaba
 * Corregido: el estado "resuelta" (aprobada/rechazada) de una solicitud de ingreso o de reserva ahora es compartido entre **todos** los OWNER/ADMIN notificados — antes cada quien veía su propio estado local en cuanto la abría, sin reflejar que otro administrador ya la había resuelto. Se agregaron columnas `resolved_status`/`resolved_at` a `notifications` (actualizadas atómicamente dentro de las mismas RPCs que resuelven la solicitud); `read_at` sigue siendo estrictamente por-usuario y nunca se usa para inferir si la solicitud fue resuelta
+* Corregido: un club configurado como público seguía enviando al jugador por el flujo de solicitud+aprobación de un club privado. El botón "Unirme al club" y su server action (`createJoinRequest`) ahora releen `clubs.visibility` en el servidor (nunca confían en el dato ya cargado en el cliente) y, si es público, invocan el RPC `join_public_club` (ya existía pero no estaba conectado a ninguna vista real) — crea la membresía PLAYER activa de inmediato, sin fila en `club_join_requests`, y redirige al jugador a su dashboard real (`getClubEntryPath`, con el rol tomado de la membresía recién confirmada, nunca hardcodeado). El flujo de clubes privados no cambió. También se corrigió una causa de "Ya eres miembro de este club" apareciendo por error: el CTA de unión se montaba tres veces a la vez (hero + 2 bloques inferiores) y las tres disparaban el auto-envío al volver de signup/login; ahora solo una lo dispara
+* Nuevo: cuando un jugador se une directo a un club público, OWNER y cada ADMIN activo reciben una notificación informativa ("Nuevo jugador en el club") que enlaza a Jugadores — sin solicitud de ingreso, sin acciones de aprobar/rechazar, sin notificar al jugador. Se genera atómicamente dentro del mismo RPC `join_public_club`, solo cuando la membresía se crea de verdad (nunca en el camino idempotente de "ya era miembro"), reutilizando la tabla/Realtime/lectura individual de notificaciones ya existentes
 
 Pendiente:
 

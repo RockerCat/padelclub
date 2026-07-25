@@ -236,7 +236,7 @@ const ACTIVITY_STATUS: Record<
   { label: string; dot: string; text: string; bg: string }
 > = {
   pending: { label: "Pendiente", dot: "bg-amber-400", text: "text-amber-400", bg: "bg-amber-400/10 border-amber-400/20" },
-  confirmed: { label: "Aprobada", dot: "bg-brand-primary", text: "text-brand-primary", bg: "bg-brand-primary/10 border-brand-primary/20" },
+  confirmed: { label: "Aprobada", dot: "bg-[#00FF00]", text: "text-[#00FF00]", bg: "bg-[#00FF00]/10 border-[#00FF00]/20" },
   rejected: { label: "Rechazada", dot: "bg-red-400", text: "text-red-400", bg: "bg-red-400/10 border-red-400/20" },
   // Not one of the panel's 3 primary states, but a player's own confirmed
   // reservation can later be cancelled by an admin — kept visible (never

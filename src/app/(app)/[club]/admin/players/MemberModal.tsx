@@ -7,7 +7,7 @@ import { Badge, Button, ConfirmDialog, Toast } from "@/components/ui";
 import { PlayerAvatar } from "@/components/players/PlayerAvatar";
 import { PlayerCategoryBadge } from "@/components/players/PlayerCategoryBadge";
 import { PLAYER_CATEGORIES, type PlayerCategory } from "@/types/database";
-import { toggleMemberActive, updateMemberCategory } from "./actions";
+import { toggleMemberActive, updateMemberCategory, getMatchesPlayedCount } from "./actions";
 import type { MemberRow } from "./MembersClient";
 
 interface MemberModalProps {
@@ -45,6 +45,23 @@ export function MemberModal({ member, clubId, clubSlug, onClose }: MemberModalPr
 
   const [savePending, startSave] = useTransition();
   const [togglePending, startToggle] = useTransition();
+
+  // "Partidos jugados" — computed on demand, not stored on the member row,
+  // so it can never drift out of sync with reservations. null = still
+  // loading (renders the same "—" placeholder this field already had),
+  // fetched fresh every time this modal opens for a member (a different
+  // selectedMember always remounts this component — see MembersClient).
+  const [matchesPlayed, setMatchesPlayed] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getMatchesPlayedCount(clubId, member.profile_id).then((result) => {
+      if (!cancelled && typeof result.count === "number") setMatchesPlayed(result.count);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [clubId, member.profile_id]);
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -155,7 +172,7 @@ export function MemberModal({ member, clubId, clubSlug, onClose }: MemberModalPr
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-brand-muted">Partidos jugados</span>
-                <span className="text-white/60">—</span>
+                <span className="text-white/60">{matchesPlayed === null ? "—" : matchesPlayed}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-brand-muted">Fecha de ingreso</span>
