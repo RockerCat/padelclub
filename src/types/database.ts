@@ -244,7 +244,7 @@ export interface Database {
           type: "match" | "class" | "block";
           title: string | null;
           notes: string | null;
-          status: "confirmed" | "cancelled" | "pending";
+          status: "confirmed" | "cancelled" | "pending" | "rejected";
           cancelled_at: string | null;
           cancelled_by: string | null;
           // Frozen price fields (20260802000002) — NULL for every
@@ -255,6 +255,14 @@ export interface Database {
           price_currency: string | null;
           pricing_rule_id: string | null;
           price_calculated_at: string | null;
+          // Rejection traceability (20260804000001) — only set once
+          // status = 'rejected'. Null for every other status, including
+          // historical rows rejected before this migration (old reject flow
+          // reused status = 'cancelled' with no reason captured).
+          rejection_reason_code: string | null;
+          rejection_reason: string | null;
+          rejected_at: string | null;
+          rejected_by: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -269,13 +277,17 @@ export interface Database {
           type?: "match" | "class" | "block";
           title?: string | null;
           notes?: string | null;
-          status?: "confirmed" | "cancelled" | "pending";
+          status?: "confirmed" | "cancelled" | "pending" | "rejected";
           cancelled_at?: string | null;
           cancelled_by?: string | null;
           price_amount?: number | null;
           price_currency?: string | null;
           pricing_rule_id?: string | null;
           price_calculated_at?: string | null;
+          rejection_reason_code?: string | null;
+          rejection_reason?: string | null;
+          rejected_at?: string | null;
+          rejected_by?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -287,13 +299,17 @@ export interface Database {
           type?: "match" | "class" | "block";
           title?: string | null;
           notes?: string | null;
-          status?: "confirmed" | "cancelled" | "pending";
+          status?: "confirmed" | "cancelled" | "pending" | "rejected";
           cancelled_at?: string | null;
           cancelled_by?: string | null;
           price_amount?: number | null;
           price_currency?: string | null;
           pricing_rule_id?: string | null;
           price_calculated_at?: string | null;
+          rejection_reason_code?: string | null;
+          rejection_reason?: string | null;
+          rejected_at?: string | null;
+          rejected_by?: string | null;
           updated_at?: string;
         };
         Relationships: [
@@ -822,6 +838,23 @@ export interface Database {
       // after approvePendingReservation/rejectPendingReservation succeed
       resolve_reservation_request_notifications: {
         Args: { p_reservation_id: string; p_status: string };
+        Returns: void;
+      };
+      // public.notify_reservation_rejected — inserts the player-facing
+      // reservation_request_rejected notification and resolves every
+      // OWNER/ADMIN's own reservation_request_created notification for
+      // this reservation, called right after rejectPendingReservation's
+      // conditional UPDATE succeeds
+      notify_reservation_rejected: {
+        Args: { p_reservation_id: string };
+        Returns: void;
+      };
+      // public.notify_reservation_created_for_players — notifies every
+      // player linked via reservation_players about a CONFIRMED reservation
+      // OWNER/ADMIN created directly (no prior request from them), called
+      // right after createReservation's players insert succeeds
+      notify_reservation_created_for_players: {
+        Args: { p_reservation_id: string };
         Returns: void;
       };
       // public.upsert_pricing_rule_with_prices — atomic create/edit of a

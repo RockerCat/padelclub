@@ -370,6 +370,24 @@ Whether a request (join request, reservation request) has been resolved is share
 
 ---
 
+## Reservation Status Principles
+
+A reservation's `status` communicates why it is not currently active: `pending` (awaiting OWNER/ADMIN review), `confirmed`, `cancelled` (a confirmed reservation later cancelled), or `rejected` (a pending request the club declined). `cancelled` and `rejected` are never interchangeable — they are different events, with different audiences and different notifications, even though both end a reservation.
+
+A rejection always carries a reason, chosen from one shared, server-validated catalog (never a free-form reason trusted from the client alone, never a second copy of the catalog). The requesting player is always notified of a rejection and its reason, the same way every other reservation notification is delivered.
+
+---
+
+## Shared View & Data Patterns
+
+When two roles (e.g. PLAYER and OWNER/ADMIN) need the same underlying computation — court availability, a player's own reservations, the signed-in user's display identity — resolve it through one shared module both surfaces call. Never let admin and player views drift into two slightly different versions of the same rule.
+
+When a secondary view is added alongside an existing primary one for the same data (e.g. an alternate calendar layout), prefer keeping both mounted and toggling visibility via CSS rather than conditionally rendering/unmounting — this lets local component state (filters, selections) survive switching between them for free, with no extra persistence mechanism.
+
+Prefer CSS-based truncation (`truncate` on a `min-w-0` flex child) over manually cutting strings — it degrades correctly at any width and never mid-word-truncates content a screen reader still receives in full.
+
+---
+
 ## Reservation Pricing Principles
 
 A club's reservation price is always a fixed amount configured explicitly for each tariff rule and each duration the club offers — never a rate multiplied by duration. A rule decides which tariff bucket applies (club, court, days, hours); the amount for a given duration is configured separately and explicitly for that bucket.

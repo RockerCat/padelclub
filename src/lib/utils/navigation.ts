@@ -4,10 +4,10 @@
  *
  * OWNER  → dashboard (operational home for configured clubs)
  * ADMIN  → reservations (daily operations starting point)
- * PLAYER → reservations (player's operational home until a real portal exists)
+ * PLAYER → home (member's home: reservations/requests first, club info below)
  */
 export function getClubEntryPath(slug: string, role: string): string {
   if (role === "OWNER") return `/${slug}/dashboard`;
   if (role === "ADMIN") return `/${slug}/admin/reservations`;
-  return `/${slug}/reservations`;
+  return `/${slug}/home`;
 }

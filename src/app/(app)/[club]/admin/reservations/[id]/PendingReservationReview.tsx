@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, X } from "lucide-react";
 import { approvePendingReservation, rejectPendingReservation, getAvailableSlots } from "../actions";
 import type { PendingActionResult } from "../actions";
+import { RejectReservationModal } from "../RejectReservationModal";
+import type { RejectionReasonCode } from "@/lib/reservationRejection";
 import { AvailabilityLegend, CourtAvailabilityCard } from "@/components/courts/CourtAvailabilityTimeline";
 import type { Court } from "@/components/courts/CourtAvailabilityTimeline";
 import { buildDayGrid, addMinutes } from "@/lib/courtAvailability";
@@ -24,6 +26,11 @@ export type PendingReservationDetail = {
   // recalculated: null means no tariff was applicable at request time.
   price_amount: number | null;
   price_currency: string | null;
+  // Only set once status === "rejected" (20260804000001) — full
+  // traceability, same value shown to OWNER and ADMIN alike.
+  rejection_reason: string | null;
+  rejected_at: string | null;
+  rejectedByName: string | null;
 };
 
 function formatCurrency(amount: number, currency: string): string {
@@ -46,7 +53,8 @@ function formatCreatedAt(iso: string): string {
 const STATUS_LABEL: Record<string, { label: string; className: string }> = {
   pending: { label: "Pendiente de aprobación", className: "bg-amber-400/10 border-amber-400/20 text-amber-400" },
   confirmed: { label: "Confirmada", className: "bg-brand-primary/10 border-brand-primary/20 text-brand-primary" },
-  cancelled: { label: "Rechazada", className: "bg-white/[0.03] border-white/5 text-brand-muted" },
+  cancelled: { label: "Cancelada", className: "bg-white/[0.03] border-white/5 text-brand-muted" },
+  rejected: { label: "Rechazada", className: "bg-red-400/10 border-red-400/20 text-red-400" },
 };
 
 // "Ya fue procesada" is returned verbatim by approvePendingReservation/
@@ -83,6 +91,8 @@ export function PendingReservationReview({
   const [resolvedElsewhere, setResolvedElsewhere] = useState(false);
   const [isApproving, startApprove] = useTransition();
   const [isRejecting, startReject] = useTransition();
+  const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [rejectError, setRejectError] = useState<string | null>(null);
   const isPending = isApproving || isRejecting;
 
   const start = reservation.start_time.slice(0, 5);
@@ -112,17 +122,30 @@ export function PendingReservationReview({
     });
   }
 
-  function handleReject() {
-    setError(null);
+  function handleRejectConfirm(reasonCode: RejectionReasonCode, comment: string) {
+    setRejectError(null);
     startReject(async () => {
-      const result: PendingActionResult = await rejectPendingReservation(clubId, reservation.id);
+      const result: PendingActionResult = await rejectPendingReservation(
+        clubId,
+        reservation.id,
+        reasonCode,
+        comment
+      );
       if (result.success) {
+        setRejectModalOpen(false);
         router.push(`/${clubSlug}/admin/reservations`);
         return;
       }
-      setError(result.error ?? "No se pudo rechazar la solicitud.");
-      if (result.error === ALREADY_RESOLVED_ERROR) setResolvedElsewhere(true);
-      router.refresh();
+      if (result.error === ALREADY_RESOLVED_ERROR) {
+        setRejectModalOpen(false);
+        setError(result.error);
+        setResolvedElsewhere(true);
+        router.refresh();
+        return;
+      }
+      // Keep the modal open with its content intact so the admin can retry
+      // without re-selecting the reason or retyping the comment.
+      setRejectError(result.error ?? "No se pudo rechazar la solicitud.");
     });
   }
 
@@ -168,6 +191,17 @@ export function PendingReservationReview({
         </div>
       </div>
 
+      {reservation.status === "rejected" && reservation.rejection_reason && (
+        <div className="mb-6 rounded-2xl border border-red-400/20 bg-red-400/5 p-4 flex flex-col gap-1.5">
+          <p className="text-sm font-medium text-red-400">Motivo de rechazo</p>
+          <p className="text-sm text-white">{reservation.rejection_reason}</p>
+          <p className="text-xs text-brand-muted mt-1">
+            {reservation.rejectedByName ?? "Un administrador"}
+            {reservation.rejected_at ? ` · ${formatCreatedAt(reservation.rejected_at)}` : ""}
+          </p>
+        </div>
+      )}
+
       <div className="mb-6 flex flex-col gap-3">
         <AvailabilityLegend showRequested />
         <CourtAvailabilityCard
@@ -196,7 +230,7 @@ export function PendingReservationReview({
           <button
             type="button"
             disabled={isPending}
-            onClick={handleReject}
+            onClick={() => setRejectModalOpen(true)}
             className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold border border-white/20 text-brand-muted hover:text-white hover:border-white/40 transition-colors disabled:opacity-40"
           >
             {isRejecting ? <Spinner /> : <X className="w-4 h-4" />}
@@ -212,6 +246,15 @@ export function PendingReservationReview({
             Aprobar reserva
           </button>
         </div>
+      )}
+
+      {rejectModalOpen && (
+        <RejectReservationModal
+          pending={isRejecting}
+          error={rejectError}
+          onConfirm={handleRejectConfirm}
+          onCancel={() => setRejectModalOpen(false)}
+        />
       )}
     </div>
   );

@@ -1,3 +1,5 @@
+import { clubRoleLabel } from "@/lib/roleLabels";
+
 interface ClubHeaderProps {
   club: {
     name: string;
@@ -15,19 +17,6 @@ function getInitials(name: string): string {
     .slice(0, 2)
     .join("")
     .toUpperCase();
-}
-
-function roleBadgeLabel(role: string): string {
-  switch (role) {
-    case "OWNER":
-      return "Propietario";
-    case "ADMIN":
-      return "Admin";
-    case "PLAYER":
-      return "Jugador";
-    default:
-      return role;
-  }
 }
 
 export function ClubHeader({ club, role }: ClubHeaderProps) {
@@ -71,7 +60,7 @@ export function ClubHeader({ club, role }: ClubHeaderProps) {
         {/* Name + role */}
         <div>
           <p className="text-sm font-bold text-white leading-tight">{club.name}</p>
-          <p className="text-xs text-brand-muted mt-0.5">{roleBadgeLabel(role)}</p>
+          <p className="text-xs text-brand-muted mt-0.5">{clubRoleLabel(role)}</p>
         </div>
       </div>
 

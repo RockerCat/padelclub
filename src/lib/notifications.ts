@@ -83,6 +83,19 @@ export async function getNotificationsPaginated(
 // Shared by the bell dropdown and /notifications so a click behaves
 // identically in both places — one routing decision, never two.
 export function hrefForNotification(n: NotificationRow): string | null {
+  if (n.type === "reservation_request_rejected") {
+    // Deliberately checked BEFORE metadata.destination below: existing rows
+    // (created by notify_reservation_rejected, 20260804000001) still carry
+    // the old "#mis-solicitudes" destination, which only scrolls to the
+    // bottom history — never the contextual top block. reservation_id has
+    // been in metadata since this notification type was introduced, so it
+    // can always drive the real per-reservation context instead, with no
+    // migration needed to move existing rows off the old destination.
+    const reservationId = n.metadata?.reservation_id;
+    const slug = n.clubs?.slug ?? (typeof n.metadata?.club_slug === "string" ? n.metadata.club_slug : undefined);
+    if (reservationId && slug) return `/${slug}/reservations?reservationId=${reservationId}`;
+    return n.metadata?.destination ?? (n.clubs ? `/${n.clubs.slug}/reservations#mis-solicitudes` : null);
+  }
   if (n.metadata?.destination) return n.metadata.destination;
   if (n.type === "join_request_created") {
     return n.clubs ? `/${n.clubs.slug}/admin/players` : null;

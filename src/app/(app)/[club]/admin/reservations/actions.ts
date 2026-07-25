@@ -8,6 +8,7 @@ import {
   timeToMinutes as sharedTimeToMinutes,
 } from "@/lib/operatingHours";
 import { getClubDurations } from "@/lib/durations";
+import { validateRejectionInput } from "@/lib/reservationRejection";
 
 export type ReservationFormState = {
   error?: string;
@@ -294,6 +295,27 @@ export async function createReservation(
         supabaseError: playersError,
       });
       // Reservation was created; don't block on player insert failure
+    } else {
+      // Only reached once the players are actually linked (this INSERT is a
+      // single statement — either every row lands or none does, so no
+      // partial-link case to guard against here). Notifies each linked
+      // player that the club booked this for them — best-effort, same
+      // convention as every other notify_* RPC call in this module: the
+      // reservation + participants are already committed and must never be
+      // rolled back over a notification-only failure. Recipients are
+      // re-derived server-side from reservation_players itself, never from
+      // this action's own playerIds array.
+      const { error: notifyError } = await supabase.rpc("notify_reservation_created_for_players", {
+        p_reservation_id: reservation.id,
+      });
+      if (notifyError) {
+        console.error("[createReservation] notify_reservation_created_for_players failed:", {
+          reservationId: reservation.id,
+          clubId,
+          code: notifyError.code,
+          message: notifyError.message,
+        });
+      }
     }
   }
 
@@ -494,6 +516,23 @@ export type ReservationEditData = {
   title: string | null;
   notes: string | null;
   player_ids: string[];
+  // Added for the Agenda ticket panel's read-only summary (View mode) —
+  // ReservationForm's initialValues only ever destructures the fields
+  // above, so these are additive and don't affect the existing edit flow.
+  price_amount: number | null;
+  price_currency: string | null;
+  // Who created it, and whether they're a PLAYER (this reservation started
+  // as an approved request) or OWNER/ADMIN (created directly by the club)
+  // — the panel's "Origen" field. Never inferred from anything the client
+  // sends; both resolved server-side from the real created_by. created_by
+  // itself is exposed too — when creator_is_player is true and no explicit
+  // reservation_players rows exist, the panel treats this same id as the
+  // effective "Jugadores" participant (the requester whose approved
+  // request became this reservation), never as a stand-in for JUGADORES
+  // when real participants already exist.
+  created_by: string;
+  creator_name: string | null;
+  creator_is_player: boolean;
 };
 
 // ─── Pending reservation approval / rejection ─────────────────────────────────
@@ -555,15 +594,27 @@ export async function approvePendingReservation(
   );
   if (hasOverlap) return { error: "El horario fue confirmado para otra reserva." };
 
-  const { error: updateErr } = await supabase
+  // .eq("status", "pending") makes this the atomic decision point: if
+  // another OWNER/ADMIN already approved or rejected this same request,
+  // Postgres' row lock on the concurrent UPDATE serializes the two writes,
+  // and whichever commits second finds status no longer 'pending' — 0 rows
+  // match, `updated` comes back null, and this admin gets the same
+  // controlled "already resolved" outcome as rejectPendingReservation.
+  const { data: updated, error: updateErr } = await supabase
     .from("reservations")
     .update({ status: "confirmed" })
     .eq("id", reservationId)
-    .eq("club_id", clubId);
+    .eq("club_id", clubId)
+    .eq("status", "pending")
+    .select("id")
+    .maybeSingle();
 
   if (updateErr) {
     console.error("[approvePendingReservation]", updateErr);
     return { error: "Error al confirmar la reserva. Intenta nuevamente." };
+  }
+  if (!updated) {
+    return { error: "La solicitud ya fue procesada." };
   }
 
   // Shares this outcome across every OWNER/ADMIN's own
@@ -591,7 +642,9 @@ export async function approvePendingReservation(
 
 export async function rejectPendingReservation(
   clubId: string,
-  reservationId: string
+  reservationId: string,
+  reasonCode: string,
+  reasonComment: string
 ): Promise<PendingActionResult> {
   const { supabase, user, error: authError } = await requireAdminRole(clubId);
   if (authError || !supabase || !user) return { error: authError ?? "Sin permiso." };
@@ -606,33 +659,51 @@ export async function rejectPendingReservation(
   if (!res) return { error: "Solicitud no encontrada." };
   if (res.status !== "pending") return { error: "La solicitud ya fue procesada." };
 
-  const { error: updateErr } = await supabase
+  // Never trust a motivo/comment composed on the client — codes and length
+  // are re-validated here, and the final player-facing text is built from
+  // that same lookup table, not from anything the client sent as "final text".
+  const validated = validateRejectionInput(reasonCode, reasonComment);
+  if ("error" in validated) return { error: validated.error };
+
+  // .eq("status", "pending") is the atomic decision point — see
+  // approvePendingReservation for the concurrency reasoning shared by both.
+  const { data: updated, error: updateErr } = await supabase
     .from("reservations")
     .update({
-      status: "cancelled",
-      cancelled_by: user.id,
-      cancelled_at: new Date().toISOString(),
+      status: "rejected",
+      rejection_reason_code: validated.reasonCode,
+      rejection_reason: validated.reasonText,
+      rejected_by: user.id,
+      rejected_at: new Date().toISOString(),
     })
     .eq("id", reservationId)
-    .eq("club_id", clubId);
+    .eq("club_id", clubId)
+    .eq("status", "pending")
+    .select("id")
+    .maybeSingle();
 
   if (updateErr) {
     console.error("[rejectPendingReservation]", updateErr);
     return { error: "Error al rechazar la solicitud. Intenta nuevamente." };
   }
+  if (!updated) {
+    return { error: "La solicitud ya fue procesada." };
+  }
 
-  // See approvePendingReservation — same shared-resolution RPC, same
-  // best-effort convention.
-  const { error: resolveErr } = await supabase.rpc("resolve_reservation_request_notifications", {
+  // Notifies the player and shares the resolution with every other
+  // OWNER/ADMIN's own reservation_request_created notification — best
+  // effort, same convention as notify_reservation_request_created in
+  // requestReservation: the reservation is already rejected and must never
+  // be rolled back over a notification-sync failure.
+  const { error: notifyErr } = await supabase.rpc("notify_reservation_rejected", {
     p_reservation_id: reservationId,
-    p_status: "rejected",
   });
-  if (resolveErr) {
-    console.error("[rejectPendingReservation] resolve_reservation_request_notifications failed:", {
+  if (notifyErr) {
+    console.error("[rejectPendingReservation] notify_reservation_rejected failed:", {
       reservationId,
       clubId,
-      code: resolveErr.code,
-      message: resolveErr.message,
+      code: notifyErr.code,
+      message: notifyErr.message,
     });
   }
 
@@ -649,13 +720,23 @@ export async function getReservationForEdit(
   const { data } = await supabase
     .from("reservations")
     .select(
-      "court_id, date, start_time, duration_minutes, type, title, notes, status, reservation_players(profile_id)"
+      "court_id, date, start_time, duration_minutes, type, title, notes, status, created_by, price_amount, price_currency, reservation_players(profile_id)"
     )
     .eq("id", reservationId)
     .eq("club_id", clubId)
     .single();
 
-  if (!data || data.status === "cancelled") return null;
+  if (!data || data.status === "cancelled" || data.status === "rejected") return null;
+
+  const [{ data: creatorProfile }, { data: creatorMembership }] = await Promise.all([
+    supabase.from("profiles").select("full_name").eq("id", data.created_by).maybeSingle(),
+    supabase
+      .from("club_members")
+      .select("role")
+      .eq("club_id", clubId)
+      .eq("profile_id", data.created_by)
+      .maybeSingle(),
+  ]);
 
   return {
     court_id: data.court_id,
@@ -668,6 +749,11 @@ export async function getReservationForEdit(
     player_ids: (data.reservation_players as unknown as Array<{ profile_id: string }>).map(
       (rp) => rp.profile_id
     ),
+    price_amount: data.price_amount,
+    price_currency: data.price_currency,
+    created_by: data.created_by,
+    creator_name: creatorProfile?.full_name ?? null,
+    creator_is_player: creatorMembership?.role === "PLAYER",
   };
 }
 

@@ -1,16 +1,25 @@
 "use client";
 
-import { useState, useEffect, useActionState, useCallback } from "react";
-import Link from "next/link";
+import { useState, useEffect, useActionState, useCallback, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, X, Check, CalendarOff, Clock } from "lucide-react";
+import { ChevronUp, ChevronDown, X, Check, CalendarOff } from "lucide-react";
 import { requestReservation, getReservationPriceQuote } from "./actions";
 import type { RequestFormState } from "./actions";
 import type { ResolveReservationPriceResult } from "@/lib/reservationPricing";
-import type { MyReservation } from "./page";
+import type { MyReservation } from "@/lib/playerReservations";
 import { durationOptions, durationLabel } from "@/lib/durations";
 import { AvailabilityLegend, CourtAvailabilityCard } from "@/components/courts/CourtAvailabilityTimeline";
+import type { ContextRange } from "@/components/courts/CourtAvailabilityTimeline";
+import { DayRangeNav } from "@/components/courts/DayRangeNav";
+import type { DayRangeDay, DayRangeBlock } from "@/components/courts/DayRangeNav";
 import { timeToMins, addMinutes, buildDayGrid } from "@/lib/courtAvailability";
+import {
+  ActivityList,
+  sortBookingsByProximity,
+  filterVisibleRequests,
+  useDismissedReservationIds,
+  usePlayerReservationsRealtime,
+} from "@/components/reservations/PlayerActivity";
 
 // Shared by the price summary in the request modal and the frozen price
 // shown on already-created requests — one formatting rule, not two.
@@ -19,41 +28,63 @@ function formatCurrency(amount: number, currency: string): string {
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-type WeekDayData = {
-  date: string;
-  dayName: string;
-  dayNum: number;
-  monthName: string;
-  isPast: boolean;
-};
+// DayRangeDay/DayRangeBlock now live in @/components/courts/DayRangeNav,
+// shared with the OWNER/ADMIN Agenda view — no second implementation of the
+// day-range navigation.
 
 type Court = { id: string; name: string; surface: string | null; is_indoor: boolean | null };
 
 type BlockedWindow = [number, number];
 
-// Day-card summary indicator — coarse, club-wide (not per-court) buckets
-// built from the same per-day/per-court `availability` already sent by the
-// server. "closed" = no operating hours that day.
-type DaySegmentState = "available" | "occupied" | "closed";
+// Carried over from clicking an activity-panel card (see activityHref below)
+// — already fully re-validated server-side (page.tsx: active court, allowed
+// duration), each field independently. Non-null only once a card was
+// actually clicked; courtId/duration are individually null when that
+// specific piece of the underlying reservation is no longer valid (inactive
+// court, disallowed duration) — the other still applies rather than the
+// whole prefill being dropped. Deliberately has no hour: selecting a card
+// must never preselect a time, only switch the calendar's context. The date
+// itself is resolved server-side directly into defaultSelectedDate,
+// independent of this object.
+export type CalendarPrefill = {
+  courtId: string | null;
+  duration: number | null;
+};
 
 interface PlayerAvailabilityCalendarProps {
-  weekDays: WeekDayData[];
+  weekDays: DayRangeDay[];
   courts: Court[];
   availability: Record<string, Record<string, string[]>>;
   closedDates: string[];
   todayStr: string;
-  weekLabel: string;
-  prevWeekHref: string;
-  nextWeekHref: string;
+  dayRangeBlocks: DayRangeBlock[];
   todayHref: string;
   clubId: string;
+  clubSlug: string;
+  // Scopes the SidePanels expand/collapse localStorage preference to this
+  // player, alongside clubId — never sent anywhere, purely a local key.
+  playerId: string;
   defaultSelectedDate: string;
   allowedDurations: number[];
   openingMinsByDate: Record<string, number>;
   closingMinsByDate: Record<string, number>;
   blockedByDate: Record<string, Record<string, BlockedWindow[]>>;
+  // "Mis solicitudes" — only the request lifecycle the player themselves
+  // started (requestReservation): pending and rejected only, page.tsx
+  // already excludes confirmed/cancelled here.
   myReservations: MyReservation[];
+  // "Mis reservas" — every CONFIRMED reservation the player participates
+  // in, however it was created (self-requested-then-approved, or OWNER/
+  // ADMIN added them directly via reservation_players). See page.tsx.
+  myBookings: MyReservation[];
+  prefill: CalendarPrefill | null;
+  // The activity-panel card currently selected — set from the reservationId
+  // query param (page.tsx), already validated to belong to this player and
+  // this club (as requester or as participant). Independent of
+  // myReservations/myBookings' date windows, so it still resolves even if
+  // the date has since elapsed. Drives both the calendar context switch and
+  // the contextual slot highlight (green/amber/red).
+  focusReservation: MyReservation | null;
 }
 
 type ModalSlot = {
@@ -61,16 +92,15 @@ type ModalSlot = {
   courtName: string;
   date: string;
   startTime: string;
+  // Reflects whatever duration is currently governing the day view
+  // (selectedDuration) at the moment the player picks a slot — so the
+  // modal never silently reverts to allowedDurations[0].
+  duration?: number;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatModalDate(date: string): string {
-  const d = new Date(date + "T00:00:00");
-  return d.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" });
-}
-
-function formatCardDate(date: string): string {
   const d = new Date(date + "T00:00:00");
   return d.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" });
 }
@@ -89,216 +119,127 @@ function filterSlotsByDuration(
   });
 }
 
-const DAY_INDICATOR_SEGMENTS = 5;
-
-// Coarse day-level summary for the day cards — buckets the operating window
-// into a handful of equal ranges and marks each "available" if ANY court has
-// a free slot inside it. Deliberately imprecise per-court (spec: this is a
-// day-level summary, not a per-court readout) — built only from the real
-// `availability` already computed server-side, no new rule.
-function buildDayIndicator(
-  date: string,
-  courts: Pick<Court, "id">[],
-  availability: Record<string, Record<string, string[]>>,
-  closedDates: string[],
-  openingMinsByDate: Record<string, number>,
-  closingMinsByDate: Record<string, number>,
-): DaySegmentState[] {
-  const openMins = openingMinsByDate[date];
-  const closeMins = closingMinsByDate[date];
-  if (closedDates.includes(date) || openMins === undefined || closeMins === undefined || closeMins <= openMins) {
-    return Array<DaySegmentState>(DAY_INDICATOR_SEGMENTS).fill("closed");
-  }
-
-  const dayAvailability = availability[date] ?? {};
-  const bucketSize = (closeMins - openMins) / DAY_INDICATOR_SEGMENTS;
-
-  return Array.from({ length: DAY_INDICATOR_SEGMENTS }, (_, i) => {
-    const bucketStart = openMins + i * bucketSize;
-    const bucketEnd = bucketStart + bucketSize;
-    const hasFreeSlot = courts.some((court) =>
-      (dayAvailability[court.id] ?? []).some((slot) => {
-        const m = timeToMins(slot);
-        return m >= bucketStart && m < bucketEnd;
-      })
-    );
-    return hasFreeSlot ? "available" : "occupied";
-  });
-}
-
-// Groups reservations by date, returns dates in ascending order
-function groupByDate(reservations: MyReservation[]): Array<{ date: string; items: MyReservation[] }> {
-  const map = new Map<string, MyReservation[]>();
-  for (const r of reservations) {
-    const list = map.get(r.date) ?? [];
-    list.push(r);
-    map.set(r.date, list);
-  }
-  return Array.from(map.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, items]) => ({ date, items }));
-}
-
-// ─── Status Badge ─────────────────────────────────────────────────────────────
-
-const STATUS_CONFIG = {
-  pending: { label: "Pendiente de aprobación", dot: "bg-amber-400", text: "text-amber-400", bg: "bg-amber-400/10 border-amber-400/20" },
-  confirmed: { label: "Confirmada", dot: "bg-brand-primary", text: "text-brand-primary", bg: "bg-brand-primary/10 border-brand-primary/20" },
-  cancelled: { label: "Cancelada", dot: "bg-red-400/60", text: "text-brand-muted", bg: "bg-white/[0.03] border-white/5" },
-} as const;
-
-function StatusBadge({ status }: { status: MyReservation["status"] }) {
-  const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.pending;
-  return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${cfg.bg} ${cfg.text}`}>
-      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cfg.dot}`} />
-      {cfg.label}
-    </span>
-  );
-}
-
-// ─── Next Reservation Card ────────────────────────────────────────────────────
-
-const NEXT_CARD_STATUS = {
-  confirmed: {
-    title: "Tu próxima reserva",
-    cardClass: "bg-brand-primary/5 border-brand-primary/20",
-    titleClass: "text-brand-primary",
-  },
-  pending: {
-    title: "Solicitud en revisión",
-    cardClass: "bg-amber-400/5 border-amber-400/20",
-    titleClass: "text-amber-400",
-  },
-} as const;
-
-function NextReservationCard({
-  reservation,
-  showHistoryLink,
+// Header for a collapsible panel block — title, live count, and a
+// chevron, the whole row acting as the expand/collapse control (never a
+// navigation link). aria-expanded/aria-controls carry the state for
+// assistive tech; the chevron alone never has to (point 9 of the spec).
+function PanelSectionHeader({
+  title,
+  count,
+  expanded,
+  onToggle,
+  controlsId,
 }: {
-  reservation: MyReservation | null;
-  showHistoryLink: boolean;
+  title: string;
+  count: number;
+  expanded: boolean;
+  onToggle: () => void;
+  controlsId: string;
 }) {
-  function scrollToHistory() {
-    document.getElementById("mis-solicitudes")?.scrollIntoView({ behavior: "smooth" });
-  }
-
-  if (!reservation) {
-    return (
-      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-        <p className="text-sm font-medium text-white">No tienes reservas próximas</p>
-        <p className="text-sm text-brand-muted mt-1">
-          Elige un horario disponible para solicitar una reserva.
-        </p>
-        {showHistoryLink && (
-          <button
-            onClick={scrollToHistory}
-            className="mt-3 text-xs text-brand-muted hover:text-white transition-colors"
-          >
-            Ver mis solicitudes →
-          </button>
-        )}
-      </div>
-    );
-  }
-
-  const cfg = NEXT_CARD_STATUS[reservation.status as keyof typeof NEXT_CARD_STATUS];
-  const start = reservation.start_time.slice(0, 5);
-  const end = addMinutes(start, reservation.duration_minutes);
-
   return (
-    <div className={`rounded-xl border p-4 ${cfg.cardClass}`}>
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <p className={`text-sm font-semibold ${cfg.titleClass}`}>{cfg.title}</p>
-        <StatusBadge status={reservation.status} />
-      </div>
-      <p className="text-sm text-white font-medium capitalize">
-        {formatCardDate(reservation.date)}
-      </p>
-      <p className="text-sm text-brand-muted mt-1">
-        {start} – {end} · {reservation.courtName} · {durationLabel(reservation.duration_minutes)}
-      </p>
-      {reservation.price_amount != null && reservation.price_currency && (
-        <p className="text-sm text-white font-medium mt-1">
-          {formatCurrency(reservation.price_amount, reservation.price_currency)}
-        </p>
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={expanded}
+      aria-controls={controlsId}
+      className="flex items-center justify-between w-full py-1.5 -my-1.5 gap-2 text-left rounded-lg transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 focus-visible:ring-offset-brand-bg"
+    >
+      <h2 className="text-sm font-semibold text-white">
+        {title} <span className="text-brand-muted font-normal">({count})</span>
+      </h2>
+      {expanded ? (
+        <ChevronUp className="w-4 h-4 text-brand-muted shrink-0" aria-hidden="true" />
+      ) : (
+        <ChevronDown className="w-4 h-4 text-brand-muted shrink-0" aria-hidden="true" />
       )}
-      {reservation.status === "pending" && (
-        <p className="text-xs text-amber-400/70 mt-2">
-          El administrador la confirmará pronto.
-        </p>
-      )}
-      {showHistoryLink && (
-        <button
-          onClick={scrollToHistory}
-          className="mt-3 text-xs text-brand-muted hover:text-white transition-colors"
-        >
-          Ver mis solicitudes →
-        </button>
-      )}
-    </div>
+    </button>
   );
 }
 
-// ─── My Reservations Section ──────────────────────────────────────────────────
+// Two clearly separated blocks reflecting the real business model: "Mis
+// reservas" is every CONFIRMED reservation the player participates in
+// regardless of how it was created (myBookings — see page.tsx); "Mis
+// solicitudes" is only the request lifecycle the player themselves started
+// (myReservations — already pending/rejected only, most-recent-first within
+// each status, from page.tsx). Same card style/component for both, just two
+// different data sources and headings — no redesign. "Mis solicitudes"
+// renders first: it's the block that can still need the player's attention
+// (pending/rejected), "Mis reservas" is already-settled confirmed bookings.
+function SidePanels({
+  myBookings,
+  myReservations,
+  clubSlug,
+  selectedId,
+  dismissedIds,
+  onDismiss,
+  solicitudesExpanded,
+  reservasExpanded,
+  onToggleSolicitudes,
+  onToggleReservas,
+}: {
+  myBookings: MyReservation[];
+  myReservations: MyReservation[];
+  clubSlug: string;
+  selectedId: string | null;
+  dismissedIds: Set<string>;
+  onDismiss: (id: string) => void;
+  solicitudesExpanded: boolean;
+  reservasExpanded: boolean;
+  onToggleSolicitudes: () => void;
+  onToggleReservas: () => void;
+}) {
+  const visibleBookings = sortBookingsByProximity(myBookings);
 
-function MyReservationsSection({ reservations }: { reservations: MyReservation[] }) {
-  const grouped = groupByDate(reservations);
+  // dismissedIds only ever applies to rejected: pending is still being
+  // processed and can never be dismissed, so a stale localStorage entry
+  // from before that rule existed must not hide one now. Also exactly the
+  // set of "operative" requests the header counter (below) must reflect —
+  // pending + visible-rejected, never approved (those live in myBookings)
+  // nor a dismissed rejected one. Shared with the player home page
+  // (filterVisibleRequests, @/components/reservations/PlayerActivity) so
+  // both apply the exact same rule.
+  const visibleRequests = filterVisibleRequests(myReservations, dismissedIds);
 
   return (
-    <div id="mis-solicitudes" className="mt-8 pt-6 border-t border-white/10">
-      <h2 className="text-sm font-semibold text-white mb-4">Mis solicitudes</h2>
-
-      {grouped.length === 0 ? (
-        <div className="flex items-center gap-3 py-6 text-brand-muted/60">
-          <Clock className="w-4 h-4 shrink-0" />
-          <p className="text-sm">Aún no tienes solicitudes de reserva.</p>
+    <div id="mis-solicitudes" className="flex flex-col gap-6 lg:max-h-[calc(100vh-220px)] lg:overflow-y-auto lg:pr-0.5">
+      <div className="flex flex-col gap-3">
+        <PanelSectionHeader
+          title="Mis solicitudes"
+          count={visibleRequests.length}
+          expanded={solicitudesExpanded}
+          onToggle={onToggleSolicitudes}
+          controlsId="panel-solicitudes-list"
+        />
+        {/* `hidden` (not unmounting) keeps this id valid for the header's
+            aria-controls at all times, collapsed or not. */}
+        <div id="panel-solicitudes-list" hidden={!solicitudesExpanded}>
+          <ActivityList
+            reservations={visibleRequests}
+            clubSlug={clubSlug}
+            selectedId={selectedId}
+            onDismiss={onDismiss}
+            emptyMessage="Aún no tienes solicitudes de reserva."
+          />
         </div>
-      ) : (
-        <div className="flex flex-col gap-5">
-          {grouped.map(({ date, items }) => (
-            <div key={date}>
-              <p className="text-xs font-medium text-brand-muted uppercase tracking-wider mb-2 capitalize">
-                {formatCardDate(date)}
-              </p>
-              <div className="flex flex-col gap-2">
-                {items.map((r) => {
-                  const startFmt = r.start_time.slice(0, 5);
-                  const endFmt = addMinutes(startFmt, r.duration_minutes);
-                  const isCancelled = r.status === "cancelled";
-                  return (
-                    <div
-                      key={r.id}
-                      className={`rounded-xl border p-4 flex flex-col gap-2 transition-opacity ${
-                        isCancelled ? "opacity-50 border-white/5 bg-white/[0.02]" : "border-white/10 bg-white/[0.04]"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <StatusBadge status={r.status} />
-                      </div>
-                      <div className="flex items-center gap-3 text-sm">
-                        <span className="font-semibold text-white">
-                          {startFmt} – {endFmt}
-                        </span>
-                        <span className="text-brand-muted/60">·</span>
-                        <span className="text-brand-muted">{r.courtName}</span>
-                        <span className="text-brand-muted/60">·</span>
-                        <span className="text-brand-muted">{durationLabel(r.duration_minutes)}</span>
-                        {r.price_amount != null && r.price_currency && (
-                          <>
-                            <span className="text-brand-muted/60">·</span>
-                            <span className="text-white font-medium">{formatCurrency(r.price_amount, r.price_currency)}</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+      </div>
+      <div className="flex flex-col gap-3 pt-4 border-t border-white/10">
+        <PanelSectionHeader
+          title="Mis reservas"
+          count={visibleBookings.length}
+          expanded={reservasExpanded}
+          onToggle={onToggleReservas}
+          controlsId="panel-reservas-list"
+        />
+        <div id="panel-reservas-list" hidden={!reservasExpanded}>
+          <ActivityList
+            reservations={visibleBookings}
+            clubSlug={clubSlug}
+            selectedId={selectedId}
+            onDismiss={onDismiss}
+            emptyMessage="No tienes reservas próximas."
+          />
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -310,6 +251,7 @@ function RequestModal({
   courtName,
   date,
   startTime,
+  duration: initialDuration,
   clubId,
   allowedDurations,
   onClose,
@@ -321,7 +263,7 @@ function RequestModal({
   onSuccess: () => void;
 }) {
   const durations = durationOptions(allowedDurations);
-  const [duration, setDuration] = useState(allowedDurations[0] ?? 60);
+  const [duration, setDuration] = useState(initialDuration ?? allowedDurations[0] ?? 60);
   const [state, formAction, pending] = useActionState<RequestFormState, FormData>(
     requestReservation.bind(null, clubId),
     {},
@@ -506,6 +448,62 @@ function RequestModal({
 // AvailabilityLegend and CourtAvailabilityCard now live in
 // @/components/courts/CourtAvailabilityTimeline, shared with the admin
 // reservation review screen — no second implementation of the timeline.
+// DayRangeNav now lives in @/components/courts/DayRangeNav, shared with the
+// OWNER/ADMIN Agenda view — no second implementation of the day-range
+// navigation either.
+
+// Expand/collapse preference for the two SidePanels blocks — same
+// useSyncExternalStore-over-localStorage shape as the dismissed-requests
+// store (@/components/reservations/PlayerActivity, one mechanism, not two),
+// just storing "expanded"/"collapsed" instead of a Set. Scoped per club AND
+// per player (falls back to "anon" only if the player id genuinely hasn't
+// resolved yet) so one player's collapsed preference never leaks into
+// another's view of the same club — the dismissed-requests store only
+// scopes by club because that preference is low-stakes; this one is
+// explicitly asked to also isolate by player.
+type Listener = () => void;
+type PanelSection = "solicitudes" | "reservas";
+const panelSectionListeners = new Set<Listener>();
+
+function notifyPanelSectionChanged() {
+  panelSectionListeners.forEach((listener) => listener());
+}
+
+function subscribePanelSection(listener: Listener) {
+  panelSectionListeners.add(listener);
+  return () => {
+    panelSectionListeners.delete(listener);
+  };
+}
+
+function panelSectionStorageKey(clubId: string, playerId: string | null, section: PanelSection): string {
+  return `padelclub:panel-section:${clubId}:${playerId ?? "anon"}:${section}`;
+}
+
+function getPanelSectionSnapshot(clubId: string, playerId: string | null, section: PanelSection): string {
+  try {
+    return window.localStorage.getItem(panelSectionStorageKey(clubId, playerId, section)) ?? "expanded";
+  } catch {
+    return "expanded";
+  }
+}
+
+// Both blocks start expanded on a first visit (no persisted preference yet)
+// — same value SSR renders, so hydration reconciles cleanly with no
+// mismatch, exactly like getDismissedServerSnapshot above.
+function getPanelSectionServerSnapshot(): string {
+  return "expanded";
+}
+
+function setPanelSectionExpanded(clubId: string, playerId: string | null, section: PanelSection, expanded: boolean) {
+  try {
+    window.localStorage.setItem(panelSectionStorageKey(clubId, playerId, section), expanded ? "expanded" : "collapsed");
+    notifyPanelSectionChanged();
+  } catch {
+    // Storage quota/private-mode failure — purely a visual preference, so
+    // there's nothing to persist or notify listeners about.
+  }
+}
 
 export function PlayerAvailabilityCalendar({
   weekDays,
@@ -513,27 +511,103 @@ export function PlayerAvailabilityCalendar({
   availability,
   closedDates,
   todayStr,
-  weekLabel,
-  prevWeekHref,
-  nextWeekHref,
+  dayRangeBlocks,
   todayHref,
   clubId,
+  clubSlug,
+  playerId,
   defaultSelectedDate,
   allowedDurations,
   openingMinsByDate,
   closingMinsByDate,
   blockedByDate,
   myReservations,
+  myBookings,
+  prefill,
+  focusReservation,
 }: PlayerAvailabilityCalendarProps) {
   const router = useRouter();
   const [selectedDate, setSelectedDate] = useState(defaultSelectedDate);
-  const [selectedDuration, setSelectedDuration] = useState(allowedDurations[0] ?? 60);
+  const [selectedDuration, setSelectedDuration] = useState(prefill?.duration ?? allowedDurations[0] ?? 60);
   const [modalSlot, setModalSlot] = useState<ModalSlot | null>(null);
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
   const durations = durationOptions(allowedDurations);
-  const nextReservation =
-    myReservations.find((r) => r.status === "pending" || r.status === "confirmed") ?? null;
-  const showHistoryLink = myReservations.length > 0;
+
+  // Dismissed rejected requests — shared store/hook (also used by the
+  // player home page), scoped per club so descartar here is instantly
+  // reflected there too.
+  const { dismissedIds, dismiss: handleDismiss } = useDismissedReservationIds(clubId);
+
+  // SidePanels expand/collapse — same store shape as dismissedIds above.
+  // Both start "expanded" (getPanelSectionServerSnapshot) until hydration
+  // reconciles any real persisted preference, so there's no SSR mismatch.
+  // Purely a display preference: never touches selection, Realtime, or data.
+  const solicitudesExpanded =
+    useSyncExternalStore(
+      subscribePanelSection,
+      () => getPanelSectionSnapshot(clubId, playerId, "solicitudes"),
+      getPanelSectionServerSnapshot
+    ) !== "collapsed";
+  const reservasExpanded =
+    useSyncExternalStore(
+      subscribePanelSection,
+      () => getPanelSectionSnapshot(clubId, playerId, "reservas"),
+      getPanelSectionServerSnapshot
+    ) !== "collapsed";
+
+  const handleToggleSolicitudes = useCallback(() => {
+    setPanelSectionExpanded(clubId, playerId, "solicitudes", !solicitudesExpanded);
+  }, [clubId, playerId, solicitudesExpanded]);
+
+  const handleToggleReservas = useCallback(() => {
+    setPanelSectionExpanded(clubId, playerId, "reservas", !reservasExpanded);
+  }, [clubId, playerId, reservasExpanded]);
+
+  // ─── Realtime sync ──────────────────────────────────────────────────────
+  // Shared hook (also used by the player home page) — one channel, four
+  // listeners, never a second subscription. router.refresh() re-fetches
+  // this page's server data, so the real status/price/etc. always comes
+  // back from Supabase, never assumed from the event payload.
+  const handleRealtimeChange = useCallback(() => router.refresh(), [router]);
+  usePlayerReservationsRealtime(handleRealtimeChange);
+
+  // ─── Prop-driven state resets (React "adjust state during render" —
+  // https://react.dev/learn/you-might-not-need-an-effect) ────────────────
+  // selectedDate only used defaultSelectedDate as a useState initializer
+  // before, so it never moved when the server recomputed it for a new week
+  // or a new retry prefill on an already-mounted component — this keeps it
+  // in sync regardless of whether navigation happens to remount the tree.
+  const [appliedDefaultDate, setAppliedDefaultDate] = useState(defaultSelectedDate);
+  if (defaultSelectedDate !== appliedDefaultDate) {
+    setAppliedDefaultDate(defaultSelectedDate);
+    setSelectedDate(defaultSelectedDate);
+  }
+
+  // Clicking an activity card lands on its duration — only when that
+  // duration is still allowed (prefill.duration is null otherwise, e.g. the
+  // club dropped it; the current/default duration is left untouched
+  // instead) — and always clears any hour selection in progress, never
+  // preselecting an hour itself nor leaving a stale slot highlighted from
+  // before the click. Date is handled separately, directly through
+  // defaultSelectedDate above.
+  const prefillKey = prefill ? `${prefill.courtId ?? ""}|${prefill.duration ?? ""}` : null;
+  const [appliedPrefillKey, setAppliedPrefillKey] = useState<string | null>(null);
+  if (prefill && prefillKey !== appliedPrefillKey) {
+    setAppliedPrefillKey(prefillKey);
+    if (prefill.duration != null) setSelectedDuration(prefill.duration);
+    setModalSlot(null);
+  }
+
+  // Pure DOM side effect (scrolling), not state — stays in a real effect.
+  // Brings the same court into view so clicking an activity card visibly
+  // lands the player on availability instead of looking like nothing
+  // happened. Skipped when the court itself is no longer valid
+  // (prefill.courtId is null) — "abre la disponibilidad normal... sin
+  // producir errores".
+  useEffect(() => {
+    if (!prefill?.courtId) return;
+    document.getElementById(`court-${prefill.courtId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [prefill]);
 
   useEffect(() => {
     if (!successBanner) return;
@@ -579,95 +653,107 @@ export function PlayerAvailabilityCalendar({
       : null;
   }
 
+  // Single shared mapping from the model's real statuses to the timeline's
+  // visual tones — used by both the individual-selection highlight and the
+  // general (nothing-selected) view below, so the two never drift apart.
+  // "cancelled" and anything else stay unhighlighted (not one of the
+  // panel's 3 supported states).
+  function toneForStatus(status: MyReservation["status"]): ContextRange["tone"] | null {
+    if (status === "confirmed") return "approved";
+    if (status === "rejected") return "rejected";
+    if (status === "pending") return "pending";
+    return null;
+  }
+
+  // Purely visual — the activity card currently selected via focusReservation
+  // (URL-driven, see page.tsx), painted on its own court/date only. Never
+  // read by the availability engine: "aprobada" tints an already-occupied
+  // slot green, "rechazada" tints whatever the slot's real state already is
+  // (usually available again) soft red, and "pending" tints an
+  // already-occupied slot amber (the player's own pending request still
+  // blocks it the same way "aprobada" does) — every one of the model's
+  // three real statuses gets the same contextual highlight, not just two of
+  // them.
+  function contextRangeFor(courtId: string): ContextRange | null {
+    if (!focusReservation) return null;
+    if (focusReservation.court_id !== courtId) return null;
+    if (focusReservation.date !== selectedDate) return null;
+    const tone = toneForStatus(focusReservation.status);
+    if (!tone) return null;
+    return { startTime: focusReservation.start_time.slice(0, 5), duration: focusReservation.duration_minutes, tone };
+  }
+
+  // General view (no individual selection) — every one of the player's own
+  // reservations on this court/date, painted simultaneously: myReservations
+  // (pending/rejected, "Mis solicitudes") for amber/red, myBookings
+  // (confirmed, "Mis reservas") for green — the same two sources the panel
+  // below reads from, never a third list built just for the calendar.
+  // Suppressed entirely the moment a card is selected (contextRangeFor
+  // above takes over instead — dismissedIds never applies there, so an
+  // explicit reservationId still shows a dismissed rejected one's red
+  // context), so the two views never overlap. A dismissed *rejected* one is
+  // skipped here too — the same dismissedIds collection that hides its
+  // panel card also hides its general-view red highlight (one mechanism,
+  // not two). Pending/approved are never dismissible in the first place, so
+  // dismissedIds never affects them.
+  function generalContextRangesFor(courtId: string): ContextRange[] {
+    if (focusReservation) return [];
+    const ranges: ContextRange[] = [];
+    for (const r of myReservations) {
+      if (r.court_id !== courtId || r.date !== selectedDate) continue;
+      if (r.status === "rejected" && dismissedIds.has(r.id)) continue;
+      const tone = toneForStatus(r.status);
+      if (!tone) continue;
+      ranges.push({ startTime: r.start_time.slice(0, 5), duration: r.duration_minutes, tone });
+    }
+    for (const r of myBookings) {
+      if (r.court_id !== courtId || r.date !== selectedDate) continue;
+      const tone = toneForStatus(r.status);
+      if (!tone) continue;
+      ranges.push({ startTime: r.start_time.slice(0, 5), duration: r.duration_minutes, tone });
+    }
+    return ranges;
+  }
+
   return (
-    <div className="flex flex-col gap-4">
-      {/* Next reservation card */}
-      <NextReservationCard reservation={nextReservation} showHistoryLink={showHistoryLink} />
+    <div className="flex flex-col lg:flex-row lg:items-start gap-6">
+      {/* Main column — calendar/availability stays first and largest, the
+          screen's primary content. */}
+      <div className="flex-1 min-w-0 flex flex-col gap-4">
+        {/* Success banner */}
+        {successBanner && (
+          <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-brand-primary/10 border border-brand-primary/30 text-brand-primary text-sm">
+            <Check className="w-4 h-4 shrink-0" />
+            <span>{successBanner}</span>
+          </div>
+        )}
 
-      {/* Success banner */}
-      {successBanner && (
-        <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-brand-primary/10 border border-brand-primary/30 text-brand-primary text-sm">
-          <Check className="w-4 h-4 shrink-0" />
-          <span>{successBanner}</span>
-        </div>
-      )}
+        {/* Day range navigation — one DayRangeNav per breakpoint (7/10/14
+            days); className on each block (page.tsx) is the only thing
+            deciding which is visible, so this is pure CSS with no width
+            detection in JS. */}
+        {dayRangeBlocks.map((block) => (
+          <DayRangeNav
+            key={block.count}
+            className={block.className}
+            variant={block.variant}
+            days={weekDays.slice(0, block.count)}
+            label={block.label}
+            prevHref={block.prevHref}
+            nextHref={block.nextHref}
+            todayHref={todayHref}
+            selectedDate={selectedDate}
+            todayStr={todayStr}
+            closedDates={closedDates}
+            courts={courts}
+            availability={availability}
+            openingMinsByDate={openingMinsByDate}
+            closingMinsByDate={closingMinsByDate}
+            onSelectDate={setSelectedDate}
+          />
+        ))}
 
-      {/* Week navigation */}
-      <div className="flex items-center gap-2">
-        <Link
-          href={prevWeekHref}
-          className="p-2 rounded-xl text-brand-muted hover:text-white hover:bg-white/5 transition-colors"
-          aria-label="Semana anterior"
-        >
-          <ChevronLeft className="w-4 h-4" />
-        </Link>
-        <span className="flex-1 text-sm font-medium text-white text-center">{weekLabel}</span>
-        <Link
-          href={nextWeekHref}
-          className="p-2 rounded-xl text-brand-muted hover:text-white hover:bg-white/5 transition-colors"
-          aria-label="Semana siguiente"
-        >
-          <ChevronRight className="w-4 h-4" />
-        </Link>
-        <Link
-          href={todayHref}
-          className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-white/10 text-brand-muted hover:text-white hover:border-white/30 transition-colors"
-        >
-          Hoy
-        </Link>
-      </div>
-
-      {/* Day tabs */}
-      <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-        {weekDays.map((day) => {
-          const isSelected = day.date === selectedDate;
-          const isToday = day.date === todayStr;
-          const isDayClosed = closedDates.includes(day.date);
-          const indicator = buildDayIndicator(day.date, courts, availability, closedDates, openingMinsByDate, closingMinsByDate);
-          const dayAriaLabel = `${formatCardDate(day.date)}${isSelected ? ", seleccionado" : ""}${isDayClosed ? ", cerrado" : ""}`;
-          return (
-            <button
-              key={day.date}
-              onClick={() => setSelectedDate(day.date)}
-              aria-pressed={isSelected}
-              aria-label={dayAriaLabel}
-              className={`flex flex-col items-center gap-1 min-w-[56px] px-2 py-2 rounded-xl border text-center transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 focus-visible:ring-offset-brand-bg ${
-                isSelected
-                  ? "border-brand-primary bg-brand-primary/10 text-brand-primary"
-                  : day.isPast
-                  ? "border-white/5 text-brand-muted/40"
-                  : isDayClosed
-                  ? "border-white/5 text-brand-muted/50"
-                  : "border-white/10 text-brand-muted hover:border-white/20 hover:text-white"
-              }`}
-            >
-              <span className="text-[10px] font-medium uppercase">{day.dayName}</span>
-              <span className="flex items-center gap-1">
-                <span className="text-base font-bold leading-tight">{day.dayNum}</span>
-                {isToday && (
-                  <span className={`w-1 h-1 rounded-full ${isSelected ? "bg-brand-primary" : "bg-brand-muted/60"}`} />
-                )}
-              </span>
-              <span className="flex items-center gap-[2px]" aria-hidden="true">
-                {indicator.map((seg, i) => (
-                  <span
-                    key={i}
-                    className={`w-1.5 h-2 rounded-[1px] ${
-                      seg === "available"
-                        ? isSelected ? "bg-brand-primary" : "bg-brand-primary/70"
-                        : seg === "occupied"
-                        ? "bg-white/20"
-                        : "border border-dashed border-white/15"
-                    }`}
-                  />
-                ))}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Duration selector — compact, only shown when there are multiple options and day is open */}
+        {/* Duration selector — compact, only shown when there are multiple options and day is open */}
       {!isClosed && durations.length > 1 && (
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[11px] font-medium text-brand-muted uppercase tracking-wider">Duración</span>
@@ -690,38 +776,67 @@ export function PlayerAvailabilityCalendar({
         </div>
       )}
 
-      {/* Court cards + timeline */}
-      <div className="flex flex-col gap-3">
-        {isClosed ? (
-          <div className="flex flex-col items-center gap-3 py-12 text-center">
-            <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center">
-              <CalendarOff className="w-5 h-5 text-brand-muted" />
+        {/* Court cards + timeline */}
+        <div className="flex flex-col gap-3">
+          {isClosed ? (
+            <div className="flex flex-col items-center gap-3 py-12 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center">
+                <CalendarOff className="w-5 h-5 text-brand-muted" />
+              </div>
+              <p className="text-brand-muted text-sm">Club cerrado este día</p>
             </div>
-            <p className="text-brand-muted text-sm">Club cerrado este día</p>
-          </div>
-        ) : (
-          <>
-            <AvailabilityLegend />
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              {courtsWithSlots.map((court) => (
-                <CourtAvailabilityCard
-                  key={court.id}
-                  court={court}
-                  grid={dayGrid}
-                  slots={court.slots}
-                  selectedRange={selectedRangeFor(court.id)}
-                  onSelectSlot={(startTime) =>
-                    setModalSlot({ courtId: court.id, courtName: court.name, date: selectedDate, startTime })
-                  }
-                />
-              ))}
-            </div>
-          </>
-        )}
+          ) : (
+            <>
+              <AvailabilityLegend showPlayerRequestStates />
+              {/* auto-fit instead of a fixed lg:grid-cols-2: a single court
+                  stretches to the column's full width (a fixed 2-column
+                  grid left it stuck at ~50%, with the empty second cell
+                  reading as a gap before the side panel) — 2+ courts still
+                  wrap into as many 300px+ columns as actually fit. */}
+              <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}>
+                {courtsWithSlots.map((court) => (
+                  // id lets an activity-card click scroll straight to the
+                  // same court (see the prefill effect above) without
+                  // touching the shared CourtAvailabilityTimeline component
+                  // itself.
+                  <div key={court.id} id={`court-${court.id}`}>
+                    <CourtAvailabilityCard
+                      court={court}
+                      grid={dayGrid}
+                      slots={court.slots}
+                      selectedRange={selectedRangeFor(court.id)}
+                      contextRange={contextRangeFor(court.id)}
+                      generalContextRanges={generalContextRangesFor(court.id)}
+                      groupByDayPart
+                      onSelectSlot={(startTime) =>
+                        setModalSlot({ courtId: court.id, courtName: court.name, date: selectedDate, startTime, duration: selectedDuration })
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Mis solicitudes */}
-      <MyReservationsSection reservations={myReservations} />
+      {/* Side panel — desktop: real side column; mobile: stacked below the
+          calendar (still second, never competing with it for space). Same
+          width/position as before the "Mis reservas" split. */}
+      <aside className="w-full lg:w-[300px] xl:w-[340px] shrink-0 lg:sticky lg:top-6">
+        <SidePanels
+          myBookings={myBookings}
+          myReservations={myReservations}
+          clubSlug={clubSlug}
+          selectedId={focusReservation?.id ?? null}
+          dismissedIds={dismissedIds}
+          onDismiss={handleDismiss}
+          solicitudesExpanded={solicitudesExpanded}
+          reservasExpanded={reservasExpanded}
+          onToggleSolicitudes={handleToggleSolicitudes}
+          onToggleReservas={handleToggleReservas}
+        />
+      </aside>
 
       {/* Request modal */}
       {modalSlot && (

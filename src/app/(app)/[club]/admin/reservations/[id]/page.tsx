@@ -25,6 +25,9 @@ type ReservationDetail = {
   created_by: string;
   price_amount: number | null;
   price_currency: string | null;
+  rejection_reason: string | null;
+  rejected_at: string | null;
+  rejected_by: string | null;
   courts: { name: string; surface: string | null; is_indoor: boolean | null } | null;
   reservation_players: Array<{ profile_id: string }>;
 };
@@ -75,6 +78,7 @@ export default async function EditReservationPage({
       `
       id, court_id, date, start_time, duration_minutes, type, title, notes, status, created_at, created_by,
       price_amount, price_currency,
+      rejection_reason, rejected_at, rejected_by,
       courts(name, surface, is_indoor),
       reservation_players(profile_id)
     `
@@ -94,10 +98,17 @@ export default async function EditReservationPage({
   // A pending request gets the dedicated review screen (court card +
   // availability timeline + approve/reject) instead of the generic edit
   // form below — this is the "official" screen a reservation-request
-  // notification links to (see notify_reservation_request_created).
-  if (reservation.status === "pending") {
-    const [{ data: playerProfile }, availableSlots] = await Promise.all([
+  // notification links to (see notify_reservation_request_created). A
+  // rejected request reuses the same read-only detail (no action footer,
+  // reservation.status !== "pending") so the reason/traceability stays
+  // visible to OWNER/ADMIN after the fact — the notification's destination
+  // never changes once resolved.
+  if (reservation.status === "pending" || reservation.status === "rejected") {
+    const [{ data: playerProfile }, { data: rejectedByProfile }, availableSlots] = await Promise.all([
       supabase.from("profiles").select("full_name").eq("id", reservation.created_by).maybeSingle(),
+      reservation.rejected_by
+        ? supabase.from("profiles").select("full_name").eq("id", reservation.rejected_by).maybeSingle()
+        : Promise.resolve({ data: null }),
       getAvailableSlots(club.id, reservation.court_id, reservation.date, reservation.duration_minutes, reservationId),
     ]);
 
@@ -117,6 +128,9 @@ export default async function EditReservationPage({
           playerName: playerProfile?.full_name ?? null,
           price_amount: reservation.price_amount,
           price_currency: reservation.price_currency,
+          rejection_reason: reservation.rejection_reason,
+          rejected_at: reservation.rejected_at,
+          rejectedByName: rejectedByProfile?.full_name ?? null,
         }}
         court={{
           id: reservation.court_id,

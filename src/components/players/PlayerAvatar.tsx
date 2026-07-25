@@ -46,7 +46,7 @@ function hashString(input: string): number {
   return Math.abs(hash);
 }
 
-function getInitials(name: string | null | undefined): string {
+export function getInitials(name: string | null | undefined): string {
   if (!name) return "?";
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";

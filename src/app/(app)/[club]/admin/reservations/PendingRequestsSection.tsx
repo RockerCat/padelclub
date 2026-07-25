@@ -7,13 +7,28 @@ import { Check, X, Clock, Eye } from "lucide-react";
 import { approvePendingReservation, rejectPendingReservation } from "./actions";
 import type { PendingActionResult } from "./actions";
 import { durationLabel } from "@/lib/durations";
+import { RejectReservationModal } from "./RejectReservationModal";
+import type { RejectionReasonCode } from "@/lib/reservationRejection";
+
+// Returned verbatim by approvePendingReservation/rejectPendingReservation
+// when another admin resolved it first — detected only to react to that
+// outcome (close the modal, let the router refresh show the real state),
+// never to re-implement the decision here.
+const ALREADY_RESOLVED_ERROR = "La solicitud ya fue procesada.";
 
 export type PendingRequest = {
   id: string;
   date: string;
   start_time: string;
   duration_minutes: number;
+  court_id: string;
   courtName: string;
+  // The real requester (reservations.created_by) — a pending request is
+  // always self-requested by the player themselves (requestReservation),
+  // never an admin/owner, so this is a genuine participant relationship,
+  // not an inference. Used to resolve their avatar/initials the same way
+  // a confirmed reservation's players are resolved.
+  playerId: string | null;
   playerName: string | null;
   // Frozen at request time (reservations.price_amount/price_currency) —
   // shown as-is, never recalculated here. Null for requests predating the
@@ -60,6 +75,8 @@ function PendingCard({
   const [isApproving, startApprove] = useTransition();
   const [isRejecting, startReject] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [rejectError, setRejectError] = useState<string | null>(null);
   const isPending = isApproving || isRejecting;
 
   function handleApprove() {
@@ -71,12 +88,29 @@ function PendingCard({
     });
   }
 
-  function handleReject() {
-    setError(null);
+  function handleRejectConfirm(reasonCode: RejectionReasonCode, comment: string) {
+    setRejectError(null);
     startReject(async () => {
-      const result: PendingActionResult = await rejectPendingReservation(clubId, request.id);
-      if (result.success) onDone();
-      else setError(result.error ?? "Error al rechazar.");
+      const result: PendingActionResult = await rejectPendingReservation(
+        clubId,
+        request.id,
+        reasonCode,
+        comment
+      );
+      if (result.success) {
+        setRejectModalOpen(false);
+        onDone();
+        return;
+      }
+      if (result.error === ALREADY_RESOLVED_ERROR) {
+        setRejectModalOpen(false);
+        setError(result.error);
+        onDone();
+        return;
+      }
+      // Keep the modal open with its content intact so the admin can retry
+      // without re-selecting the reason or retyping the comment.
+      setRejectError(result.error ?? "Error al rechazar.");
     });
   }
 
@@ -111,7 +145,7 @@ function PendingCard({
             Revisar
           </Link>
           <button
-            onClick={handleReject}
+            onClick={() => setRejectModalOpen(true)}
             disabled={isPending}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border border-white/20 text-brand-muted hover:text-white hover:border-white/40 transition-colors disabled:opacity-40"
           >
@@ -130,6 +164,14 @@ function PendingCard({
       </div>
       {error && (
         <p className="mt-2 text-xs text-red-400">{error}</p>
+      )}
+      {rejectModalOpen && (
+        <RejectReservationModal
+          pending={isRejecting}
+          error={rejectError}
+          onConfirm={handleRejectConfirm}
+          onCancel={() => setRejectModalOpen(false)}
+        />
       )}
     </div>
   );

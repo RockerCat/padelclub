@@ -19,6 +19,9 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils/cn";
+import { SidebarIdentity } from "./SidebarIdentity";
+import type { SidebarIdentityData } from "@/lib/userIdentity";
+import { PLATFORM_ADMIN_LABEL } from "@/lib/roleLabels";
 
 interface NavItem {
   label: string;
@@ -77,11 +80,12 @@ function PlatformHeader() {
 
 interface NavContentProps {
   pathname: string;
+  identity: SidebarIdentityData;
   onLinkClick: () => void;
   onLogout: () => void;
 }
 
-function NavContent({ pathname, onLinkClick, onLogout }: NavContentProps) {
+function NavContent({ pathname, identity, onLinkClick, onLogout }: NavContentProps) {
   return (
     <nav className="flex flex-col h-full">
       <PlatformHeader />
@@ -134,6 +138,12 @@ function NavContent({ pathname, onLinkClick, onLogout }: NavContentProps) {
       </ul>
 
       <div className="p-3 border-t border-white/10 flex flex-col gap-1">
+        <SidebarIdentity
+          name={identity.name}
+          email={identity.email}
+          avatarUrl={identity.avatarUrl}
+          roleLabel={PLATFORM_ADMIN_LABEL}
+        />
         <Link
           href="/clubs"
           onClick={onLinkClick}
@@ -154,7 +164,7 @@ function NavContent({ pathname, onLinkClick, onLogout }: NavContentProps) {
   );
 }
 
-export function PlatformNav() {
+export function PlatformNav({ identity }: { identity: SidebarIdentityData }) {
   const router = useRouter();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -173,7 +183,7 @@ export function PlatformNav() {
     <>
       {/* Desktop sidebar */}
       <aside className="hidden md:flex flex-col w-64 shrink-0 bg-brand-surface border-r border-white/10 h-screen sticky top-0">
-        <NavContent pathname={pathname} onLinkClick={closeMobile} onLogout={handleLogout} />
+        <NavContent pathname={pathname} identity={identity} onLinkClick={closeMobile} onLogout={handleLogout} />
       </aside>
 
       {/* Mobile top bar */}
@@ -198,7 +208,7 @@ export function PlatformNav() {
         <div className="md:hidden fixed inset-0 z-30 flex">
           <div className="absolute inset-0 bg-black/60" onClick={closeMobile} />
           <div className="relative z-10 w-72 max-w-[85vw] bg-brand-surface border-r border-white/10 h-full flex flex-col">
-            <NavContent pathname={pathname} onLinkClick={closeMobile} onLogout={handleLogout} />
+            <NavContent pathname={pathname} identity={identity} onLinkClick={closeMobile} onLogout={handleLogout} />
           </div>
         </div>
       )}

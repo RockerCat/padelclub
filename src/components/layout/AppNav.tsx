@@ -25,7 +25,10 @@ import { cn } from "@/lib/utils/cn";
 import { ClubHeader } from "./ClubHeader";
 import { NotificationBell } from "./NotificationBell";
 import { JoinRequestsListener } from "./JoinRequestsListener";
+import { SidebarIdentity } from "./SidebarIdentity";
 import type { NotificationRow } from "@/lib/notifications";
+import type { SidebarIdentityData } from "@/lib/userIdentity";
+import { clubRoleLabel } from "@/lib/roleLabels";
 
 function getInitials(name: string): string {
   return name
@@ -59,6 +62,7 @@ interface AppNavProps {
   pendingJoinRequests?: number;
   notificationCount?: number;
   notificationItems?: NotificationRow[];
+  identity: SidebarIdentityData;
 }
 
 // pendingJoinRequests only ever has a meaningful value for OWNER/ADMIN (the
@@ -147,11 +151,18 @@ function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequest
     );
   } else {
     // PLAYER
-    base.push({
-      label: "Reservaciones",
-      href: `/${slug}/reservations`,
-      icon: CalendarDays,
-    });
+    base.push(
+      {
+        label: "Página del club",
+        href: `/${slug}/home`,
+        icon: Home,
+      },
+      {
+        label: "Reservaciones",
+        href: `/${slug}/reservations`,
+        icon: CalendarDays,
+      }
+    );
   }
 
   return base;
@@ -167,6 +178,7 @@ interface NavContentProps {
   pathname: string;
   notificationCount: number;
   notificationItems: NotificationRow[];
+  identity: SidebarIdentityData;
   onLinkClick: () => void;
   onLogout: () => void;
 }
@@ -179,6 +191,7 @@ function NavContent({
   pathname,
   notificationCount,
   notificationItems,
+  identity,
   onLinkClick,
   onLogout,
 }: NavContentProps) {
@@ -266,6 +279,12 @@ function NavContent({
 
       {/* Bottom actions */}
       <div className="p-3 border-t border-white/10 flex flex-col gap-1">
+        <SidebarIdentity
+          name={identity.name}
+          email={identity.email}
+          avatarUrl={identity.avatarUrl}
+          roleLabel={clubRoleLabel(role)}
+        />
         <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-brand-muted/50 cursor-not-allowed select-none">
           <User className="w-4 h-4 shrink-0" />
           <span className="text-sm flex-1">Mi Perfil</span>
@@ -315,6 +334,7 @@ export function AppNav({
   pendingJoinRequests = 0,
   notificationCount = 0,
   notificationItems = [],
+  identity,
 }: AppNavProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -349,6 +369,7 @@ export function AppNav({
           pathname={pathname}
           notificationCount={notificationCount}
           notificationItems={notificationItems}
+          identity={identity}
           onLinkClick={closeMobile}
           onLogout={handleLogout}
         />
@@ -414,6 +435,7 @@ export function AppNav({
               pathname={pathname}
               notificationCount={notificationCount}
               notificationItems={notificationItems}
+              identity={identity}
               onLinkClick={closeMobile}
               onLogout={handleLogout}
             />

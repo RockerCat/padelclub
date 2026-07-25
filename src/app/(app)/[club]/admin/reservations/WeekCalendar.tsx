@@ -50,6 +50,12 @@ export type CalendarReservation = {
   court_id: string;
   courtName: string;
   players: string[];
+  // Who technically created the row — never rendered as a player by
+  // WeekCalendar itself; only Agenda's participant-fallback resolution
+  // (AdminAvailabilityView) reads this, to recognize a reservation that
+  // came from the requester's own approved request (no explicit
+  // reservation_players row) versus one an OWNER/ADMIN created directly.
+  created_by: string;
 };
 
 export type CalendarCourt = {
@@ -473,6 +479,11 @@ export function WeekCalendar({
   // Reservation create/edit modal
   const [modalState, setModalState] = useState<ModalState | null>(null);
 
+  // Court filter — local state so it naturally persists across week navigation
+  // (same WeekCalendar instance, no remount) and Agenda↔Semana toggling
+  // (ReservationsViewSwitcher keeps both views mounted, hidden via CSS).
+  const [courtFilter, setCourtFilter] = useState<string>("all");
+
   // Auto-dismiss URL-param banner + clean URL
   useEffect(() => {
     if (!successMessage) return;
@@ -493,13 +504,19 @@ export function WeekCalendar({
   });
 
   const closedDaySet = new Set(closedDays ?? []);
-  const byDate = groupByDate(reservations);
-  const totalCount = reservations.length;
+  const filteredReservations =
+    courtFilter === "all" ? reservations : reservations.filter((r) => r.court_id === courtFilter);
+  const byDate = groupByDate(filteredReservations);
+  const totalCount = filteredReservations.length;
 
   // ─── Modal handlers ─────────────────────────────────────────────────────────
 
   function openNewModal(date?: string) {
-    setModalState({ mode: "create", initialDate: date });
+    setModalState({
+      mode: "create",
+      initialDate: date,
+      initialCourtId: courtFilter !== "all" ? courtFilter : undefined,
+    });
   }
 
   function openEditModal(r: CalendarReservation) {
@@ -597,6 +614,28 @@ export function WeekCalendar({
         </button>
       </div>
 
+      {/* ─── Court filter ────────────────────────────────────────────────── */}
+      {courts.length > 0 && (
+        <div className="flex items-center gap-2 mb-4">
+          <label htmlFor="week-court-filter" className="text-xs font-medium text-brand-muted whitespace-nowrap">
+            Filtrar por cancha
+          </label>
+          <select
+            id="week-court-filter"
+            value={courtFilter}
+            onChange={(e) => setCourtFilter(e.target.value)}
+            className="h-9 px-3 rounded-xl border border-white/15 bg-[#082735] text-sm text-white focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/30 transition-colors cursor-pointer max-w-full sm:max-w-[220px]"
+          >
+            <option value="all">Todas las canchas</option>
+            {courts.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {/* ─── Court legend ────────────────────────────────────────────────── */}
       {courts.length > 0 && (
         <div className="flex flex-wrap gap-x-4 gap-y-2 mb-5">
@@ -620,14 +659,20 @@ export function WeekCalendar({
         {totalCount === 0 && (
           <div className="mb-4 flex items-center justify-center gap-3 py-3 rounded-xl border border-dashed border-white/10 text-sm text-brand-muted">
             <CalendarDays className="w-4 h-4 shrink-0" />
-            No hay reservas esta semana —{" "}
-            <button
-              type="button"
-              onClick={() => openNewModal()}
-              className="text-brand-primary hover:underline font-medium bg-transparent border-none p-0 cursor-pointer"
-            >
-              Crear primera reserva
-            </button>
+            {courtFilter === "all" ? (
+              <>
+                No hay reservas esta semana —{" "}
+                <button
+                  type="button"
+                  onClick={() => openNewModal()}
+                  className="text-brand-primary hover:underline font-medium bg-transparent border-none p-0 cursor-pointer"
+                >
+                  Crear primera reserva
+                </button>
+              </>
+            ) : (
+              "No hay reservas para esta cancha durante esta semana."
+            )}
           </div>
         )}
         <div className="overflow-x-auto">
