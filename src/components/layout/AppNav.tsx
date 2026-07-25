@@ -26,6 +26,7 @@ import { ClubHeader } from "./ClubHeader";
 import { NotificationBell } from "./NotificationBell";
 import { JoinRequestsListener } from "./JoinRequestsListener";
 import { SidebarIdentity } from "./SidebarIdentity";
+import { PlayerAvatar } from "@/components/players/PlayerAvatar";
 import type { NotificationRow } from "@/lib/notifications";
 import type { SidebarIdentityData } from "@/lib/userIdentity";
 import { clubRoleLabel } from "@/lib/roleLabels";
@@ -166,6 +167,65 @@ function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequest
   }
 
   return base;
+}
+
+// ─── Mobile tab bar (OWNER/ADMIN only) ─────────────────────────────────────────
+// Exactly 5 fixed items, same order/labels regardless of role — OWNER's and
+// ADMIN's navItems already share identical href/icon for all 5 (see
+// getNavItems above); OWNER's extra items (Dashboard/Equipo/Configuración)
+// live in the secondary menu instead, never duplicated here. Reservaciones
+// is always the centered, primary item. href/icon are read straight from
+// navItems — the single source of truth already used by the desktop
+// sidebar — never a second, possibly-drifting hardcoded route list. Only
+// the label for "Página Pública" is shortened to "Pública" for this compact
+// bar; the route itself is untouched.
+const TAB_BAR_LABELS = ["Canchas", "Jugadores", "Reservaciones", "Noticias", "Página Pública"] as const;
+
+function getTabBarItems(navItems: NavItem[]): NavItem[] {
+  const byLabel = new Map(navItems.map((item) => [item.label, item] as const));
+  return TAB_BAR_LABELS.map((label) => byLabel.get(label))
+    .filter((item): item is NavItem => !!item)
+    .map((item) => (item.label === "Página Pública" ? { ...item, label: "Pública" } : item));
+}
+
+function MobileTabBarItem({ item, isActive }: { item: NavItem; isActive: boolean }) {
+  const Icon = item.icon;
+  const isPrimary = item.label === "Reservaciones";
+  const accent = item.color === "secondary" ? "var(--club-secondary)" : "var(--club-primary)";
+  // Reservaciones keeps the same footprint as every other item (same
+  // flex-1/py/icon size) — its only "sutil" distinction is a permanent,
+  // low-opacity accent tint on the icon circle (barely there when inactive,
+  // same 18% tint every other item only gets once active).
+  const showAccentBg = isActive || isPrimary;
+
+  return (
+    <Link
+      href={item.href!}
+      className="flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 min-w-0"
+    >
+      <span
+        className="w-8 h-8 flex items-center justify-center rounded-xl transition-colors"
+        style={{
+          backgroundColor: showAccentBg
+            ? `color-mix(in srgb, ${accent} ${isActive ? 18 : 10}%, transparent)`
+            : undefined,
+          // lucide-react icons default to stroke="currentColor" — setting
+          // color on this wrapper tints the icon without needing a `style`
+          // prop on the icon component itself (NavItem["icon"] only accepts
+          // `className`, same contract the desktop sidebar already relies on).
+          color: isActive || isPrimary ? accent : undefined,
+        }}
+      >
+        <Icon className={cn("w-[18px] h-[18px]", !isActive && !isPrimary && "text-brand-muted")} />
+      </span>
+      <span
+        className={cn("text-[10px] leading-none truncate max-w-full", isActive ? "font-semibold" : "text-brand-muted")}
+        style={isActive ? { color: accent } : undefined}
+      >
+        {item.label}
+      </span>
+    </Link>
+  );
 }
 
 // ─── NavContent extracted as a standalone component ───────────────────────────
@@ -338,7 +398,15 @@ export function AppNav({
 }: AppNavProps) {
   const router = useRouter();
   const pathname = usePathname();
+  // PLAYER keeps its existing mobile pattern untouched (hamburger + full
+  // drawer reusing NavContent) — only OWNER/ADMIN get the new top bar + tab
+  // bar below, per this task's explicit scope.
   const [mobileOpen, setMobileOpen] = useState(false);
+  // OWNER/ADMIN mobile-only "more options" dropdown — Dashboard (OWNER)/
+  // Equipo (OWNER)/Configuración (OWNER)/Cambiar de club/Crear otro club
+  // (OWNER)/Mi Perfil/Salir. Separate from mobileOpen (PLAYER's drawer) so
+  // neither role's state interferes with the other's UI.
+  const [secondaryMenuOpen, setSecondaryMenuOpen] = useState(false);
 
   async function handleLogout() {
     const supabase = createClient();
@@ -351,6 +419,7 @@ export function AppNav({
   }
 
   const navItems = getNavItems(club.slug, role, pendingJoinRequests);
+  const tabBarItems = getTabBarItems(navItems);
 
   return (
     <>
@@ -359,7 +428,7 @@ export function AppNav({
           PLAYER never sees that badge, so it doesn't need the subscription. */}
       {role !== "PLAYER" && <JoinRequestsListener clubId={club.id} />}
 
-      {/* Desktop sidebar */}
+      {/* Desktop sidebar — unchanged for every role */}
       <aside className="hidden md:flex flex-col w-64 shrink-0 bg-brand-surface border-r border-white/10 h-screen sticky top-0">
         <NavContent
           club={club}
@@ -375,72 +444,238 @@ export function AppNav({
         />
       </aside>
 
-      {/* Mobile top bar */}
-      <div className="md:hidden flex items-center justify-between px-4 py-3 bg-brand-surface border-b border-white/10 sticky top-0 z-40">
-        <div className="flex items-center gap-2.5 min-w-0 mr-2">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden ring-1 ring-white/10"
-            style={
-              !club.logo_url
-                ? { backgroundColor: `${club.primary_color}22`, color: club.primary_color }
-                : undefined
-            }
-          >
-            {club.logo_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={club.logo_url}
-                alt={`Logo de ${club.name}`}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              getInitials(club.name)
-            )}
+      {role === "PLAYER" ? (
+        <>
+          {/* Mobile top bar — PLAYER, unchanged */}
+          <div className="md:hidden flex items-center justify-between px-4 py-3 bg-brand-surface border-b border-white/10 sticky top-0 z-40">
+            <div className="flex items-center gap-2.5 min-w-0 mr-2">
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden ring-1 ring-white/10"
+                style={
+                  !club.logo_url
+                    ? { backgroundColor: `${club.primary_color}22`, color: club.primary_color }
+                    : undefined
+                }
+              >
+                {club.logo_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={club.logo_url}
+                    alt={`Logo de ${club.name}`}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  getInitials(club.name)
+                )}
+              </div>
+              <span className="text-sm font-semibold text-white truncate">
+                {club.name}
+              </span>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <NotificationBell initialCount={notificationCount} initialItems={notificationItems} />
+              <button
+                onClick={() => setMobileOpen((prev) => !prev)}
+                className="p-2 rounded-xl text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
+                aria-label="Abrir menú"
+              >
+                {mobileOpen ? (
+                  <X className="w-5 h-5" />
+                ) : (
+                  <Menu className="w-5 h-5" />
+                )}
+              </button>
+            </div>
           </div>
-          <span className="text-sm font-semibold text-white truncate">
-            {club.name}
-          </span>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <NotificationBell initialCount={notificationCount} initialItems={notificationItems} />
-          <button
-            onClick={() => setMobileOpen((prev) => !prev)}
-            className="p-2 rounded-xl text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
-            aria-label="Abrir menú"
-          >
-            {mobileOpen ? (
-              <X className="w-5 h-5" />
-            ) : (
-              <Menu className="w-5 h-5" />
-            )}
-          </button>
-        </div>
-      </div>
 
-      {/* Mobile drawer */}
-      {mobileOpen && (
-        <div className="md:hidden fixed inset-0 z-30 flex">
-          {/* Overlay */}
-          <div
-            className="absolute inset-0 bg-black/60"
-            onClick={closeMobile}
-          />
-          {/* Drawer */}
-          <div className="relative z-10 w-72 max-w-[85vw] bg-brand-surface border-r border-white/10 h-full flex flex-col">
-            <NavContent
-              club={club}
-              role={role}
-              membershipCount={membershipCount}
-              navItems={navItems}
-              pathname={pathname}
-              notificationCount={notificationCount}
-              notificationItems={notificationItems}
-              identity={identity}
-              onLinkClick={closeMobile}
-              onLogout={handleLogout}
-            />
+          {/* Mobile drawer — PLAYER, unchanged */}
+          {mobileOpen && (
+            <div className="md:hidden fixed inset-0 z-30 flex">
+              {/* Overlay */}
+              <div
+                className="absolute inset-0 bg-black/60"
+                onClick={closeMobile}
+              />
+              {/* Drawer */}
+              <div className="relative z-10 w-72 max-w-[85vw] bg-brand-surface border-r border-white/10 h-full flex flex-col">
+                <NavContent
+                  club={club}
+                  role={role}
+                  membershipCount={membershipCount}
+                  navItems={navItems}
+                  pathname={pathname}
+                  notificationCount={notificationCount}
+                  notificationItems={notificationItems}
+                  identity={identity}
+                  onLinkClick={closeMobile}
+                  onLogout={handleLogout}
+                />
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          {/* Mobile top bar — OWNER/ADMIN: club logo, signed-in user's name/
+              role (never the club name — that's the logo's job here), the
+              existing notification bell, and an avatar trigger for the
+              secondary menu (Mi Perfil/Salir/Dashboard/Equipo/Configuración/
+              cambiar-crear club) — replaces the hamburger+drawer entirely. */}
+          {/* z-50 (not z-40, matching the tab bar below) so this element's
+              whole stacking context — including the secondary-menu overlay/
+              panel nested inside it — reliably paints above the bottom tab
+              bar regardless of DOM order; a descendant's own z-index can
+              never escape its ancestor's stacking context to out-rank a
+              sibling, so the wrapper itself must outrank z-40. */}
+          <div className="md:hidden sticky top-0 z-50">
+            <div
+              className="flex items-center justify-between gap-2 px-4 bg-brand-surface border-b border-white/10 pb-3"
+              style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))" }}
+            >
+              <div className="flex items-center gap-2.5 min-w-0 mr-2">
+                <div
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden ring-1 ring-white/10"
+                  style={
+                    !club.logo_url
+                      ? { backgroundColor: `${club.primary_color}22`, color: club.primary_color }
+                      : undefined
+                  }
+                >
+                  {club.logo_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={club.logo_url}
+                      alt={`Logo de ${club.name}`}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    getInitials(club.name)
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white truncate">{identity.name}</p>
+                  <p className="text-[11px] text-brand-muted truncate">{clubRoleLabel(role)}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <NotificationBell initialCount={notificationCount} initialItems={notificationItems} />
+                <button
+                  type="button"
+                  onClick={() => setSecondaryMenuOpen((prev) => !prev)}
+                  aria-label="Más opciones"
+                  aria-expanded={secondaryMenuOpen}
+                  className="rounded-full ring-1 ring-white/10 hover:ring-white/30 transition-colors"
+                >
+                  <PlayerAvatar player={{ full_name: identity.name, avatar_url: identity.avatarUrl }} size="sm" />
+                </button>
+              </div>
+            </div>
+
+            {secondaryMenuOpen && (
+              <>
+                {/* Click-away overlay — above the top bar and the tab bar
+                    (both z-40) so a tap anywhere else, including over the
+                    tab bar, closes the menu instead of navigating; still
+                    far below any real modal/panel (z-[400]+). */}
+                <div
+                  className="fixed inset-0 z-[45]"
+                  onClick={() => setSecondaryMenuOpen(false)}
+                />
+                <div className="absolute right-4 top-full mt-2 z-50 w-64 max-w-[80vw] rounded-2xl border border-white/10 bg-brand-surface shadow-2xl overflow-hidden">
+                  <div className="p-2 flex flex-col gap-0.5">
+                    {role === "OWNER" && (
+                      <Link
+                        href={`/${club.slug}/dashboard`}
+                        onClick={() => setSecondaryMenuOpen(false)}
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
+                      >
+                        <LayoutDashboard className="w-4 h-4 shrink-0" />
+                        <span>Dashboard</span>
+                      </Link>
+                    )}
+                    {role === "OWNER" && (
+                      <Link
+                        href={`/${club.slug}/admin/team`}
+                        onClick={() => setSecondaryMenuOpen(false)}
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
+                      >
+                        <ShieldCheck className="w-4 h-4 shrink-0" />
+                        <span>Equipo</span>
+                      </Link>
+                    )}
+                    {role === "OWNER" && (
+                      <Link
+                        href={`/${club.slug}/admin/settings`}
+                        onClick={() => setSecondaryMenuOpen(false)}
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
+                      >
+                        <Settings className="w-4 h-4 shrink-0" />
+                        <span>Configuración</span>
+                      </Link>
+                    )}
+                    {membershipCount >= 2 && (
+                      <Link
+                        href="/clubs"
+                        onClick={() => setSecondaryMenuOpen(false)}
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
+                      >
+                        <ArrowLeftRight className="w-4 h-4 shrink-0" />
+                        <span>Cambiar de club</span>
+                      </Link>
+                    )}
+                    {role === "OWNER" && (
+                      <Link
+                        href="/clubs/create"
+                        onClick={() => setSecondaryMenuOpen(false)}
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
+                      >
+                        <PlusCircle className="w-4 h-4 shrink-0" />
+                        <span>Crear otro club</span>
+                      </Link>
+                    )}
+                    <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-brand-muted/50 cursor-not-allowed select-none">
+                      <User className="w-4 h-4 shrink-0" />
+                      <span className="text-sm flex-1">Mi Perfil</span>
+                      <span className="text-[10px] font-medium bg-white/5 border border-white/10 text-brand-muted px-1.5 py-0.5 rounded-md flex items-center gap-1">
+                        <Lock className="w-2.5 h-2.5" />
+                        Próx.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSecondaryMenuOpen(false);
+                        handleLogout();
+                      }}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors w-full text-left"
+                    >
+                      <LogOut className="w-4 h-4 shrink-0" />
+                      <span>Salir</span>
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
-        </div>
+
+          {/* Bottom tab bar — OWNER/ADMIN, mobile only. Fixed, below every
+              real modal/panel (z-[400]+) but above ordinary page content. */}
+          <nav
+            className="md:hidden fixed inset-x-0 bottom-0 z-40 flex items-stretch bg-brand-surface border-t border-white/10"
+            style={{ paddingBottom: "max(0.25rem, env(safe-area-inset-bottom))" }}
+            aria-label="Navegación principal"
+          >
+            {tabBarItems.map((item) => (
+              <MobileTabBarItem
+                key={item.label}
+                item={item}
+                isActive={
+                  item.href ? pathname === item.href || pathname.startsWith(item.href + "/") : false
+                }
+              />
+            ))}
+          </nav>
+        </>
       )}
     </>
   );
