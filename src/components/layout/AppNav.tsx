@@ -26,6 +26,7 @@ import { ClubHeader } from "./ClubHeader";
 import { NotificationBell } from "./NotificationBell";
 import { JoinRequestsListener } from "./JoinRequestsListener";
 import { SidebarIdentity } from "./SidebarIdentity";
+import { LeaveClubButton } from "./LeaveClubButton";
 import { PlayerAvatar } from "@/components/players/PlayerAvatar";
 import type { NotificationRow } from "@/lib/notifications";
 import type { SidebarIdentityData } from "@/lib/userIdentity";
@@ -373,6 +374,7 @@ function NavContent({
             <span>Crear otro club</span>
           </Link>
         )}
+        {role === "PLAYER" && <LeaveClubButton clubId={club.id} />}
         <button
           onClick={onLogout}
           className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors w-full text-left"

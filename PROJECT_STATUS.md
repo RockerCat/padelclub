@@ -3,7 +3,7 @@
 ## Estado General
 
 * Estado: Validation Gate 1.0
-* Última actualización: 25 de julio de 2026 (color por tipo de reserva y colores de estado fijos en Agenda, reubicación de Reservas rechazadas, corrección del ingreso directo a clubes públicos con notificación a OWNER/ADMIN, regla de bloqueo de desactivación de jugadores con reservas activas, "Partidos jugados" real en el detalle del miembro)
+* Última actualización: 26 de julio de 2026 (modelo global de cuentas y endurecimiento de seguridad, retiro de invitaciones para PLAYER, navegación inteligente multi-club, cancelación de reservas con ventana de 2 horas, salida voluntaria de un club, desactivación de jugadores que limpia compromisos futuros en vez de bloquear, edición de reservas con protección real de concurrencia compartida entre creación/edición/aprobación)
 
 ## Visión
 
@@ -456,15 +456,16 @@ Estado:
 
 Incluye:
 
-* Invitaciones
+* Invitaciones (solo ADMIN — ver "Modelo Global de Cuentas y Seguridad" más abajo)
 * Membresías
 * Roles
 * Multi-club
-* Un jugador con al menos una reservación activa (pendiente o confirmada) cuya hora de finalización real (fecha + hora de inicio + duración) todavía no pasó no puede ser desactivado — se valida server-side, justo antes de actualizar la membresía, tanto por reservas creadas por el jugador como por reservas donde fue agregado como participante (contadas una sola vez). Bloqueos de cancha, clases (fuera de esta regla salvo que también sean partido), reservas canceladas/rechazadas/finalizadas y reservas de otros clubes nunca bloquean la desactivación
-* "Partidos jugados" en el detalle del miembro ahora muestra el número real (o `0`), calculado en el momento desde `reservations`/`reservation_players` (partido, confirmado, ya finalizado, sin duplicar cuando el jugador es creador y participante a la vez) — antes era un `—` fijo sin ninguna consulta detrás
+* **Desactivar jugador** (`deactivate_player`, RPC `SECURITY DEFINER`): OWNER/ADMIN puede desactivar a un PLAYER activo de su propio club desde `MemberModal`. Ya no bloquea la acción cuando el jugador tiene reservas activas — en su lugar, la propia operación las limpia de forma atómica: cancela toda reserva futura `pending`/`confirmed` creada por el jugador (mismo modelo de cancelación que cualquier otra — `status`/`cancelled_at`/`cancelled_by`, con `cancelled_by` = el OWNER/ADMIN ejecutor, sin la ventana de 2 horas por ser una cancelación operativa del club) y retira únicamente su participación futura en reservas creadas por otros (sin tocar esa reserva, su creador ni sus demás participantes). `club_members` queda con `is_active = false`; `account_type`, el perfil y el historial nunca se tocan. El jugador recibe una notificación `player_deactivated` ("Tu acceso a [club] fue desactivado por el club"); los afectados por las reservas canceladas/retiradas reciben las notificaciones normales de cancelación/participación
+* "Partidos jugados" en el detalle del miembro muestra el número real (o `0`), calculado en el momento desde `reservations`/`reservation_players` (partido, confirmado, ya finalizado, sin duplicar cuando el jugador es creador y participante a la vez)
 
 Pendiente:
 
+* Reactivación de un jugador desactivado
 * Perfil ampliado
 * Historial de actividad
 

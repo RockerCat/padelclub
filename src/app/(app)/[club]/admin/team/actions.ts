@@ -63,10 +63,11 @@ export async function removeAdmin(
   return {};
 }
 
-// Same single-use/non-expiring model as player invitations (see
-// players/actions.ts's createInvitationLink) via the shared
-// insertSingleUseInvite — only the role and the OWNER-only permission guard
-// differ.
+// The only real, tracked, token-based invitation left in the product —
+// player invitations were retired (Phase 2, see CLAUDE.md → Club Sharing
+// Principles); players only ever link to a club via join_public_club or
+// create_join_request+approve_join_request. Same single-use/non-expiring
+// model as before via the shared insertSingleUseInvite.
 export async function createAdminInvite(
   clubId: string,
   clubSlug: string

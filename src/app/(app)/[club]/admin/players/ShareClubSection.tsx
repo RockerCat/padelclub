@@ -8,9 +8,10 @@ interface ShareClubSectionProps {
   clubSlug: string;
 }
 
-// Shown instead of "Invitar jugadores" when the club is public — a public
-// club wants to grow, so the primary action is promoting the public profile
-// rather than gatekeeping access through invitation links.
+// The only PLAYER onboarding surface, public or private clubs alike — there
+// are no player invitations (see CLAUDE.md → Club Sharing Principles): just
+// this public URL. A public club joins instantly from it; a private club
+// requests access from it — same link, same component, either way.
 export function ShareClubSection({ clubName, clubSlug }: ShareClubSectionProps) {
   const [copied, setCopied] = useState(false);
   // Starts as the relative path (matches SSR output) and upgrades to an

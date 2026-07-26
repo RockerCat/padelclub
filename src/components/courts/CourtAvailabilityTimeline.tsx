@@ -189,6 +189,11 @@ const CONTEXT_TONE_PRIORITY: Record<ContextRange["tone"], number> = {
 // anchor tick's real on-screen rect (not guessed via CSS alone) so it never
 // runs off the viewport regardless of where the tick sits in the grid;
 // `fixed` positioning keeps it clear of the row's own scroll container.
+// z-[200] matches the same "floating contextual UI" tier already used by
+// WeekCalendar's day-menu and ContextMenu — always above ordinary page
+// content, but below every real modal (ConfirmDialog and friends sit at
+// z-[400]/[401]), so a lingering hover/focus tooltip can never render on
+// top of a dialog the user is actively confirming.
 const TOOLTIP_WIDTH = 220;
 const TOOLTIP_GAP = 8;
 
@@ -226,7 +231,7 @@ function TickTooltip({
       role="tooltip"
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className="fixed z-[500] rounded-xl border border-white/15 bg-[#0e3347] px-3 py-2.5 text-xs text-white shadow-xl leading-snug"
+      className="fixed z-[200] rounded-xl border border-white/15 bg-[#0e3347] px-3 py-2.5 text-xs text-white shadow-xl leading-snug"
       style={{
         top: pos.top,
         left: pos.left,

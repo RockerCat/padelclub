@@ -1,12 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition, useSyncExternalStore } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { X, Clock } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { addMinutes } from "@/lib/courtAvailability";
 import { durationLabel } from "@/lib/durations";
 import type { MyReservation } from "@/lib/playerReservations";
+import { cancelMyReservation } from "@/app/(app)/[club]/reservations/actions";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 // Every surface that shows a player's own reservations/requests (the
 // Reservations page's side panel, the player home page) shares this exact
@@ -80,6 +83,19 @@ export function sortBookingsByProximity(bookings: MyReservation[]): MyReservatio
 // (sortBookingsByProximity above) the moment it's confirmed.
 export function filterVisibleRequests(myReservations: MyReservation[], dismissedIds: Set<string>): MyReservation[] {
   return myReservations.filter((r) => r.status !== "rejected" || !dismissedIds.has(r.id));
+}
+
+// Purely a client-side UX gate for showing/hiding the "Cancelar" affordance
+// — real enforcement of the 2-hour rule lives server-side in the
+// cancel_reservation RPC, which never trusts this. Only pending/confirmed
+// are ever cancellable by a PLAYER (rejected/cancelled are terminal
+// states); the actual creator-or-participant check also happens
+// server-side, since this component never receives who's related to a
+// reservation, only that it's one of the viewer's own.
+export function canPlayerCancelReservation(r: MyReservation): boolean {
+  if (r.status !== "pending" && r.status !== "confirmed") return false;
+  const startDate = new Date(`${r.date}T${r.start_time.slice(0, 5)}:00`);
+  return startDate.getTime() - Date.now() >= 2 * 60 * 60 * 1000;
 }
 
 // ─── Dismissed-rejected-requests store ─────────────────────────────────────────
@@ -249,63 +265,162 @@ const ACTIVITY_STATUS: Record<
 export function ActivityCard({
   reservation,
   clubSlug,
+  viewerId,
   isSelected,
   onDismiss,
 }: {
   reservation: MyReservation;
   clubSlug: string;
+  // The signed-in player's own id — only the creator may edit (being a
+  // reservation_players participant grants no edit permission, Phase 7),
+  // so this card needs to know who's viewing it, not just whose list it's
+  // rendered in.
+  viewerId: string;
   isSelected: boolean;
   onDismiss: (id: string) => void;
 }) {
+  const router = useRouter();
   const cfg = ACTIVITY_STATUS[reservation.status] ?? ACTIVITY_STATUS.pending;
   const start = reservation.start_time.slice(0, 5);
   const end = addMinutes(start, reservation.duration_minutes);
   const isRejected = reservation.status === "rejected";
+  const isCreator = reservation.created_by === viewerId;
+  const isCancellableState = reservation.status === "pending" || reservation.status === "confirmed";
+  const canCancelNow = isCancellableState && canPlayerCancelReservation(reservation);
+  // Same window/state gate as cancelling — editing additionally requires
+  // being the creator. Purely a display gate; update_reservation is the
+  // real authority.
+  const canEditNow = isCreator && canCancelNow;
+
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function handleConfirmCancel() {
+    setCancelError(null);
+    startTransition(async () => {
+      const result = await cancelMyReservation(reservation.id, clubSlug);
+      if (result.error) {
+        setCancelError(result.error);
+        return;
+      }
+      setConfirmOpen(false);
+      router.refresh();
+    });
+  }
 
   return (
-    <Link
-      href={activityHref(clubSlug, reservation.id)}
-      className={`relative block rounded-lg border px-3 py-2.5 pr-7 transition-colors ${
-        isSelected
-          ? "border-brand-primary bg-brand-primary/5"
-          : "border-white/10 bg-white/[0.03] hover:border-white/20"
-      }`}
-    >
-      {/* Only rejected is dismissible — pending is still being processed and
-          an active approved reservation is still upcoming, neither can be
-          hidden manually, so neither renders a close button at all (never a
-          disabled one). */}
-      {isRejected && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onDismiss(reservation.id);
-          }}
-          aria-label="Cerrar tarjeta"
-          className="absolute top-2 right-2 p-0.5 rounded text-brand-muted/50 hover:text-white transition-colors"
-        >
-          <X className="w-3 h-3" />
-        </button>
-      )}
-
-      <span
-        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${cfg.bg} ${cfg.text}`}
+    <>
+      <Link
+        href={activityHref(clubSlug, reservation.id)}
+        className={`relative block rounded-lg border px-3 py-2.5 pr-7 transition-colors ${
+          isSelected
+            ? "border-brand-primary bg-brand-primary/5"
+            : "border-white/10 bg-white/[0.03] hover:border-white/20"
+        }`}
       >
-        <span className={`w-1 h-1 rounded-full shrink-0 ${cfg.dot}`} />
-        {cfg.label}
-      </span>
-      <p className="text-xs text-white font-medium mt-1.5 capitalize truncate">
-        {formatCompactDate(reservation.date)}
-      </p>
-      <p className="text-[11px] text-brand-muted mt-0.5 truncate">
-        {reservation.courtName} · {start}–{end} · {durationLabel(reservation.duration_minutes)}
-      </p>
-      {isRejected && reservation.rejection_reason && (
-        <p className="text-[11px] text-red-400/90 mt-1 line-clamp-2">{reservation.rejection_reason}</p>
-      )}
-    </Link>
+        {/* Only rejected is dismissible — pending is still being processed and
+            an active approved reservation is still upcoming, neither can be
+            hidden manually, so neither renders a close button at all (never a
+            disabled one). */}
+        {isRejected && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onDismiss(reservation.id);
+            }}
+            aria-label="Cerrar tarjeta"
+            className="absolute top-2 right-2 p-0.5 rounded text-brand-muted/50 hover:text-white transition-colors"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        )}
+
+        <span
+          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${cfg.bg} ${cfg.text}`}
+        >
+          <span className={`w-1 h-1 rounded-full shrink-0 ${cfg.dot}`} />
+          {cfg.label}
+        </span>
+        <p className="text-xs text-white font-medium mt-1.5 capitalize truncate">
+          {formatCompactDate(reservation.date)}
+        </p>
+        <p className="text-[11px] text-brand-muted mt-0.5 truncate">
+          {reservation.courtName} · {start}–{end} · {durationLabel(reservation.duration_minutes)}
+        </p>
+        {isRejected && reservation.rejection_reason && (
+          <p className="text-[11px] text-red-400/90 mt-1 line-clamp-2">{reservation.rejection_reason}</p>
+        )}
+
+        {/* Editar/Cancelar — only for pending/confirmed. Within 2 hours of
+            the start time this becomes an explanatory line instead of
+            (disabled, harder to read on mobile) buttons — canCancelNow/
+            canEditNow are purely display gates, update_reservation/
+            cancel_reservation re-check the real window server-side
+            regardless of what's shown here. Editar never shows for a
+            reservation the viewer only participates in (canEditNow already
+            requires isCreator). */}
+        {isCancellableState && (
+          <div className="mt-2 pt-2 border-t border-white/5 flex items-center gap-4">
+            {canCancelNow ? (
+              <>
+                {canEditNow && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      router.push(`${activityHref(clubSlug, reservation.id)}&edit=1`);
+                    }}
+                    className="text-[11px] font-medium text-brand-primary hover:brightness-110 transition-colors"
+                  >
+                    Editar reserva
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setCancelError(null);
+                    setConfirmOpen(true);
+                  }}
+                  className="text-[11px] font-medium text-red-400 hover:text-red-300 transition-colors"
+                >
+                  Cancelar reserva
+                </button>
+              </>
+            ) : (
+              <p className="text-[11px] text-brand-muted/60">
+                {isCreator
+                  ? "Ya no se puede editar ni cancelar (faltan menos de 2 horas)"
+                  : "Ya no se puede cancelar (faltan menos de 2 horas)"}
+              </p>
+            )}
+          </div>
+        )}
+      </Link>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Cancelar reserva"
+        message={
+          `¿Seguro que quieres cancelar tu reserva del ${formatCompactDate(reservation.date)} de ${start} a ${end}? Esta acción no se puede deshacer.` +
+          (cancelError ? `\n\n${cancelError}` : "")
+        }
+        confirmLabel="Sí, cancelar"
+        cancelLabel="Volver"
+        confirmVariant="danger"
+        loading={pending}
+        onConfirm={handleConfirmCancel}
+        onCancel={() => {
+          setConfirmOpen(false);
+          setCancelError(null);
+        }}
+      />
+    </>
   );
 }
 
@@ -315,12 +430,14 @@ export function ActivityCard({
 export function ActivityList({
   reservations,
   clubSlug,
+  viewerId,
   selectedId,
   onDismiss,
   emptyMessage,
 }: {
   reservations: MyReservation[];
   clubSlug: string;
+  viewerId: string;
   selectedId: string | null;
   onDismiss: (id: string) => void;
   emptyMessage: string;
@@ -340,6 +457,7 @@ export function ActivityList({
           key={r.id}
           reservation={r}
           clubSlug={clubSlug}
+          viewerId={viewerId}
           isSelected={r.id === selectedId}
           onDismiss={onDismiss}
         />

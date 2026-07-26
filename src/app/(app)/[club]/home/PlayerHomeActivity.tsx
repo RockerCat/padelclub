@@ -24,11 +24,13 @@ import {
 export function PlayerHomeActivity({
   clubId,
   clubSlug,
+  playerId,
   myBookings,
   myReservations,
 }: {
   clubId: string;
   clubSlug: string;
+  playerId: string;
   myBookings: MyReservation[];
   myReservations: MyReservation[];
 }) {
@@ -62,7 +64,14 @@ export function PlayerHomeActivity({
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {visibleBookings.map((r) => (
-              <ActivityCard key={r.id} reservation={r} clubSlug={clubSlug} isSelected={false} onDismiss={dismiss} />
+              <ActivityCard
+                key={r.id}
+                reservation={r}
+                clubSlug={clubSlug}
+                viewerId={playerId}
+                isSelected={false}
+                onDismiss={dismiss}
+              />
             ))}
           </div>
         )}
@@ -78,6 +87,7 @@ export function PlayerHomeActivity({
           <ActivityList
             reservations={visibleRequests}
             clubSlug={clubSlug}
+            viewerId={playerId}
             selectedId={null}
             onDismiss={dismiss}
             emptyMessage=""

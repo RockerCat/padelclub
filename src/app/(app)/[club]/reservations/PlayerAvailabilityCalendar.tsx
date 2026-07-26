@@ -3,7 +3,7 @@
 import { useState, useEffect, useActionState, useCallback, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronUp, ChevronDown, X, Check, CalendarOff } from "lucide-react";
-import { requestReservation, getReservationPriceQuote } from "./actions";
+import { requestReservation, updateMyReservation, getReservationPriceQuote } from "./actions";
 import type { RequestFormState } from "./actions";
 import type { ResolveReservationPriceResult } from "@/lib/reservationPricing";
 import type { MyReservation } from "@/lib/playerReservations";
@@ -85,6 +85,13 @@ interface PlayerAvailabilityCalendarProps {
   // the date has since elapsed. Drives both the calendar context switch and
   // the contextual slot highlight (green/amber/red).
   focusReservation: MyReservation | null;
+  // Non-null only when "Editar reserva" was clicked (PlayerActivity.tsx)
+  // AND page.tsx re-validated the reservation still qualifies (creator,
+  // pending/confirmed, 2+ hours out) — switches the next slot click into
+  // edit mode instead of create mode. Purely a UI-mode flag: the real
+  // authorization/re-validation happens inside update_reservation
+  // regardless of this value.
+  editingReservation: MyReservation | null;
 }
 
 type ModalSlot = {
@@ -169,6 +176,7 @@ function SidePanels({
   myBookings,
   myReservations,
   clubSlug,
+  viewerId,
   selectedId,
   dismissedIds,
   onDismiss,
@@ -180,6 +188,7 @@ function SidePanels({
   myBookings: MyReservation[];
   myReservations: MyReservation[];
   clubSlug: string;
+  viewerId: string;
   selectedId: string | null;
   dismissedIds: Set<string>;
   onDismiss: (id: string) => void;
@@ -216,6 +225,7 @@ function SidePanels({
           <ActivityList
             reservations={visibleRequests}
             clubSlug={clubSlug}
+            viewerId={viewerId}
             selectedId={selectedId}
             onDismiss={onDismiss}
             emptyMessage="Aún no tienes solicitudes de reserva."
@@ -234,6 +244,7 @@ function SidePanels({
           <ActivityList
             reservations={visibleBookings}
             clubSlug={clubSlug}
+            viewerId={viewerId}
             selectedId={selectedId}
             onDismiss={onDismiss}
             emptyMessage="No tienes reservas próximas."
@@ -253,19 +264,30 @@ function RequestModal({
   startTime,
   duration: initialDuration,
   clubId,
+  clubSlug,
   allowedDurations,
+  editingReservationId,
   onClose,
   onSuccess,
 }: ModalSlot & {
   clubId: string;
+  clubSlug: string;
   allowedDurations: number[];
+  // Set only when this modal was opened to move an existing reservation
+  // (see editingReservation on the main component) — binds the form to
+  // updateMyReservation instead of requestReservation, everything else
+  // about the modal (duration picker, price quote, layout) is reused as-is.
+  editingReservationId?: string;
   onClose: () => void;
   onSuccess: () => void;
 }) {
   const durations = durationOptions(allowedDurations);
   const [duration, setDuration] = useState(initialDuration ?? allowedDurations[0] ?? 60);
+  const isEditMode = !!editingReservationId;
   const [state, formAction, pending] = useActionState<RequestFormState, FormData>(
-    requestReservation.bind(null, clubId),
+    isEditMode
+      ? updateMyReservation.bind(null, editingReservationId!, clubSlug)
+      : requestReservation.bind(null, clubId),
     {},
   );
 
@@ -327,7 +349,7 @@ function RequestModal({
       <div className="relative z-10 w-full md:w-[420px] bg-brand-surface border border-white/10 rounded-t-2xl md:rounded-2xl flex flex-col max-h-[90dvh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-white/10">
-          <h2 className="text-base font-bold text-white">Solicitar reserva</h2>
+          <h2 className="text-base font-bold text-white">{isEditMode ? "Editar reserva" : "Solicitar reserva"}</h2>
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg text-brand-muted hover:text-white hover:bg-white/5 transition-colors"
@@ -432,11 +454,13 @@ function RequestModal({
             className="w-full py-3 rounded-xl font-semibold text-sm transition-opacity disabled:opacity-50"
             style={{ backgroundColor: "var(--club-primary, #B7E000)", color: "#001A24" }}
           >
-            {pending ? "Enviando…" : "Enviar solicitud"}
+            {pending ? "Guardando…" : isEditMode ? "Guardar cambios" : "Enviar solicitud"}
           </button>
 
           <p className="text-xs text-brand-muted text-center leading-relaxed">
-            Tu solicitud quedará pendiente de aprobación por el administrador.
+            {isEditMode
+              ? "Si tu reserva ya estaba confirmada, un cambio de horario puede requerir nueva aprobación del club."
+              : "Tu solicitud quedará pendiente de aprobación por el administrador."}
           </p>
         </form>
       </div>
@@ -525,6 +549,7 @@ export function PlayerAvailabilityCalendar({
   myBookings,
   prefill,
   focusReservation,
+  editingReservation,
 }: PlayerAvailabilityCalendarProps) {
   const router = useRouter();
   const [selectedDate, setSelectedDate] = useState(defaultSelectedDate);
@@ -617,9 +642,14 @@ export function PlayerAvailabilityCalendar({
 
   const handleSuccess = useCallback(() => {
     setModalSlot(null);
-    setSuccessBanner("Tu solicitud fue enviada. El administrador la confirmará pronto.");
+    setSuccessBanner(
+      editingReservation
+        ? "Tu reserva fue actualizada."
+        : "Tu solicitud fue enviada. El administrador la confirmará pronto."
+    );
     router.refresh(); // Re-fetches server data → updates availability + Mis solicitudes
-  }, [router]);
+    if (editingReservation) router.push(`/${clubSlug}/reservations`);
+  }, [router, editingReservation, clubSlug]);
 
   const isClosed = closedDates.includes(selectedDate);
   const openingMins = openingMinsByDate[selectedDate];
@@ -728,6 +758,20 @@ export function PlayerAvailabilityCalendar({
           </div>
         )}
 
+        {/* Edit mode banner — reuses the same court-card availability grid
+            below to pick the new slot; no separate calendar/form. */}
+        {editingReservation && (
+          <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-300 text-sm">
+            <span>Editando reserva — selecciona un nuevo horario en el calendario.</span>
+            <a
+              href={`/${clubSlug}/reservations`}
+              className="text-xs font-medium text-white/70 hover:text-white transition-colors shrink-0"
+            >
+              Cancelar edición
+            </a>
+          </div>
+        )}
+
         {/* Day range navigation — one DayRangeNav per breakpoint (7/10/14
             days); className on each block (page.tsx) is the only thing
             deciding which is visible, so this is pure CSS with no width
@@ -828,6 +872,7 @@ export function PlayerAvailabilityCalendar({
           myBookings={myBookings}
           myReservations={myReservations}
           clubSlug={clubSlug}
+          viewerId={playerId}
           selectedId={focusReservation?.id ?? null}
           dismissedIds={dismissedIds}
           onDismiss={handleDismiss}
@@ -838,13 +883,17 @@ export function PlayerAvailabilityCalendar({
         />
       </aside>
 
-      {/* Request modal */}
+      {/* Request modal — same component/form for both creating a new
+          reservation and editing an existing one (editingReservation),
+          never two independent implementations. */}
       {modalSlot && (
         <RequestModal
           key={`${modalSlot.courtId}-${modalSlot.date}-${modalSlot.startTime}`}
           {...modalSlot}
           clubId={clubId}
+          clubSlug={clubSlug}
           allowedDurations={allowedDurations}
+          editingReservationId={editingReservation?.id}
           onClose={() => setModalSlot(null)}
           onSuccess={handleSuccess}
         />

@@ -1,17 +1,14 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import {
-  getEffectiveHour,
-  timeToMinutes,
-  validateAgainstOperatingHours,
-} from "@/lib/operatingHours";
-import type { OperatingHour } from "@/lib/operatingHours";
-import { getClubDurations } from "@/lib/durations";
 import { resolveReservationPrice } from "@/lib/reservationPricing";
 import type { ResolveReservationPriceResult } from "@/lib/reservationPricing";
+import { mapUpdateReservationError } from "@/lib/reservationErrors";
 
 export type RequestFormState = { error?: string; success?: boolean };
+
+export type CancelReservationResult = { success?: boolean; error?: string };
 
 // ─── getReservationPriceQuote ─────────────────────────────────────────────────
 // Read-only Server Action — same pattern as getAvailableSlots (admin/
@@ -51,6 +48,15 @@ export async function getReservationPriceQuote(
   return resolveReservationPrice(supabase, { clubId, courtId, date, startTime, durationMinutes });
 }
 
+// Routed through create_reservation_player (Phase 7 concurrency fix,
+// 20260814000001) — the direct validate-then-insert this action used to
+// perform is gone; every rule (membership, court, operating hours,
+// duration, conflict, pricing) is re-validated inside the RPC, inside the
+// same advisory-lock-protected transaction update_reservation and
+// create_reservation_admin also use, so a reservation created here can
+// never race a concurrent edit or admin-created reservation for the same
+// court/day. Client-visible behavior is unchanged: same required fields,
+// same "no tariff configured" block, same success/notify shape.
 export async function requestReservation(
   clubId: string,
   _prevState: RequestFormState,
@@ -62,133 +68,30 @@ export async function requestReservation(
   } = await supabase.auth.getUser();
   if (!user) return { error: "No autenticado." };
 
-  const { data: membership } = await supabase
-    .from("club_members")
-    .select("role")
-    .eq("club_id", clubId)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-  if (!membership) return { error: "Sin acceso al club." };
-
   const courtId = formData.get("court_id") as string;
   const date = formData.get("date") as string;
   const startTime = formData.get("start_time") as string;
   const durationMinutes = parseInt(formData.get("duration_minutes") as string, 10);
 
-  // Fetch allowed durations for this club
-  const { data: clubData } = await supabase
-    .from("clubs")
-    .select("allowed_reservation_durations")
-    .eq("id", clubId)
-    .single();
-  const allowedDurations = getClubDurations(clubData?.allowed_reservation_durations);
-
   if (!courtId || !date || !startTime) {
     return { error: "Datos incompletos." };
   }
 
-  if (!allowedDurations.includes(durationMinutes)) {
-    return { error: "Esta duración no está permitida para este club." };
-  }
-
-  // Local calendar date (getFullYear/getMonth/getDate), never
-  // toISOString() — that converts to UTC first, so near a UTC offset
-  // boundary (e.g. after ~19:00 in UTC-5) it silently rolls over to
-  // "tomorrow" while now.getHours()/getMinutes() below still read local
-  // time, comparing two different days as if they were the same one.
-  const now = new Date();
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-
-  if (date < todayStr) return { error: "No puedes reservar en una fecha pasada." };
-
-  if (date === todayStr) {
-    const [h, m] = startTime.split(":").map(Number);
-    if (h * 60 + m <= now.getHours() * 60 + now.getMinutes()) {
-      return { error: "El horario seleccionado ya pasó." };
-    }
-  }
-
-  const { data: court } = await supabase
-    .from("courts")
-    .select("id")
-    .eq("id", courtId)
-    .eq("club_id", clubId)
-    .eq("is_active", true)
-    .single();
-  if (!court) return { error: "Cancha no disponible." };
-
-  const { data: dbHours } = await supabase
-    .from("club_operating_hours")
-    .select("day_of_week, is_open, opens_at, closes_at")
-    .eq("club_id", clubId);
-
-  const dayOfWeek = new Date(date + "T00:00:00").getDay();
-  const effectiveHours = getEffectiveHour((dbHours ?? []) as OperatingHour[], dayOfWeek);
-  const hoursError = validateAgainstOperatingHours(effectiveHours, startTime, durationMinutes);
-  if (hoursError) return { error: hoursError };
-
-  // Check overlap against both confirmed AND pending reservations
-  const { data: existing } = await supabase
-    .from("reservations")
-    .select("start_time, duration_minutes")
-    .eq("court_id", courtId)
-    .eq("date", date)
-    .in("status", ["confirmed", "pending"]);
-
-  const newStart = timeToMinutes(startTime);
-  const newEnd = newStart + durationMinutes;
-  for (const r of existing ?? []) {
-    const rStart = timeToMinutes(r.start_time);
-    const rEnd = rStart + r.duration_minutes;
-    if (newStart < rEnd && newEnd > rStart) {
-      return { error: "El horario ya fue tomado. Selecciona otro." };
-    }
-  }
-
-  // Price is resolved fresh here, server-side, right before the insert —
-  // never trusted from the client (the form never even submits a price
-  // field). A PLAYER request with no applicable tariff is not created at
-  // all: this is a new-request gate only, it must never affect historical
-  // reservations that already have their 4 price fields NULL (those rows
-  // are never touched by this function).
-  const priceResult = await resolveReservationPrice(supabase, {
-    clubId,
-    courtId,
-    date,
-    startTime,
-    durationMinutes,
+  const { data: reservationId, error } = await supabase.rpc("create_reservation_player", {
+    p_club_id: clubId,
+    p_court_id: courtId,
+    p_date: date,
+    p_start_time: startTime.length === 5 ? `${startTime}:00` : startTime,
+    p_duration_minutes: durationMinutes,
   });
-  if (!priceResult.matched) {
-    return { error: "No hay una tarifa configurada para este horario. Contacta al club para continuar con la reserva." };
-  }
 
-  const { data: reservation, error: insertError } = await supabase
-    .from("reservations")
-    .insert({
-      club_id: clubId,
-      court_id: courtId,
-      created_by: user.id,
-      date,
-      start_time: startTime.length === 5 ? `${startTime}:00` : startTime,
-      duration_minutes: durationMinutes,
-      type: "match",
-      status: "pending",
-      price_amount: priceResult.finalPrice,
-      price_currency: priceResult.currency,
-      pricing_rule_id: priceResult.ruleId,
-      price_calculated_at: priceResult.calculatedAt,
-    })
-    .select("id")
-    .single();
-
-  if (insertError || !reservation) {
-    console.error("requestReservation:", insertError);
-    return { error: "Error al enviar la solicitud. Intenta nuevamente." };
+  if (error) {
+    console.error("[requestReservation] create_reservation_player failed:", { clubId, supabaseError: error });
+    return { error: mapUpdateReservationError(error) };
   }
 
   const { error: notifyError } = await supabase.rpc("notify_reservation_request_created", {
-    p_reservation_id: reservation.id,
+    p_reservation_id: reservationId,
   });
   // Notifying admins is best-effort — the reservation request itself already
   // succeeded and must not be rolled back, and the player must never see a
@@ -197,7 +100,7 @@ export async function requestReservation(
   // including player-identifying data.
   if (notifyError) {
     console.error("[requestReservation] notify_reservation_request_created RPC failed", {
-      reservationId: reservation.id,
+      reservationId,
       userId: user.id,
       clubId,
       code: notifyError.code,
@@ -205,5 +108,115 @@ export async function requestReservation(
     });
   }
 
+  return { success: true };
+}
+
+// ─── cancelMyReservation ───────────────────────────────────────────────────
+// PLAYER self-cancellation — creator or participant, only while the
+// reservation's start time is still 2+ hours away. Everything that actually
+// matters for authorization is re-derived server-side, inside
+// cancel_reservation (SECURITY DEFINER), from auth.uid() and the
+// reservation row itself; this action passes nothing but the reservation
+// id and never trusts client-side timing. clubSlug is only used for the
+// revalidatePath calls below, exactly like the existing OWNER/ADMIN
+// cancelReservation action uses its own clubSlug for its redirect.
+export async function cancelMyReservation(
+  reservationId: string,
+  clubSlug: string
+): Promise<CancelReservationResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Debes iniciar sesión para cancelar tu reserva." };
+
+  const { error } = await supabase.rpc("cancel_reservation", { p_reservation_id: reservationId });
+
+  if (error) {
+    if (error.code === "23514") return { error: "No puedes cancelar con menos de 2 horas de anticipación." };
+    if (error.code === "22023") return { error: "Esta reserva ya no se puede cancelar." };
+    if (error.code === "P0002") return { error: "Reserva no encontrada." };
+    if (error.code === "42501") return { error: "No tienes permiso para cancelar esta reserva." };
+    console.error("[cancelMyReservation] cancel_reservation failed:", { reservationId, supabaseError: error });
+    return { error: "Error al cancelar la reserva. Intenta nuevamente." };
+  }
+
+  // Best-effort, same pattern as requestReservation's notify call above —
+  // the cancellation itself already succeeded and must not be rolled back
+  // over a notification-only failure.
+  const { error: notifyError } = await supabase.rpc("notify_reservation_cancelled", {
+    p_reservation_id: reservationId,
+  });
+  if (notifyError) {
+    console.error("[cancelMyReservation] notify_reservation_cancelled RPC failed", {
+      reservationId,
+      userId: user.id,
+      code: notifyError.code,
+      message: notifyError.message,
+    });
+  }
+
+  revalidatePath(`/${clubSlug}/reservations`);
+  revalidatePath(`/${clubSlug}/home`);
+  return { success: true };
+}
+
+// ─── updateMyReservation ───────────────────────────────────────────────────
+// PLAYER self-edit — creator only (being a participant grants no edit
+// permission), pending/confirmed, not a block, only while the CURRENT
+// start time is still 2+ hours away. Every one of those checks, plus
+// availability/operating-hours/duration re-validation and price
+// recomputation, happens inside update_reservation (SECURITY DEFINER);
+// this action passes only the reservation id and the new field values —
+// never a role, a computed price, or a bypass flag. Bound into the same
+// RequestModal used for creating a reservation (see
+// PlayerAvailabilityCalendar.tsx), so the (prevState, formData) shape
+// matches requestReservation's exactly.
+export async function updateMyReservation(
+  reservationId: string,
+  clubSlug: string,
+  _prevState: RequestFormState,
+  formData: FormData
+): Promise<RequestFormState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "No autenticado." };
+
+  const courtId = formData.get("court_id") as string;
+  const date = formData.get("date") as string;
+  const startTime = formData.get("start_time") as string;
+  const durationMinutes = parseInt(formData.get("duration_minutes") as string, 10);
+
+  if (!courtId || !date || !startTime) return { error: "Datos incompletos." };
+
+  const { error } = await supabase.rpc("update_reservation", {
+    p_reservation_id: reservationId,
+    p_court_id: courtId,
+    p_date: date,
+    p_start_time: startTime.length === 5 ? `${startTime}:00` : startTime,
+    p_duration_minutes: durationMinutes,
+  });
+
+  if (error) {
+    console.error("[updateMyReservation] update_reservation failed:", { reservationId, supabaseError: error });
+    return { error: mapUpdateReservationError(error) };
+  }
+
+  const { error: notifyError } = await supabase.rpc("notify_reservation_updated", {
+    p_reservation_id: reservationId,
+  });
+  if (notifyError) {
+    console.error("[updateMyReservation] notify_reservation_updated RPC failed", {
+      reservationId,
+      userId: user.id,
+      code: notifyError.code,
+      message: notifyError.message,
+    });
+  }
+
+  revalidatePath(`/${clubSlug}/reservations`);
+  revalidatePath(`/${clubSlug}/home`);
   return { success: true };
 }

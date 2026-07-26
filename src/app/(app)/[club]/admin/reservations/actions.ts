@@ -2,20 +2,14 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import {
-  getEffectiveHour,
-  validateAgainstOperatingHours,
-  timeToMinutes as sharedTimeToMinutes,
-} from "@/lib/operatingHours";
-import { getClubDurations } from "@/lib/durations";
+import { getEffectiveHour, timeToMinutes as sharedTimeToMinutes } from "@/lib/operatingHours";
 import { validateRejectionInput } from "@/lib/reservationRejection";
+import { mapUpdateReservationError } from "@/lib/reservationErrors";
 
 export type ReservationFormState = {
   error?: string;
   success?: boolean;
 };
-
-const isDev = process.env.NODE_ENV === "development";
 
 // ─── Permission guard ─────────────────────────────────────────────────────────
 
@@ -51,75 +45,6 @@ async function requireAdminRole(clubId: string) {
   return { supabase, user, error: null };
 }
 
-// ─── Operating hours check ────────────────────────────────────────────────────
-
-async function checkOperatingHours(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any,
-  clubId: string,
-  date: string,
-  startTime: string,
-  durationMinutes: number
-): Promise<string | null> {
-  const d = new Date(date + "T00:00:00");
-  const dayOfWeek = d.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-
-  const { data } = await supabase
-    .from("club_operating_hours")
-    .select("is_open, opens_at, closes_at")
-    .eq("club_id", clubId)
-    .eq("day_of_week", dayOfWeek)
-    .maybeSingle();
-
-  const hours = getEffectiveHour(
-    data
-      ? [{ day_of_week: dayOfWeek, is_open: data.is_open, opens_at: data.opens_at, closes_at: data.closes_at }]
-      : [],
-    dayOfWeek
-  );
-
-  return validateAgainstOperatingHours(hours, startTime, durationMinutes);
-}
-
-// ─── Overlap check ────────────────────────────────────────────────────────────
-
-async function checkOverlap(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any,
-  courtId: string,
-  date: string,
-  startTime: string,
-  durationMinutes: number,
-  excludeId?: string
-): Promise<boolean> {
-  let query = supabase
-    .from("reservations")
-    .select("start_time, duration_minutes")
-    .eq("court_id", courtId)
-    .eq("date", date)
-    .eq("status", "confirmed");
-
-  if (excludeId) query = query.neq("id", excludeId);
-
-  const { data: existing, error } = await query;
-
-  if (error) {
-    console.error("[reservations] overlap check query failed:", error);
-    // Don't block the insert on overlap check failure
-    return false;
-  }
-
-  const newStart = sharedTimeToMinutes(startTime);
-  const newEnd = newStart + durationMinutes;
-
-  for (const r of existing ?? []) {
-    const existStart = sharedTimeToMinutes(r.start_time);
-    const existEnd = existStart + r.duration_minutes;
-    if (newStart < existEnd && newEnd > existStart) return true;
-  }
-  return false;
-}
-
 // ─── Parse + validate ─────────────────────────────────────────────────────────
 
 function parseFormData(formData: FormData) {
@@ -140,48 +65,14 @@ function parseFormData(formData: FormData) {
   return { courtId, date, startTime, durationMinutes, type, title, notes, playerIds };
 }
 
-async function getClubAllowedDurations(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any,
-  clubId: string
-): Promise<number[]> {
-  const { data } = await supabase
-    .from("clubs")
-    .select("allowed_reservation_durations")
-    .eq("id", clubId)
-    .single();
-  return getClubDurations(data?.allowed_reservation_durations);
-}
-
-function validate(
-  courtId: string,
-  date: string,
-  startTime: string,
-  durationMinutes: number,
-  type: string,
-  title: string | null,
-  allowedDurations: number[]
-): string | null {
-  if (!courtId) return "Selecciona una cancha.";
-  if (!date) return "Selecciona una fecha.";
-  if (!startTime || startTime === ":00") return "Selecciona una hora de inicio.";
-  if (!allowedDurations.includes(durationMinutes)) return "Esta duración no está permitida para este club.";
-  if (!["match", "class", "block"].includes(type)) return "Tipo inválido.";
-  if (type === "block" && !title) return "El título es obligatorio para bloqueos.";
-  return null;
-}
-
-// Construct a local datetime from YYYY-MM-DD + HH:MM[:SS] and compare to now.
-// ISO 8601 without timezone offset is treated as local time in V8 (Node.js ≥ ES2015).
-function checkNotInPast(date: string, startTime: string): string | null {
-  const startDatetime = new Date(`${date}T${startTime.slice(0, 5)}`);
-  if (startDatetime.getTime() < Date.now()) {
-    return "La reserva no puede estar en el pasado.";
-  }
-  return null;
-}
-
 // ─── createReservation ────────────────────────────────────────────────────────
+// Routed through create_reservation_admin (Phase 7 concurrency fix,
+// 20260814000001) — the direct validate-then-insert this action used to
+// perform (plus its own checkOperatingHours/checkOverlap calls) is gone;
+// every rule is re-validated inside the RPC, inside the same
+// advisory-lock-protected transaction update_reservation and
+// create_reservation_player also use. reservation_players + notification
+// are still handled here afterward, unchanged.
 
 export async function createReservation(
   clubId: string,
@@ -190,107 +81,39 @@ export async function createReservation(
   _prevState: ReservationFormState,
   formData: FormData
 ): Promise<ReservationFormState> {
-  const { supabase, user, error: authError } = await requireAdminRole(clubId);
-  if (authError || !supabase || !user) return { error: authError! };
+  const { supabase, error: authError } = await requireAdminRole(clubId);
+  if (authError || !supabase) return { error: authError! };
 
   const { courtId, date, startTime, durationMinutes, type, title, notes, playerIds } =
     parseFormData(formData);
 
-  console.log("[createReservation] parsed input:", {
-    clubId,
-    courtId,
-    date,
-    startTime,
-    duration: durationMinutes,
-    type,
-    title,
-    players: playerIds,
+  if (!courtId || !date || !startTime) return { error: "Datos incompletos." };
+
+  const { data: reservationId, error } = await supabase.rpc("create_reservation_admin", {
+    p_club_id: clubId,
+    p_court_id: courtId,
+    p_date: date,
+    p_start_time: startTime,
+    p_duration_minutes: durationMinutes,
+    p_type: type,
+    p_title: title,
+    p_notes: notes,
   });
 
-  const allowedDurations = await getClubAllowedDurations(supabase, clubId);
-  const validationError = validate(courtId, date, startTime, durationMinutes, type, title, allowedDurations);
-  if (validationError) {
-    console.log("[createReservation] validation failed:", validationError);
-    return { error: validationError };
-  }
-
-  const pastError = checkNotInPast(date, startTime);
-  if (pastError) return { error: pastError };
-
-  // Verify court belongs to this club and is active
-  const { data: court, error: courtError } = await supabase
-    .from("courts")
-    .select("id")
-    .eq("id", courtId)
-    .eq("club_id", clubId)
-    .eq("is_active", true)
-    .single();
-
-  if (courtError) {
-    console.error("[createReservation] court lookup error:", courtError);
-  }
-  if (!court) {
-    return { error: isDev ? `[DEV] Cancha no encontrada o inactiva (court_id: ${courtId})` : "La cancha seleccionada no está disponible." };
-  }
-
-  // Operating hours check
-  const hoursError = await checkOperatingHours(supabase, clubId, date, startTime, durationMinutes);
-  if (hoursError) return { error: hoursError };
-
-  // Overlap check
-  const hasOverlap = await checkOverlap(supabase, courtId, date, startTime, durationMinutes);
-  if (hasOverlap) {
-    return { error: "Ya existe una reserva en ese horario para esta cancha." };
-  }
-
-  // Insert reservation
-  const reservationData = {
-    club_id: clubId,
-    court_id: courtId,
-    created_by: user.id,
-    date,
-    start_time: startTime,
-    duration_minutes: durationMinutes,
-    type: type as "match" | "class" | "block",
-    title,
-    notes,
-  };
-
-  console.log("[createReservation] inserting:", reservationData);
-
-  const { data: reservation, error: insertError } = await supabase
-    .from("reservations")
-    .insert(reservationData)
-    .select("id")
-    .single();
-
-  if (insertError || !reservation) {
-    console.error("[createReservation] insert failed:", {
-      clubId,
-      courtId,
-      date,
-      startTime,
-      duration: durationMinutes,
-      players: playerIds,
-      reservationData,
-      supabaseError: insertError,
-    });
-    return {
-      error: isDev
-        ? `[DEV] Error al insertar: ${insertError?.message ?? "sin datos"} (código: ${insertError?.code ?? "—"}, hint: ${insertError?.hint ?? "—"})`
-        : "Error al crear la reserva. Intenta de nuevo.",
-    };
+  if (error) {
+    console.error("[createReservation] create_reservation_admin failed:", { clubId, supabaseError: error });
+    return { error: mapUpdateReservationError(error) };
   }
 
   // Insert players
   if (playerIds.length > 0) {
     const { error: playersError } = await supabase
       .from("reservation_players")
-      .insert(playerIds.map((profileId) => ({ reservation_id: reservation.id, profile_id: profileId })));
+      .insert(playerIds.map((profileId) => ({ reservation_id: reservationId, profile_id: profileId })));
 
     if (playersError) {
       console.error("[createReservation] players insert failed:", {
-        reservationId: reservation.id,
+        reservationId,
         playerIds,
         supabaseError: playersError,
       });
@@ -306,11 +129,11 @@ export async function createReservation(
       // re-derived server-side from reservation_players itself, never from
       // this action's own playerIds array.
       const { error: notifyError } = await supabase.rpc("notify_reservation_created_for_players", {
-        p_reservation_id: reservation.id,
+        p_reservation_id: reservationId,
       });
       if (notifyError) {
         console.error("[createReservation] notify_reservation_created_for_players failed:", {
-          reservationId: reservation.id,
+          reservationId,
           clubId,
           code: notifyError.code,
           message: notifyError.message,
@@ -319,13 +142,24 @@ export async function createReservation(
     }
   }
 
-  console.log("[createReservation] success — reservationId:", reservation.id);
   if (noRedirect) return { success: true };
   redirect(`/${clubSlug}/admin/reservations`);
 }
 
 // ─── updateReservation ────────────────────────────────────────────────────────
-
+// Routed through the centralized update_reservation RPC (Phase 7,
+// 20260814000001) — the direct .update() this action used to perform
+// (plus its own checkOperatingHours/checkOverlap calls) is gone; every one
+// of those rules is now re-validated inside the RPC itself, which also
+// re-derives OWNER/ADMIN authorization from auth.uid() instead of trusting
+// requireAdminRole alone (kept here only as the same early, friendly gate
+// every other action in this file already uses).
+//
+// Scope of this phase is exactly court/cancha, fecha, hora de inicio,
+// duración — type, title, notes, and participants are deliberately no
+// longer editable through this action (ReservationForm disables those
+// inputs while editingReservationId is set); reservation_players is never
+// touched here anymore either.
 export async function updateReservation(
   clubId: string,
   clubSlug: string,
@@ -337,72 +171,28 @@ export async function updateReservation(
   const { supabase, error: authError } = await requireAdminRole(clubId);
   if (authError || !supabase) return { error: authError! };
 
-  const { data: currentStatus } = await supabase
-    .from("reservations")
-    .select("status")
-    .eq("id", reservationId)
-    .eq("club_id", clubId)
-    .maybeSingle();
+  const { courtId, date, startTime, durationMinutes } = parseFormData(formData);
 
-  if (currentStatus?.status === "cancelled") {
-    return { error: "No se puede editar una reserva cancelada." };
+  if (!courtId || !date || !startTime) return { error: "Datos incompletos." };
+
+  const { error } = await supabase.rpc("update_reservation", {
+    p_reservation_id: reservationId,
+    p_court_id: courtId,
+    p_date: date,
+    p_start_time: startTime,
+    p_duration_minutes: durationMinutes,
+  });
+
+  if (error) {
+    console.error("[updateReservation] update_reservation failed:", { reservationId, clubId, supabaseError: error });
+    return { error: mapUpdateReservationError(error) };
   }
 
-  const { courtId, date, startTime, durationMinutes, type, title, notes, playerIds } =
-    parseFormData(formData);
-
-  console.log("[updateReservation] parsed input:", { reservationId, clubId, courtId, date, startTime, duration: durationMinutes, type, title, players: playerIds });
-
-  const allowedDurations = await getClubAllowedDurations(supabase, clubId);
-  const validationError = validate(courtId, date, startTime, durationMinutes, type, title, allowedDurations);
-  if (validationError) return { error: validationError };
-
-  const pastError = checkNotInPast(date, startTime);
-  if (pastError) return { error: pastError };
-
-  const { data: court, error: courtError } = await supabase
-    .from("courts")
-    .select("id")
-    .eq("id", courtId)
-    .eq("club_id", clubId)
-    .eq("is_active", true)
-    .single();
-
-  if (courtError) console.error("[updateReservation] court lookup error:", courtError);
-  if (!court) {
-    return { error: isDev ? `[DEV] Cancha no encontrada (court_id: ${courtId})` : "La cancha seleccionada no está disponible." };
-  }
-
-  const hoursErrorUpdate = await checkOperatingHours(supabase, clubId, date, startTime, durationMinutes);
-  if (hoursErrorUpdate) return { error: hoursErrorUpdate };
-
-  const hasOverlap = await checkOverlap(supabase, courtId, date, startTime, durationMinutes, reservationId);
-  if (hasOverlap) return { error: "Ya existe una reserva en ese horario para esta cancha." };
-
-  const { error: updateError } = await supabase
-    .from("reservations")
-    .update({ court_id: courtId, date, start_time: startTime, duration_minutes: durationMinutes, type: type as "match" | "class" | "block", title, notes })
-    .eq("id", reservationId)
-    .eq("club_id", clubId);
-
-  if (updateError) {
-    console.error("[updateReservation] update failed:", { reservationId, supabaseError: updateError });
-    return {
-      error: isDev
-        ? `[DEV] Error al actualizar: ${updateError.message} (código: ${updateError.code})`
-        : "Error al guardar los cambios. Intenta de nuevo.",
-    };
-  }
-
-  // Replace players
-  await supabase.from("reservation_players").delete().eq("reservation_id", reservationId);
-
-  if (playerIds.length > 0) {
-    const { error: playersError } = await supabase
-      .from("reservation_players")
-      .insert(playerIds.map((profileId) => ({ reservation_id: reservationId, profile_id: profileId })));
-
-    if (playersError) console.error("[updateReservation] players insert failed:", playersError);
+  const { error: notifyError } = await supabase.rpc("notify_reservation_updated", {
+    p_reservation_id: reservationId,
+  });
+  if (notifyError) {
+    console.error("[updateReservation] notify_reservation_updated failed:", { reservationId, notifyError });
   }
 
   if (noRedirect) return { success: true };
@@ -539,6 +329,47 @@ export type ReservationEditData = {
 
 export type PendingActionResult = { success?: boolean; error?: string };
 
+// Dedicated mapping (not the shared mapUpdateReservationError — its
+// messages belong to create/edit, not approval) so approvePendingReservation
+// keeps its exact original user-facing text. P0003 (duration/operating
+// hours) is the one case where the message is passed straight through:
+// approve_pending_reservation raises it via the shared
+// _check_operating_hours helper, whose RAISE messages are already
+// presentable Spanish (the same ones requestReservation/updateReservation
+// show) — not a raw SQL error, safe to surface as-is. The single disclosed
+// wording difference from the old inline check: the club's own duration
+// list now reads "Esta duración no está permitida para este club."
+// (the helper's shared wording) instead of the old
+// "Duración no permitida por el club." — same meaning, reused text.
+function mapApprovePendingReservationError(error: { code?: string | null; message?: string }): string {
+  switch (error.code) {
+    case "P0002":
+      return "Solicitud no encontrada.";
+    case "P0004":
+      return "La cancha ya no está disponible.";
+    case "P0003":
+      return error.message || "El horario ya no es válido para este club.";
+    case "23P01":
+      return "El horario fue confirmado para otra reserva.";
+    case "22023":
+      return "La solicitud ya fue procesada.";
+    case "42501":
+      return "Sin permiso.";
+    default:
+      return "Error al confirmar la reserva. Intenta nuevamente.";
+  }
+}
+
+// Routed through approve_pending_reservation (Phase 7 concurrency fix,
+// 20260814000001) — takes the exact same shared advisory lock
+// (_lock_court_date) and conflict check (_check_reservation_conflict) as
+// create_reservation_player/create_reservation_admin/update_reservation,
+// so an approval can never race a concurrent create/edit for the same
+// court+day into a double booking. Every validation this action already
+// performed (club membership/role, pending status, court still active,
+// duration/operating hours, conflict against confirmed reservations
+// excluding itself) is preserved, just re-derived server-side inside the
+// RPC instead of via separate, unprotected queries from this action.
 export async function approvePendingReservation(
   clubId: string,
   reservationId: string
@@ -546,84 +377,25 @@ export async function approvePendingReservation(
   const { supabase, error: authError } = await requireAdminRole(clubId);
   if (authError || !supabase) return { error: authError ?? "Sin permiso." };
 
-  // Fetch the reservation (must be pending + belong to this club)
-  const { data: res } = await supabase
-    .from("reservations")
-    .select("id, court_id, date, start_time, duration_minutes, status")
-    .eq("id", reservationId)
-    .eq("club_id", clubId)
-    .single();
+  const { error } = await supabase.rpc("approve_pending_reservation", { p_reservation_id: reservationId });
 
-  if (!res) return { error: "Solicitud no encontrada." };
-  if (res.status !== "pending") return { error: "La solicitud ya fue procesada." };
-
-  // Validate duration against club config
-  const allowedDurations = await getClubAllowedDurations(supabase, clubId);
-  if (!allowedDurations.includes(res.duration_minutes)) {
-    return { error: "Duración no permitida por el club." };
-  }
-
-  // Validate court still active
-  const { data: court } = await supabase
-    .from("courts")
-    .select("id")
-    .eq("id", res.court_id)
-    .eq("club_id", clubId)
-    .eq("is_active", true)
-    .single();
-  if (!court) return { error: "La cancha ya no está disponible." };
-
-  // Validate operating hours
-  const hoursError = await checkOperatingHours(
-    supabase,
-    clubId,
-    res.date,
-    res.start_time,
-    res.duration_minutes
-  );
-  if (hoursError) return { error: hoursError };
-
-  // Check overlap with CONFIRMED reservations (exclude self so PENDING doesn't block itself)
-  const hasOverlap = await checkOverlap(
-    supabase,
-    res.court_id,
-    res.date,
-    res.start_time,
-    res.duration_minutes,
-    reservationId
-  );
-  if (hasOverlap) return { error: "El horario fue confirmado para otra reserva." };
-
-  // .eq("status", "pending") makes this the atomic decision point: if
-  // another OWNER/ADMIN already approved or rejected this same request,
-  // Postgres' row lock on the concurrent UPDATE serializes the two writes,
-  // and whichever commits second finds status no longer 'pending' — 0 rows
-  // match, `updated` comes back null, and this admin gets the same
-  // controlled "already resolved" outcome as rejectPendingReservation.
-  const { data: updated, error: updateErr } = await supabase
-    .from("reservations")
-    .update({ status: "confirmed" })
-    .eq("id", reservationId)
-    .eq("club_id", clubId)
-    .eq("status", "pending")
-    .select("id")
-    .maybeSingle();
-
-  if (updateErr) {
-    console.error("[approvePendingReservation]", updateErr);
-    return { error: "Error al confirmar la reserva. Intenta nuevamente." };
-  }
-  if (!updated) {
-    return { error: "La solicitud ya fue procesada." };
+  if (error) {
+    console.error("[approvePendingReservation] approve_pending_reservation failed:", {
+      reservationId,
+      clubId,
+      supabaseError: error,
+    });
+    return { error: mapApprovePendingReservationError(error) };
   }
 
   // Shares this outcome across every OWNER/ADMIN's own
   // reservation_request_created notification for this reservation (not
   // just the resolver's own) — a plain client UPDATE can't reach other
   // recipients' rows (notifications_update_own is profile_id-scoped), so
-  // this goes through a SECURITY DEFINER RPC instead. Best-effort: the
-  // reservation is already confirmed and must never be rolled back over a
-  // notification-sync failure.
+  // this goes through a SECURITY DEFINER RPC instead. Best-effort, called
+  // only after approve_pending_reservation succeeds — same place, same
+  // convention as before: the reservation is already confirmed and must
+  // never be rolled back over a notification-sync failure.
   const { error: resolveErr } = await supabase.rpc("resolve_reservation_request_notifications", {
     p_reservation_id: reservationId,
     p_status: "approved",
@@ -758,7 +530,14 @@ export async function getReservationForEdit(
 }
 
 // ─── cancelReservation ────────────────────────────────────────────────────────
-
+// Routed through the same centralized cancel_reservation RPC (Phase 4,
+// 20260811000001) the new PLAYER-facing cancelMyReservation uses — one
+// place decides who can cancel what, instead of this action's own direct
+// .update(). requireAdminRole stays as the first gate (preserves this
+// action's existing behavior for a non-admin caller), with cancel_reservation
+// re-deriving the same OWNER/ADMIN check internally regardless. Unlike the
+// old direct update, this now also fires notify_reservation_cancelled so
+// affected players are actually notified — a gap the old path never covered.
 export async function cancelReservation(
   clubId: string,
   clubSlug: string,
@@ -767,13 +546,18 @@ export async function cancelReservation(
   const { supabase, user, error: authError } = await requireAdminRole(clubId);
   if (authError || !supabase || !user) return;
 
-  const { error } = await supabase
-    .from("reservations")
-    .update({ status: "cancelled", cancelled_at: new Date().toISOString(), cancelled_by: user.id })
-    .eq("id", reservationId)
-    .eq("club_id", clubId);
+  const { error } = await supabase.rpc("cancel_reservation", { p_reservation_id: reservationId });
 
-  if (error) console.error("[cancelReservation] failed:", { reservationId, supabaseError: error });
+  if (error) {
+    console.error("[cancelReservation] cancel_reservation failed:", { reservationId, supabaseError: error });
+  } else {
+    const { error: notifyError } = await supabase.rpc("notify_reservation_cancelled", {
+      p_reservation_id: reservationId,
+    });
+    if (notifyError) {
+      console.error("[cancelReservation] notify_reservation_cancelled failed:", { reservationId, notifyError });
+    }
+  }
 
   redirect(`/${clubSlug}/admin/reservations?cancelled=1`);
 }

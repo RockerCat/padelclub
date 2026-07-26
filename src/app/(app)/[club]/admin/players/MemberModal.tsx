@@ -199,7 +199,7 @@ export function MemberModal({ member, clubId, clubSlug, onClose }: MemberModalPr
               loading={togglePending}
               onClick={() => setConfirmOpen(true)}
             >
-              {isActive ? "Desactivar miembro" : "Activar miembro"}
+              {isActive ? "Desactivar jugador" : "Activar miembro"}
             </Button>
             <Button type="button" loading={savePending} onClick={handleSave}>
               Guardar cambios
@@ -210,13 +210,13 @@ export function MemberModal({ member, clubId, clubSlug, onClose }: MemberModalPr
 
       <ConfirmDialog
         open={confirmOpen}
-        title={isActive ? "Desactivar miembro" : "Activar miembro"}
+        title={isActive ? "Desactivar jugador" : "Activar miembro"}
         message={
           isActive
-            ? "¿Deseas desactivar a este miembro?\nDejará de tener acceso como jugador activo del club."
+            ? "Este jugador perderá acceso al club. Sus reservas futuras propias serán canceladas y dejará de participar en reservas futuras creadas por otros jugadores. Su historial se conservará."
             : "¿Deseas activar a este miembro?\nVolverá a tener acceso como jugador activo del club."
         }
-        confirmLabel={isActive ? "Desactivar miembro" : "Activar miembro"}
+        confirmLabel={isActive ? "Desactivar jugador" : "Activar miembro"}
         confirmVariant={isActive ? "danger" : "success"}
         loading={togglePending}
         onConfirm={handleConfirmToggle}

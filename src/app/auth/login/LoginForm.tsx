@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getClubEntryPath } from "@/lib/utils/navigation";
+import { resolveClubEntryPath } from "@/lib/utils/navigation";
 import { checkProfileIsPlatformAdmin } from "@/lib/platformAdminQuery";
 import { getSafeInternalPath } from "@/lib/utils/safeRedirect";
 import Link from "next/link";
@@ -72,29 +72,10 @@ export function LoginForm() {
         return;
       }
 
-      const { data: memberships } = await supabase
-        .from("club_members")
-        .select("role, clubs!inner(id, slug)")
-        .eq("profile_id", user!.id)
-        .eq("is_active", true)
-        .order("joined_at", { ascending: true });
-
-      // 0 clubs → home, let the user decide what to do
-      if (!memberships || memberships.length === 0) {
-        router.push("/clubs");
-        return;
-      }
-
-      // 1 club → direct entry based on role
-      if (memberships.length === 1) {
-        const { role, clubs } = memberships[0];
-        const club = clubs as unknown as { slug: string };
-        router.push(getClubEntryPath(club.slug, role));
-        return;
-      }
-
-      // Multiple clubs → club selector (handles last_club_id sorting server-side)
-      router.push("/clubs");
+      // Single point of decision (shared with the auth callback route) —
+      // 0 clubs → /clubs; 1 club → straight there; 2+ clubs → last_club_id
+      // if it still points at an active membership, otherwise /clubs.
+      router.push(await resolveClubEntryPath(supabase, user!.id));
     } finally {
       setLoading(false);
     }

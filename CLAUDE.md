@@ -160,6 +160,8 @@ Features such as:
 
 should not be prioritized over operational workflows unless explicitly requested.
 
+The following are explicitly out of MVP scope — do not implement yet, even opportunistically: club ownership transfer, ranking, guest players, global "delete my Mi Pádel Club account" (see Club Membership Principles), and any membership/subscription-tier strategy.
+
 When there is uncertainty:
 
 **Prioritize reservations and owner value.**
@@ -188,6 +190,12 @@ Club isolation is a core platform requirement.
 
 ## Role Philosophy
 
+Account types — SUPERADMIN, OWNER, ADMIN, PLAYER — are global and permanent, never derived from or scoped to a club. A user's relationships with clubs (which clubs, which membership) are independent of their account type.
+
+Signing up never assigns a type by itself — a fresh account has no type at all (`profiles.account_type IS NULL`) until it takes its first qualifying action: creating a club (→ OWNER), joining/requesting a club as a player (→ PLAYER), or accepting a valid ADMIN invitation (→ ADMIN). Once assigned, `account_type` is permanent — the database itself rejects any later change, including back to untyped. The PLAYER→ADMIN exception described under ADMIN below is implemented as exactly this same untyped state: only an account with `account_type IS NULL` and zero `club_members` history of any kind (active or inactive) may accept an ADMIN invitation.
+
+SUPERADMIN is fully exclusive: it can never be OWNER, ADMIN, or PLAYER, and never holds a `club_members` row of any kind — active, inactive, or historical, in any club. It never participates operationally inside a club; it only operates the platform itself, from the global platform panel. `profiles.is_platform_admin` (the pre-existing flag identifying who this is) is kept for compatibility with existing code, but the database rejects any `club_members` row for a profile that is SUPERADMIN by either signal.
+
 ### OWNER
 
 The owner is the primary customer.
@@ -204,6 +212,8 @@ When prioritizing functionality:
 
 **Owner value takes precedence.**
 
+OWNER is the only paying customer type. An OWNER can own one or several clubs, and can switch between them from within the app. An OWNER never becomes a PLAYER and never becomes an ADMIN. With a single club, sign-in goes straight there; with several, sign-in goes to the last club used.
+
 ### ADMIN
 
 Administrators focus on daily operations.
@@ -218,6 +228,8 @@ Administrators are operators, not business owners.
 
 Do not assume administrators need access to owner-level insights or configuration.
 
+An ADMIN account only ever comes from an OWNER's invitation — there is no public self-registration path into this role. An ADMIN administers exactly one club and never changes role, with one exception: a PLAYER who has never belonged to any club can accept an ADMIN invitation and permanently become an ADMIN.
+
 ### PLAYER
 
 Players are secondary users.
@@ -231,6 +243,16 @@ Players primarily care about:
 Players do not need access to most operational information.
 
 Player experiences should focus on action and convenience rather than administration.
+
+A PLAYER can belong to multiple clubs simultaneously: joining a public club is instant, requesting access to a private club goes through request+approval (see Club Membership Principles).
+
+---
+
+## Club Sharing Principles
+
+There are no invitations for players. The only mechanism is sharing the club's public link, which simply opens the public club page — it creates no record, has no expiration, no acceptance, no rejection, and no tracking. Do not build an invitation/acceptance flow around this link; it is nothing more than a URL.
+
+Player invitations should not be confused with ADMIN invitations, which are a real, tracked, accept/reject flow (see Role Philosophy → ADMIN).
 
 ---
 
@@ -354,6 +376,12 @@ Operational workflows remain important, but club identity should always be visib
 
 ---
 
+## Club Archival Principles
+
+During the MVP a club is never physically deleted — it is archived instead. Archiving a club: stops it from accepting new members, stops it from accepting new reservations, removes it from public discovery, cancels its pending and future reservations, and preserves its entire history untouched.
+
+---
+
 ## Notifications & Live-Update Principles
 
 There is one notification system: bell, unread badge, dropdown and `/notifications`.
@@ -380,11 +408,33 @@ A rejection always carries a reason, chosen from one shared, server-validated ca
 
 ---
 
+## Reservation Editing & Cancellation Principles
+
+A reservation's court, date, start time, and duration can be edited — by its creator, or by any OWNER/ADMIN of the same club. Being a participant (added to `reservation_players`, never the creator) grants no edit or cancel permission of its own. During the MVP, editing never changes the creator, the club, the participant list, or the type — every new value is re-validated against exactly the same rules reservation creation already enforces (active court in the same club, operating hours, allowed duration, no conflicting reservation), and every player linked to the reservation is notified of the new schedule.
+
+When a PLAYER edits a still-pending request, it stays pending. When a PLAYER edits an already-confirmed reservation and the schedule actually changes, it reverts to pending for fresh review — the same rule every new request already follows, since the MVP has no auto-approval policy. When OWNER/ADMIN edits, the reservation's status is never touched. A PLAYER-created reservation's price is always recalculated for its new schedule using the same pricing resolution rule as creation; OWNER/ADMIN-created reservations are never priced, unchanged.
+
+During the MVP, a player can cancel or edit their own reservation up to 2 hours before its start time; this window is fixed and not configurable per club during the MVP (a future version will let each club configure it). OWNER and ADMIN can cancel or edit a reservation at any time, with no window restriction.
+
+---
+
+## Player Statistics Principles
+
+A player's permanent statistics are: Partidos, Victorias, Derrotas, Win %, Reservas, Cancelaciones. Per Principle 2 (Do Not Depend On Administrative Discipline), these must be derived automatically from real reservation/match data, never manually maintained or manually recalculated.
+
+---
+
 ## Club Membership Principles
 
 A public club's join is instant: no `club_join_requests` row, no OWNER/ADMIN approval, membership created directly with role PLAYER. A private club's join always goes through the existing request+approval flow. Which one applies is decided by re-reading the club's real visibility on the server at the moment of the join action — never trusted from a client-supplied flag, which only ever drives button copy.
 
-A club member can never be deactivated while they hold at least one reservation — as creator/holder or as an added participant — whose real end time (date + start_time + duration) has not yet passed and whose status is still active (`pending` or `confirmed`). This check runs server-side, immediately before the membership update, scoped to the exact club and profile being deactivated — never from reservation data already loaded in the UI.
+OWNER and ADMIN can deactivate a PLAYER's membership in their own club — never an OWNER, an ADMIN, or a member of another club. Deactivating never deletes anything and never touches `account_type`: it flips `club_members.is_active` to false and cleans up the player's future commitments rather than being blocked by them — every future pending/confirmed reservation the player created is cancelled (as the club's own operational cancellation, not the player's voluntary one, so the 2-hour window never applies), and their participation in any future reservation created by someone else is removed, leaving that reservation, its creator, and its other participants untouched. History is always preserved.
+
+Leaving a club (the player's own voluntary equivalent of the above) only ends that one membership — it is never account deletion. The player keeps their account, keeps every other club's membership, and can join new clubs afterward. A global "delete my Mi Pádel Club account" flow is out of MVP scope.
+
+Before a player leaves, the platform warns them that their own future reservations will be cancelled and that they will stop participating in others' future reservations. Only after the player confirms — reusing the exact same reservation-cleanup rule deactivation uses above (own reservations cancelled in full, participation in others' removed, nothing about a reservation already underway or in the past ever touched) — is the membership itself deactivated. Ownership of a reservation is never transferred to another participant; the MVP has no such mechanism.
+
+Leaving marks the membership inactive (a voluntary departure), never deletes it. Rejoining afterward follows the normal join rules: instant for a public club, a new request for a private club. Historical stats are preserved across a departure. Once ranking exists (not yet implemented), leaving a club will mean losing that club's ranking points specifically.
 
 ---
 
@@ -395,6 +445,8 @@ When two roles (e.g. PLAYER and OWNER/ADMIN) need the same underlying computatio
 When a secondary view is added alongside an existing primary one for the same data (e.g. an alternate calendar layout), prefer keeping both mounted and toggling visibility via CSS rather than conditionally rendering/unmounting — this lets local component state (filters, selections) survive switching between them for free, with no extra persistence mechanism.
 
 Prefer CSS-based truncation (`truncate` on a `min-w-0` flex child) over manually cutting strings — it degrades correctly at any width and never mid-word-truncates content a screen reader still receives in full.
+
+Any operation that turns a court/date/time slot from available to occupied — creating a reservation, editing one, or approving a pending request into confirmed — must validate availability and write the result inside one atomic, lock-protected operation, never a plain read-then-write split across separate calls. Every such operation shares the exact same locking/conflict-check mechanism, so none of them can ever double-book the same slot against each other.
 
 ---
 

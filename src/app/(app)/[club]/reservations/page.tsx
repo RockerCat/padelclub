@@ -24,6 +24,13 @@ interface PlayerReservationsPageProps {
     // this player, this club, and be one of the panel's supported statuses
     // — never trusted as-is.
     reservationId?: string;
+    // Set by the "Editar reserva" action (PlayerActivity.tsx) alongside
+    // reservationId — purely a UI-mode switch (which slot-click behavior
+    // to wire up), re-validated server-side below (creator-only,
+    // pending/confirmed, 2+ hours out) purely for SHOW/HIDE of the edit
+    // affordance; update_reservation (SECURITY DEFINER) is the real
+    // authority and re-checks everything again regardless of this flag.
+    edit?: string;
   }>;
 }
 
@@ -57,6 +64,20 @@ function formatRangeLabel(start: Date, end: Date): string {
   return `${start.getDate()} ${MONTH[start.getMonth()]} – ${end.getDate()} ${MONTH[end.getMonth()]}`;
 }
 
+// Same UI-only gate PlayerActivity.tsx's "Editar reserva" button already
+// applies (creator-only, pending/confirmed, 2+ hours out) — real
+// enforcement is update_reservation's job, not this page's. Duplicated
+// here (rather than imported from a "use client" module) as a small, pure
+// local check, matching this codebase's existing convention of small
+// per-file time helpers (e.g. checkNotInPast in admin/reservations/
+// actions.ts) rather than a shared abstraction for a 3-line computation.
+function isEditableByPlayer(r: MyReservation, userId: string): boolean {
+  if (r.created_by !== userId) return false;
+  if (r.status !== "pending" && r.status !== "confirmed") return false;
+  const startDate = new Date(`${r.date}T${r.start_time.slice(0, 5)}:00`);
+  return startDate.getTime() - Date.now() >= 2 * 60 * 60 * 1000;
+}
+
 // MyReservation/RawReservationRow/toMyReservation now live in
 // @/lib/playerReservations, shared with the player home page; RawReservation
 // and computeAvailability now live in @/lib/courtDayAvailability, shared
@@ -70,7 +91,7 @@ export default async function PlayerReservationsPage({
   searchParams,
 }: PlayerReservationsPageProps) {
   const { club: slug } = await params;
-  const { week: weekParam, reservationId } = await searchParams;
+  const { week: weekParam, reservationId, edit } = await searchParams;
 
   const supabase = await createClient();
   const {
@@ -125,7 +146,7 @@ export default async function PlayerReservationsPage({
         .maybeSingle()
     : { data: null };
 
-  const rawFocusRow = rawFocusCandidate as (RawReservationRow & { created_by: string }) | null;
+  const rawFocusRow = rawFocusCandidate as RawReservationRow | null;
   let focusReservation: MyReservation | null = null;
   if (rawFocusRow) {
     const isOwnRequest = rawFocusRow.created_by === user.id;
@@ -147,6 +168,13 @@ export default async function PlayerReservationsPage({
   // A focus date in the past is never trusted to steer week navigation —
   // falls back to today's week exactly as if no reservationId were present.
   const validFocusDate = focusReservation && focusReservation.date >= todayStr ? focusReservation.date : undefined;
+
+  // "Editar reserva" mode — only when explicitly requested (edit=1) AND
+  // the focused reservation genuinely qualifies right now (creator, still
+  // pending/confirmed, 2+ hours out). Falls back to plain view/select mode
+  // otherwise, never a broken/half-editing state.
+  const editingReservation =
+    edit === "1" && focusReservation && isEditableByPlayer(focusReservation, user.id) ? focusReservation : null;
 
   // ─── Day range ──────────────────────────────────────────────────────────────
   // anchorStart is the first visible day, shared by all three desktop/mobile
@@ -182,7 +210,7 @@ export default async function PlayerReservationsPage({
         .order("sort_order", { ascending: true }),
       supabase
         .from("reservations")
-        .select("court_id, date, start_time, duration_minutes")
+        .select("id, court_id, date, start_time, duration_minutes")
         .eq("club_id", club.id)
         .in("status", ["confirmed", "pending"])
         .gte("date", rangeStartStr)
@@ -196,7 +224,15 @@ export default async function PlayerReservationsPage({
   ]);
 
   const courts = courtsRes.data ?? [];
-  const reservations = (reservationsRes.data ?? []) as RawReservation[];
+  // Edit mode only: excludes the reservation being edited from the
+  // occupancy grid, so its own current slot doesn't read as "occupied"
+  // while picking its new one — the RPC (update_reservation) is the real
+  // authority and already excludes this same row server-side regardless.
+  // Create mode (editingReservation === null) is completely untouched.
+  const rawReservations = (reservationsRes.data ?? []) as (RawReservation & { id: string })[];
+  const reservations = editingReservation
+    ? rawReservations.filter((r) => r.id !== editingReservation.id)
+    : rawReservations;
   const opHours = (opHoursRes.data ?? []) as OperatingHour[];
 
   // ─── Day range metadata ───────────────────────────────────────────────────────
@@ -332,6 +368,7 @@ export default async function PlayerReservationsPage({
           myBookings={myBookings}
           prefill={prefill}
           focusReservation={focusReservation}
+          editingReservation={editingReservation}
         />
       )}
     </div>

@@ -1,10 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardHeader, CardContent } from "@/components/ui";
-import { UserPlus, Share2 } from "lucide-react";
+import { Share2 } from "lucide-react";
 import { MembersClient } from "./MembersClient";
-import { InviteManager } from "./InviteManager";
-import type { InviteLink } from "./InviteManager";
 import { ShareClubSection } from "./ShareClubSection";
 import { JoinRequestsSection } from "./JoinRequestsSection";
 import type { JoinRequestRow } from "./JoinRequestsSection";
@@ -25,7 +23,7 @@ export default async function PlayersPage({ params }: PlayersPageProps) {
 
   const { data: club } = await supabase
     .from("clubs")
-    .select("id, name, visibility")
+    .select("id, name")
     .eq("slug", slug)
     .eq("is_active", true)
     .single();
@@ -51,19 +49,6 @@ export default async function PlayersPage({ params }: PlayersPageProps) {
     .eq("role", "PLAYER")
     .order("joined_at", { ascending: false });
 
-  const isPublic = club.visibility !== "private";
-
-  // Private clubs gate access through invitations — load every PLAYER link
-  // (not just active ones) so revoked/used links still show their status.
-  const { data: inviteLinks } = isPublic
-    ? { data: null }
-    : await supabase
-        .from("invitation_links")
-        .select("id, token, uses, max_uses, is_active, created_at")
-        .eq("club_id", club.id)
-        .eq("role", "PLAYER")
-        .order("created_at", { ascending: false });
-
   // Players' second access path (public and private clubs alike since the
   // "join a public club instantly" placeholder was removed), pending
   // OWNER/ADMIN approval. get_club_join_requests also carries the
@@ -75,7 +60,6 @@ export default async function PlayersPage({ params }: PlayersPageProps) {
   });
 
   const memberList = (members ?? []) as Parameters<typeof MembersClient>[0]["members"];
-  const links = (inviteLinks ?? []) as InviteLink[];
   const requests = (joinRequests ?? []) as JoinRequestRow[];
 
   return (
@@ -91,53 +75,35 @@ export default async function PlayersPage({ params }: PlayersPageProps) {
       {/* Members list */}
       <MembersClient members={memberList} clubSlug={slug} clubId={club.id} />
 
-      {/* Solicitudes de ingreso — más prioritarias operativamente que las
-          invitaciones, por eso van por encima. Público y privado usan el
-          mismo flujo de solicitud+aprobación, así que esto no depende de
-          isPublic. Incluye historial (aprobadas/rechazadas), no solo
-          pendientes — JoinRequestsSection decide qué acciones mostrar según
-          el status de cada fila. */}
+      {/* Solicitudes de ingreso — van por encima de "Compartir club" por
+          prioridad operativa. Público y privado usan el mismo flujo de
+          solicitud+aprobación. Incluye historial (aprobadas/rechazadas), no
+          solo pendientes — JoinRequestsSection decide qué acciones mostrar
+          según el status de cada fila. */}
       {requests.length > 0 && (
         <div className="mt-10">
           <JoinRequestsSection clubId={club.id} clubSlug={slug} requests={requests} />
         </div>
       )}
 
-      {/* Incorporación de jugadores — adapta según visibilidad del club:
-          público promociona el perfil, privado controla el acceso. */}
+      {/* Incorporación de jugadores — no existen invitaciones para
+          jugadores (ver CLAUDE.md → Club Sharing Principles): la única vía
+          es compartir el enlace público del club, igual para clubes
+          públicos (unión directa) y privados (solicitud de ingreso). */}
       <div className="mt-10">
         <Card variant="default">
-          {isPublic ? (
-            <>
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <Share2 className="w-4 h-4 text-brand-muted" />
-                  <h2 className="text-base font-semibold text-white">Compartir club</h2>
-                </div>
-                <p className="text-xs text-brand-muted mt-1">
-                  Comparte tu club para que nuevos jugadores puedan registrarse y unirse.
-                </p>
-              </CardHeader>
-              <CardContent>
-                <ShareClubSection clubName={club.name} clubSlug={slug} />
-              </CardContent>
-            </>
-          ) : (
-            <>
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <UserPlus className="w-4 h-4 text-brand-muted" />
-                  <h2 className="text-base font-semibold text-white">Invitar jugadores</h2>
-                </div>
-                <p className="text-xs text-brand-muted mt-1">
-                  Genera un link de un solo uso para que un nuevo jugador se una al club.
-                </p>
-              </CardHeader>
-              <CardContent>
-                <InviteManager clubId={club.id} clubSlug={slug} links={links} />
-              </CardContent>
-            </>
-          )}
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Share2 className="w-4 h-4 text-brand-muted" />
+              <h2 className="text-base font-semibold text-white">Compartir club</h2>
+            </div>
+            <p className="text-xs text-brand-muted mt-1">
+              Comparte este club con otros jugadores. Podrán ver el perfil del club y unirse o solicitar ingreso.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <ShareClubSection clubName={club.name} clubSlug={slug} />
+          </CardContent>
         </Card>
       </div>
     </div>

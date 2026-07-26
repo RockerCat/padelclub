@@ -2,23 +2,10 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
-import { insertSingleUseInvite } from "@/lib/invitations";
 import { addMinutes } from "@/lib/courtAvailability";
 import type { PlayerCategory } from "@/types/database";
 
 export type ActionState = { success?: boolean; error?: string; data?: unknown };
-
-// ─── Deactivation guard: active reservations ───────────────────────────────────
-// A member with at least one still-active reservation — as creator/holder OR
-// as an added participant — must never be deactivated. "Active" mirrors the
-// real states used everywhere else in the project (CLAUDE.md "Reservation
-// Status Principles"): pending (awaiting review) and confirmed are active;
-// cancelled/rejected never block. "block" reservations (court closures) have
-// no real player relationship and are excluded. A reservation's end is
-// computed the same offset-less-local-Date way checkNotInPast already
-// computes "is this in the past" in admin/reservations/actions.ts — date +
-// start_time + duration_minutes — no new timezone convention invented here.
-const ACTIVE_RESERVATION_STATUSES = ["pending", "confirmed"] as const;
 
 type ActiveReservationRow = { date: string; start_time: string; duration_minutes: number };
 
@@ -54,6 +41,18 @@ async function requireAdminRole(clubId: string) {
 }
 
 // ─── toggleMemberActive ───────────────────────────────────────────────────────
+// Deactivation (isActive === false) is routed through deactivate_player
+// (Phase 6, SECURITY DEFINER) — it re-derives the executor's role, the
+// target's membership/role/account_type, cancels the target's own future
+// reservations, removes their participation in others' future
+// reservations, deactivates the membership, and notifies, all atomically.
+// This replaced the previous behavior of simply BLOCKING deactivation
+// whenever the target had an active reservation — deactivating a club
+// member is now an operational cleanup, not something an admin gets stuck
+// on. Activation (isActive === true) is unchanged: reactivation flows are
+// out of scope for this phase, so it keeps the exact same direct
+// club_members update as before (still permitted by the existing
+// column-level GRANT UPDATE (is_active, category), 20260809000001).
 
 export async function toggleMemberActive(
   clubId: string,
@@ -64,7 +63,6 @@ export async function toggleMemberActive(
   const { supabase, user, error: authError } = await requireAdminRole(clubId);
   if (authError || !supabase || !user) return { error: authError! };
 
-  // Prevent self-deactivation
   const { data: target } = await supabase
     .from("club_members")
     .select("profile_id, role")
@@ -76,56 +74,27 @@ export async function toggleMemberActive(
   if (target.profile_id === user.id) return { error: "No puedes modificar tu propio estado." };
   if (target.role === "OWNER") return { error: "No se puede desactivar a un Owner." };
 
-  // Only gates deactivation (never activation), and runs immediately before
-  // the update below to keep the race window between "we checked" and "we
-  // wrote" as small as possible. Reads reservations/reservation_players
-  // fresh from Supabase under the calling OWNER/ADMIN's own session (both
-  // tables are readable by any active club member via RLS — "club members
-  // read reservations"/"club members read reservation_players" — no new RPC
-  // needed for a plain conditional read), scoped to this exact club and the
-  // real target.profile_id just read above — never data already loaded in
-  // the UI.
   if (isActive === false) {
-    const [ownRes, participantRes] = await Promise.all([
-      supabase
-        .from("reservations")
-        .select("date, start_time, duration_minutes")
-        .eq("club_id", clubId)
-        .eq("created_by", target.profile_id)
-        .in("status", ACTIVE_RESERVATION_STATUSES)
-        .neq("type", "block")
-        .limit(200),
-      supabase
-        .from("reservation_players")
-        .select("reservations!inner(date, start_time, duration_minutes, status, type, club_id)")
-        .eq("profile_id", target.profile_id)
-        .eq("reservations.club_id", clubId)
-        .in("reservations.status", ACTIVE_RESERVATION_STATUSES)
-        .neq("reservations.type", "block")
-        .limit(200),
-    ]);
+    const { error } = await supabase.rpc("deactivate_player", {
+      p_club_id: clubId,
+      p_player_id: target.profile_id,
+    });
 
-    if (ownRes.error || participantRes.error) {
-      return { error: "Error al validar las reservaciones del jugador." };
+    if (error) {
+      if (error.code === "P0002") return { error: "Este jugador ya no pertenece al club." };
+      if (error.code === "22023") return { error: "Este jugador ya está desactivado." };
+      if (error.code === "42501") return { error: "No tienes permiso para desactivar a este jugador." };
+      console.error("[toggleMemberActive] deactivate_player failed:", { clubId, memberId, supabaseError: error });
+      return { error: "Error al desactivar al jugador. Intenta nuevamente." };
     }
 
-    const ownRows = (ownRes.data ?? []) as ActiveReservationRow[];
-    const participantRows = (
-      (participantRes.data ?? []) as unknown as { reservations: ActiveReservationRow }[]
-    ).map((row) => row.reservations);
-
-    const hasBlockingReservation = [...ownRows, ...participantRows].some(
-      (r) => reservationEndDatetime(r).getTime() > Date.now()
-    );
-
-    if (hasBlockingReservation) {
-      return { error: "No puedes desactivar a este jugador porque tiene reservaciones activas pendientes por jugar." };
-    }
+    revalidatePath(`/${clubSlug}/admin/players`);
+    return { success: true };
   }
 
   const { error } = await supabase
     .from("club_members")
-    .update({ is_active: isActive })
+    .update({ is_active: true })
     .eq("id", memberId)
     .eq("club_id", clubId);
 
@@ -221,31 +190,6 @@ export async function getMatchesPlayedCount(
   return { count };
 }
 
-// ─── createInvitationLink ─────────────────────────────────────────────────────
-// Player invitations only (admin invitations are a separate flow — see
-// team/actions.ts's createAdminInvite). Single-use/non-expiring insert
-// shape is shared with that flow via insertSingleUseInvite — same model,
-// same rules, just a different role and a different permission guard.
-
-export async function createInvitationLink(
-  clubId: string,
-  clubSlug: string
-): Promise<ActionState> {
-  const { supabase, user, error: authError } = await requireAdminRole(clubId);
-  if (authError || !supabase || !user) return { error: authError! };
-
-  const { data, error } = await insertSingleUseInvite(supabase, {
-    clubId,
-    role: "PLAYER",
-    createdBy: user.id,
-  });
-
-  if (error || !data) return { error: "Error al crear la invitación." };
-
-  revalidatePath(`/${clubSlug}/admin/players`);
-  return { success: true, data: { token: data.token } };
-}
-
 // ─── approveJoinRequest ────────────────────────────────────────────────────────
 // approve_join_request (SECURITY DEFINER) re-checks the caller's role for
 // this exact club, the request's club_id and its pending status, inserts
@@ -289,28 +233,6 @@ export async function rejectJoinRequest(
     if (error.code === "22023") return { error: "Esta solicitud ya fue resuelta." };
     return { error: "Error al rechazar la solicitud." };
   }
-
-  revalidatePath(`/${clubSlug}/admin/players`);
-  return { success: true };
-}
-
-// ─── deactivateInvitationLink ─────────────────────────────────────────────────
-
-export async function deactivateInvitationLink(
-  clubId: string,
-  linkId: string,
-  clubSlug: string
-): Promise<ActionState> {
-  const { supabase, error: authError } = await requireAdminRole(clubId);
-  if (authError || !supabase) return { error: authError! };
-
-  const { error } = await supabase
-    .from("invitation_links")
-    .update({ is_active: false })
-    .eq("id", linkId)
-    .eq("club_id", clubId);
-
-  if (error) return { error: "Error al revocar la invitación." };
 
   revalidatePath(`/${clubSlug}/admin/players`);
   return { success: true };

@@ -90,12 +90,14 @@ interface InviteLinkListProps {
   onChanged: () => void;
 }
 
-// Shared by Jugadores and Equipo — invitations are single-use and never
-// expire (the creating action inserts max_uses=1 and a far-future
+// Used by Equipo (ADMIN invitations — the only real, tracked, token-based
+// invitation left; player invitations were retired in Phase 2, see
+// CLAUDE.md → Club Sharing Principles). Invitations are single-use and
+// never expire (the creating action inserts max_uses=1 and a far-future
 // expires_at), so validity depends only on "not used yet" / "not revoked",
 // surfaced here as an explicit status instead of an expiry date or use
-// counter. Same component, same rules, regardless of which role the
-// invitation grants.
+// counter. Kept role-parameterized (createLabel/onCreate/onRevoke) rather
+// than hardcoded to ADMIN, in case a future real invitation type needs it.
 export function InviteLinkList({ links, createLabel, onCreate, onRevoke, onChanged }: InviteLinkListProps) {
   const [error, setError] = useState<string | null>(null);
   const [creating, startCreate] = useTransition();

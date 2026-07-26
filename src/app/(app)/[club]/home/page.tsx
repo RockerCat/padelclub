@@ -83,7 +83,13 @@ export default async function PlayerHomePage({ params }: PlayerHomePageProps) {
       </div>
 
       {/* Reservas y solicitudes — máxima prioridad operativa. */}
-      <PlayerHomeActivity clubId={club.id} clubSlug={slug} myBookings={myBookings} myReservations={myReservations} />
+      <PlayerHomeActivity
+        clubId={club.id}
+        clubSlug={slug}
+        playerId={user.id}
+        myBookings={myBookings}
+        myReservations={myReservations}
+      />
 
       {/* Noticias recientes */}
       {news.length > 0 && (

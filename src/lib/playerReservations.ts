@@ -16,6 +16,11 @@ export type MyReservation = {
   status: "pending" | "confirmed" | "cancelled" | "rejected";
   court_id: string;
   courtName: string;
+  // Who created it — being a reservation_players participant never grants
+  // edit permission (Phase 7), only the creator does. Needed here (rather
+  // than re-deriving per-card) since myBookings mixes self-requested and
+  // OWNER/ADMIN-added-as-participant rows, which look identical otherwise.
+  created_by: string;
   // Frozen at request time (see requestReservation) — null for reservations
   // predating the pricing engine, or when no tariff applied. Never a live
   // recalculation: this is exactly what was charged when requested.
@@ -38,6 +43,7 @@ export type RawReservationRow = {
   duration_minutes: number;
   status: string;
   court_id: string;
+  created_by: string;
   price_amount: number | null;
   price_currency: string | null;
   rejection_reason: string | null;
@@ -54,6 +60,7 @@ export function toMyReservation(r: RawReservationRow): MyReservation {
     status: r.status as MyReservation["status"],
     court_id: r.court_id,
     courtName: r.courts?.name ?? "—",
+    created_by: r.created_by,
     price_amount: r.price_amount,
     price_currency: r.price_currency,
     rejection_reason: r.rejection_reason,
@@ -73,7 +80,7 @@ export interface PlayerReservations {
 }
 
 const RESERVATION_SELECT =
-  "id, date, start_time, duration_minutes, status, court_id, price_amount, price_currency, rejection_reason, rejected_at, courts(name)";
+  "id, date, start_time, duration_minutes, status, court_id, created_by, price_amount, price_currency, rejection_reason, rejected_at, courts(name)";
 
 // Fetches both "Mis solicitudes" and "Mis reservas" for one player in one
 // club, `todayStr` scoping both to today-forward (the panel never shows

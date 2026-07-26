@@ -17,6 +17,17 @@ export interface ConfirmDialogProps {
 
 // Same visual language as ReservationModal: blurred backdrop, centered panel
 // on desktop / bottom sheet on mobile, bg-[#082735] surface.
+//
+// `isolate` (isolation: isolate) on the panel itself: bg-[#082735] alone is
+// already fully opaque (no alpha channel, verified in the compiled CSS —
+// `background-color:#082735`, nothing else touches this property on this
+// element) — but the sibling backdrop overlay's `backdropFilter: blur(4px)`
+// can still visually bleed through an overlapping opaque element on top of
+// it in some browser compositors (notably WebKit/Safari) when neither
+// element is forced into its own compositing/stacking boundary, even though
+// both z-index and background-color are declared correctly. `isolate`
+// forces the panel onto its own stacking context so the backdrop-filter
+// effect can never show through it, regardless of that browser quirk.
 export function ConfirmDialog({
   open,
   title,
@@ -46,14 +57,14 @@ export function ConfirmDialog({
   return (
     <>
       <div
-        className="fixed inset-0 bg-black/60 z-[400]"
+        className="fixed inset-0 bg-black/70 z-[400]"
         style={{ backdropFilter: "blur(4px)" }}
         onClick={onCancel}
         aria-hidden
       />
       <div className="fixed inset-x-0 bottom-0 md:inset-0 md:flex md:items-center md:justify-center z-[401] pointer-events-none">
         <div
-          className="pointer-events-auto w-full md:w-[420px] bg-[#082735] border border-white/10 rounded-t-2xl md:rounded-2xl shadow-2xl flex flex-col"
+          className="pointer-events-auto isolate w-full md:w-[420px] bg-[#082735] border border-white/10 rounded-t-2xl md:rounded-2xl shadow-2xl flex flex-col"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="px-5 py-5">

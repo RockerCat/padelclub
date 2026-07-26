@@ -857,6 +857,111 @@ export interface Database {
         Args: { p_reservation_id: string };
         Returns: void;
       };
+      // public.cancel_reservation — Phase 4: single centralized RPC for both
+      // PLAYER self-cancellation (creator/participant, 2+ hours out) and
+      // OWNER/ADMIN operational cancellation (no time restriction); every
+      // authorization check is re-derived server-side from auth.uid(), only
+      // the reservation id is ever passed in
+      cancel_reservation: {
+        Args: { p_reservation_id: string };
+        Returns: void;
+      };
+      // public.notify_reservation_cancelled — best-effort, called right
+      // after cancel_reservation succeeds; notifies affected players when
+      // OWNER/ADMIN cancelled, or every OWNER/ADMIN of the club when a
+      // PLAYER cancelled their own reservation
+      notify_reservation_cancelled: {
+        Args: { p_reservation_id: string };
+        Returns: void;
+      };
+      // public.leave_club — Phase 5: PLAYER-only voluntary leave. Cancels
+      // every related pending/confirmed reservation via cancel_reservation,
+      // deactivates the membership, and notifies OWNER/ADMIN — all
+      // server-derived from auth.uid(), only the club id is ever passed in
+      leave_club: {
+        Args: { p_club_id: string };
+        Returns: void;
+      };
+      // public.deactivate_player — Phase 6: OWNER/ADMIN-only deactivation
+      // of a PLAYER's membership in their own club. Cancels the target's
+      // own future reservations, removes their participation in others'
+      // future reservations, deactivates the membership, and notifies —
+      // all server-derived from auth.uid(); only club_id and the target
+      // profile id are ever passed in
+      deactivate_player: {
+        Args: { p_club_id: string; p_player_id: string };
+        Returns: void;
+      };
+      // public.create_reservation_player — Phase 7 concurrency fix:
+      // replaces requestReservation's own inline validate-then-insert.
+      // Same rules as before (any active club member, conflict-checks
+      // pending+confirmed, always type='match'/status='pending', prices
+      // the request), now inside the same advisory-lock-protected
+      // transaction update_reservation/create_reservation_admin use
+      create_reservation_player: {
+        Args: {
+          p_club_id: string;
+          p_court_id: string;
+          p_date: string;
+          p_start_time: string;
+          p_duration_minutes: number;
+        };
+        Returns: string;
+      };
+      // public.create_reservation_admin — Phase 7 concurrency fix:
+      // replaces createReservation's own inline validate-then-insert.
+      // Same rules as before (OWNER/ADMIN only, conflict-checks confirmed
+      // only, price never touched), now inside the same
+      // advisory-lock-protected transaction
+      create_reservation_admin: {
+        Args: {
+          p_club_id: string;
+          p_court_id: string;
+          p_date: string;
+          p_start_time: string;
+          p_duration_minutes: number;
+          p_type: string;
+          p_title: string | null;
+          p_notes: string | null;
+        };
+        Returns: string;
+      };
+      // public.update_reservation — Phase 7: single centralized RPC for
+      // editing a reservation's court/date/start_time/duration_minutes.
+      // PLAYER (creator only, 2+ hours out) and OWNER/ADMIN (any club
+      // reservation, no time window) share this one entry point; every
+      // authorization/availability/pricing check is re-derived
+      // server-side from auth.uid(), only the new field values and the
+      // reservation id are ever passed in
+      update_reservation: {
+        Args: {
+          p_reservation_id: string;
+          p_court_id: string;
+          p_date: string;
+          p_start_time: string;
+          p_duration_minutes: number;
+        };
+        Returns: void;
+      };
+      // public.approve_pending_reservation — Phase 7 concurrency fix:
+      // replaces approvePendingReservation's own inline
+      // check-then-UPDATE. Same rules as before (OWNER/ADMIN of this
+      // reservation's club, pending→confirmed only, court still active,
+      // duration/operating hours re-validated, confirmed-only conflict
+      // check excluding itself), now inside the same
+      // advisory-lock-protected transaction the create/edit paths use
+      approve_pending_reservation: {
+        Args: { p_reservation_id: string };
+        Returns: void;
+      };
+      // public.notify_reservation_updated — best-effort, called right
+      // after update_reservation succeeds; notifies OWNER/ADMIN +
+      // participants when a PLAYER edited, or the creator + participants
+      // when OWNER/ADMIN edited
+      notify_reservation_updated: {
+        Args: { p_reservation_id: string };
+        Returns: void;
+      };
       // public.upsert_pricing_rule_with_prices — atomic create/edit of a
       // pricing rule together with its per-duration prices (child rows).
       // p_rule_id NULL creates; otherwise updates. p_prices is a jsonb

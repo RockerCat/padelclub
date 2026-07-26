@@ -289,6 +289,7 @@ export function ReservationForm({
           <select
             name="type"
             required
+            disabled={!!editingReservationId}
             value={type}
             onChange={(e) => { setType(e.target.value); markDirty(); }}
             className={selectClass}
@@ -314,6 +315,7 @@ export function ReservationForm({
           type="text"
           name="title"
           required={type === "block"}
+          disabled={!!editingReservationId}
           value={title}
           onChange={(e) => { setTitle(e.target.value); markDirty(); }}
           placeholder={type === "block" ? "Ej: Mantenimiento" : "Ej: Liga de verano"}
@@ -329,12 +331,19 @@ export function ReservationForm({
         <textarea
           name="notes"
           rows={2}
+          disabled={!!editingReservationId}
           value={notes}
           onChange={(e) => { setNotes(e.target.value); markDirty(); }}
           placeholder="Información adicional..."
-          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-base md:text-sm text-white placeholder:text-brand-muted/60 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20 resize-none"
+          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-base md:text-sm text-white placeholder:text-brand-muted/60 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20 resize-none disabled:opacity-50"
         />
       </div>
+
+      {editingReservationId && (
+        <p className="text-xs text-brand-muted/70 -mt-2">
+          Tipo, título, notas y jugadores no se pueden editar por ahora — solo cancha, fecha, hora y duración.
+        </p>
+      )}
 
       {/* Jugadores */}
       {type !== "block" && (
@@ -373,7 +382,8 @@ export function ReservationForm({
                     value={m.profile_id}
                     checked={checkedPlayers.has(m.profile_id)}
                     onChange={() => togglePlayer(m.profile_id)}
-                    className="w-4 h-4 rounded accent-brand-primary cursor-pointer"
+                    disabled={!!editingReservationId}
+                    className="w-4 h-4 rounded accent-brand-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                   />
                   <span className="text-sm text-white">
                     {m.full_name ?? "Sin nombre"}
