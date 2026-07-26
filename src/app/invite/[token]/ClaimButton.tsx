@@ -23,6 +23,7 @@ export function ClaimButton({ token }: ClaimButtonProps) {
           invalid_token: "Este link de invitación no es válido o ya expiró.",
           max_uses_reached: "Este link ya no está disponible.",
           not_authenticated: "Debes iniciar sesión para continuar.",
+          club_archived: "Este club se encuentra archivado y ya no acepta nuevas invitaciones.",
         };
         setError(messages[result.error ?? ""] ?? "Error al procesar la invitación.");
         return;

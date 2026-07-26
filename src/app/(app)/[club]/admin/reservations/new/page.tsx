@@ -25,7 +25,7 @@ export default async function NewReservationPage({
 
   const { data: club } = await supabase
     .from("clubs")
-    .select("id, name, slug, allowed_reservation_durations")
+    .select("id, name, slug, allowed_reservation_durations, archived_at")
     .eq("slug", slug)
     .eq("is_active", true)
     .single();
@@ -43,6 +43,13 @@ export default async function NewReservationPage({
 
   if (!membership || !["OWNER", "ADMIN"].includes(membership.role)) {
     redirect(`/${slug}`);
+  }
+
+  // Real protection is server-side (create_reservation_admin rejects an
+  // archived club regardless) — this only stops a direct visit to this
+  // dedicated creation page from reaching a form that would just fail.
+  if (club.archived_at) {
+    redirect(`/${slug}/admin/reservations`);
   }
 
   const [courtsResult, membersResult] = await Promise.all([

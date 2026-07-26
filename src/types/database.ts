@@ -45,6 +45,7 @@ export interface Database {
           latitude: number | null;
           longitude: number | null;
           is_active: boolean;
+          archived_at: string | null;
           allowed_reservation_durations: number[];
           gallery_image_urls: string[];
           created_at: string;
@@ -72,6 +73,7 @@ export interface Database {
           latitude?: number | null;
           longitude?: number | null;
           is_active?: boolean;
+          archived_at?: string | null;
           allowed_reservation_durations?: number[];
           gallery_image_urls?: string[];
           created_at?: string;
@@ -99,6 +101,7 @@ export interface Database {
           latitude?: number | null;
           longitude?: number | null;
           is_active?: boolean;
+          archived_at?: string | null;
           allowed_reservation_durations?: number[];
           gallery_image_urls?: string[];
           updated_at?: string;
@@ -890,6 +893,14 @@ export interface Database {
       // profile id are ever passed in
       deactivate_player: {
         Args: { p_club_id: string; p_player_id: string };
+        Returns: void;
+      };
+      // public.archive_club — Phase 8: OWNER-only. Sets clubs.archived_at,
+      // notifies every active member (any role). No other row is touched —
+      // membership, reservations, pricing, branding all stay exactly as
+      // they were. Authorization fully server-derived from auth.uid()
+      archive_club: {
+        Args: { p_club_id: string };
         Returns: void;
       };
       // public.create_reservation_player — Phase 7 concurrency fix:

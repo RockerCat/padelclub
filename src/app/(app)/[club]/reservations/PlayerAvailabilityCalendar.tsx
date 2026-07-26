@@ -85,6 +85,9 @@ interface PlayerAvailabilityCalendarProps {
   // the date has since elapsed. Drives both the calendar context switch and
   // the contextual slot highlight (green/amber/red).
   focusReservation: MyReservation | null;
+  // clubs.archived_at IS NOT NULL — real protection is server-side
+  // (create_reservation_player), this only hides the affordance.
+  archived?: boolean;
   // Non-null only when "Editar reserva" was clicked (PlayerActivity.tsx)
   // AND page.tsx re-validated the reservation still qualifies (creator,
   // pending/confirmed, 2+ hours out) — switches the next slot click into
@@ -549,6 +552,7 @@ export function PlayerAvailabilityCalendar({
   myBookings,
   prefill,
   focusReservation,
+  archived,
   editingReservation,
 }: PlayerAvailabilityCalendarProps) {
   const router = useRouter();
@@ -852,9 +856,10 @@ export function PlayerAvailabilityCalendar({
                       contextRange={contextRangeFor(court.id)}
                       generalContextRanges={generalContextRangesFor(court.id)}
                       groupByDayPart
-                      onSelectSlot={(startTime) =>
-                        setModalSlot({ courtId: court.id, courtName: court.name, date: selectedDate, startTime, duration: selectedDuration })
-                      }
+                      onSelectSlot={(startTime) => {
+                        if (archived) return; // server (create_reservation_player/update_reservation) is the real guard — this only stops the affordance
+                        setModalSlot({ courtId: court.id, courtName: court.name, date: selectedDate, startTime, duration: selectedDuration });
+                      }}
                     />
                   </div>
                 ))}

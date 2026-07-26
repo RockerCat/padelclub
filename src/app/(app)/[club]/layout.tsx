@@ -33,7 +33,7 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
   // Step 1: resolve slug → club row
   const result = await supabase
     .from("clubs")
-    .select("id, name, slug, logo_url, primary_color, secondary_color")
+    .select("id, name, slug, logo_url, primary_color, secondary_color, archived_at")
     .eq("slug", slug)
     .eq("is_active", true)
     .single();
@@ -97,6 +97,19 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
         notificationItems={notificationItems}
         identity={identity}
       />
+      {/* OWNER-only: the real enforcement is server-side (every write RPC
+          rejects an archived club) — this is just visibility, per CLAUDE.md
+          → Notifications & Live-Update Principles' spirit of never hiding
+          state behind silence. ADMIN/PLAYER learn about it inline, only
+          when they actually attempt a blocked operation. */}
+      {role === "OWNER" && club.archived_at && (
+        <div className="px-4 md:px-6 pt-4">
+          <div className="rounded-xl border border-amber-400/20 bg-amber-400/5 px-4 py-3 text-sm text-amber-300">
+            Este club está archivado. Ya no acepta nuevas reservas, solicitudes de ingreso ni invitaciones. Toda la información histórica se conserva.
+          </div>
+        </div>
+      )}
+
       {/* Bottom padding only for OWNER/ADMIN on mobile — clears the new fixed
           tab bar (AppNav) so the last elements of a page are never hidden
           behind it; PLAYER keeps its existing drawer-only mobile nav with no

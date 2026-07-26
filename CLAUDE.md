@@ -378,7 +378,11 @@ Operational workflows remain important, but club identity should always be visib
 
 ## Club Archival Principles
 
-During the MVP a club is never physically deleted — it is archived instead. Archiving a club: stops it from accepting new members, stops it from accepting new reservations, removes it from public discovery, cancels its pending and future reservations, and preserves its entire history untouched.
+During the MVP a club is never physically deleted — it is archived instead, via `clubs.archived_at` (`NULL` = active). Only the OWNER can archive their own club, server-side and atomically; ADMIN and SUPERADMIN have no capability here.
+
+Archiving blocks every operation that would create a new commitment against the club — new/edited/approved reservations, new join requests, new ADMIN invitation claims — and removes the club from public discovery and its public profile. It never cancels or modifies anything that already exists: members, reservations (past or future), pricing, and branding are all left exactly as they were. Existing members keep read-only access to an archived club. Resolving something that already exists (cancelling a reservation, rejecting a pending request) is never blocked — only actions that would create something new are.
+
+Reactivation is out of MVP scope — not yet implemented.
 
 ---
 

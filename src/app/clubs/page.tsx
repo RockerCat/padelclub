@@ -81,6 +81,7 @@ export default async function ClubsPage({
     .from("clubs")
     .select("id, name, slug, visibility, description, logo_url, primary_color, secondary_color, whatsapp, city, state")
     .eq("is_active", true)
+    .is("archived_at", null)
     .order("name", { ascending: true })
     .then(({ data }) => (data ?? []) as unknown as DirectoryClub[]);
 

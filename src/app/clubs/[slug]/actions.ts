@@ -38,6 +38,7 @@ export async function createJoinRequest(clubId: string, clubSlug: string): Promi
     .select("visibility")
     .eq("id", clubId)
     .eq("is_active", true)
+    .is("archived_at", null)
     .single();
 
   if (clubError || !clubRow) return { error: "Club no encontrado." };
@@ -75,6 +76,7 @@ export async function createJoinRequest(clubId: string, clubSlug: string): Promi
     if (error.code === "22023") {
       return { error: "Tu solicitud anterior fue rechazada. Contacta al club directamente." };
     }
+    if (error.code === "P0005") return { error: "Este club se encuentra archivado." };
     return { error: "Error al enviar la solicitud." };
   }
 

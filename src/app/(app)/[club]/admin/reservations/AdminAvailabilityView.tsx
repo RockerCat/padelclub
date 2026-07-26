@@ -43,6 +43,7 @@ interface AdminAvailabilityViewProps {
   closedDates: string[];
   minDuration: number;
   rejectedReservations: RejectedReservation[];
+  archived?: boolean; // clubs.archived_at IS NOT NULL — real protection is server-side (create_reservation_admin), this only hides the affordance
 }
 
 // Hover tooltip only lists this many names before falling back to "+N
@@ -148,6 +149,7 @@ export function AdminAvailabilityView({
   closedDates,
   minDuration,
   rejectedReservations,
+  archived,
 }: AdminAvailabilityViewProps) {
   const router = useRouter();
   const [selectedDate, setSelectedDate] = useState(
@@ -203,6 +205,7 @@ export function AdminAvailabilityView({
   }
 
   function handleSelectAvailable(courtId: string, startTime: string) {
+    if (archived) return; // server (create_reservation_admin) is the real guard — this only stops the affordance
     setPanelState({ mode: "create", initialDate: selectedDate, initialCourtId: courtId, initialStartTime: startTime });
   }
 

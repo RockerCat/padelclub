@@ -58,7 +58,7 @@ export default async function AdminReservationsPage({
 
   const { data: club } = await supabase
     .from("clubs")
-    .select("id, name, slug, allowed_reservation_durations")
+    .select("id, name, slug, allowed_reservation_durations, archived_at")
     .eq("slug", slug)
     .eq("is_active", true)
     .single();
@@ -412,6 +412,7 @@ export default async function AdminReservationsPage({
           allowedDurations,
           successMessage,
           closedDays,
+          archived: !!club.archived_at,
         }}
         availabilityProps={{
           weekDays: agendaWeekDays,
@@ -431,6 +432,7 @@ export default async function AdminReservationsPage({
           closedDates,
           minDuration,
           rejectedReservations,
+          archived: !!club.archived_at,
         }}
       />
     </div>

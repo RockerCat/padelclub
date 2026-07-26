@@ -18,6 +18,8 @@ export function mapUpdateReservationError(error: { code?: string | null }): stri
       return "Ese horario ya está ocupado. Selecciona otro.";
     case "P0003":
       return "El nuevo horario no es válido (duración, horario del club, fecha pasada o tarifa no configurada).";
+    case "P0005":
+      return "Este club se encuentra archivado.";
     default:
       return "Error al guardar los cambios. Intenta de nuevo.";
   }

@@ -347,6 +347,8 @@ function mapApprovePendingReservationError(error: { code?: string | null; messag
       return "Solicitud no encontrada.";
     case "P0004":
       return "La cancha ya no está disponible.";
+    case "P0005":
+      return "Este club se encuentra archivado.";
     case "P0003":
       return error.message || "El horario ya no es válido para este club.";
     case "23P01":

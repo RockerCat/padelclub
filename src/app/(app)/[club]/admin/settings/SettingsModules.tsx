@@ -8,6 +8,7 @@ import type { Club } from "@/types/database";
 import { LocationModal } from "./LocationModal";
 import { OperationModal } from "./OperationModal";
 import { PricingModal, type PricingRuleWithPrices } from "./PricingModal";
+import { ArchiveClubButton } from "./ArchiveClubButton";
 
 type ModuleKey = "location" | "operation" | "pricing";
 
@@ -139,6 +140,16 @@ export function SettingsModules({ club, initialHours, role, pricingRules, pricin
           )}
         </ModuleCard>
       </div>
+
+      {/* Danger zone — OWNER only, matches the visibility rule every other
+          OWNER-only card in this grid already uses. Hidden once the club
+          is already archived: the layout's own banner already covers that
+          state, and re-archiving would only ever fail. */}
+      {role === "OWNER" && !club.archived_at && (
+        <div className="mt-4">
+          <ArchiveClubButton clubId={club.id} />
+        </div>
+      )}
 
       {openModal === "location" && <LocationModal club={club} onClose={() => setOpenModal(null)} />}
       {openModal === "operation" && (

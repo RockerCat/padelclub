@@ -78,6 +78,7 @@ interface WeekCalendarProps {
   allowedDurations: number[];
   successMessage?: string; // "updated" | "cancelled"
   closedDays?: number[];   // day_of_week values (0=Sun…6=Sat) that are closed
+  archived?: boolean;      // clubs.archived_at IS NOT NULL — real protection is server-side (create_reservation_admin), this only hides the affordance
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -461,6 +462,7 @@ export function WeekCalendar({
   allowedDurations,
   successMessage,
   closedDays,
+  archived,
 }: WeekCalendarProps) {
   const router = useRouter();
 
@@ -512,6 +514,7 @@ export function WeekCalendar({
   // ─── Modal handlers ─────────────────────────────────────────────────────────
 
   function openNewModal(date?: string) {
+    if (archived) return; // server (create_reservation_admin) is the real guard — this only stops the affordance
     setModalState({
       mode: "create",
       initialDate: date,
@@ -607,7 +610,13 @@ export function WeekCalendar({
         <button
           type="button"
           onClick={() => openNewModal()}
-          className="inline-flex items-center gap-2 h-9 px-4 rounded-xl bg-brand-primary text-brand-bg text-sm font-semibold hover:brightness-110 transition-all"
+          disabled={archived}
+          title={archived ? "Este club se encuentra archivado." : undefined}
+          className={
+            archived
+              ? "inline-flex items-center gap-2 h-9 px-4 rounded-xl bg-white/10 text-brand-muted text-sm font-semibold cursor-not-allowed"
+              : "inline-flex items-center gap-2 h-9 px-4 rounded-xl bg-brand-primary text-brand-bg text-sm font-semibold hover:brightness-110 transition-all"
+          }
         >
           <Plus className="w-4 h-4" />
           Nueva reserva
@@ -660,16 +669,20 @@ export function WeekCalendar({
           <div className="mb-4 flex items-center justify-center gap-3 py-3 rounded-xl border border-dashed border-white/10 text-sm text-brand-muted">
             <CalendarDays className="w-4 h-4 shrink-0" />
             {courtFilter === "all" ? (
-              <>
-                No hay reservas esta semana —{" "}
-                <button
-                  type="button"
-                  onClick={() => openNewModal()}
-                  className="text-brand-primary hover:underline font-medium bg-transparent border-none p-0 cursor-pointer"
-                >
-                  Crear primera reserva
-                </button>
-              </>
+              archived ? (
+                "No hay reservas esta semana."
+              ) : (
+                <>
+                  No hay reservas esta semana —{" "}
+                  <button
+                    type="button"
+                    onClick={() => openNewModal()}
+                    className="text-brand-primary hover:underline font-medium bg-transparent border-none p-0 cursor-pointer"
+                  >
+                    Crear primera reserva
+                  </button>
+                </>
+              )
             ) : (
               "No hay reservas para esta cancha durante esta semana."
             )}

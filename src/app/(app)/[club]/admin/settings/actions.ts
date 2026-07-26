@@ -499,6 +499,32 @@ export async function addGalleryImage(
   return {};
 }
 
+// ─── archiveClub ───────────────────────────────────────────────────────────
+// OWNER-only, irreversible-for-now (reactivation is a future phase)
+// retirement of the club (see CLAUDE.md → Club Archival Principles). This
+// action is only a thin, friendly gate — every real check (auth, active
+// OWNER membership, club existence, not-already-archived) and the atomic
+// archived_at write + member notification fan-out live inside the
+// archive_club RPC (SECURITY DEFINER), which re-derives authorization from
+// auth.uid() regardless of what this action already checked.
+export async function archiveClub(clubId: string): Promise<{ error?: string }> {
+  const supabase = await createClient();
+
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) return { error: "No autenticado." };
+
+  const { error } = await supabase.rpc("archive_club", { p_club_id: clubId });
+
+  if (error) {
+    if (error.code === "42501") return { error: "Solo el propietario puede archivar el club." };
+    if (error.code === "22023") return { error: "El club ya fue archivado." };
+    if (error.code === "P0002") return { error: "Club no encontrado." };
+    return { error: "Error al archivar el club. Intenta nuevamente." };
+  }
+
+  return {};
+}
+
 export async function removeGalleryImage(
   clubId: string,
   url: string

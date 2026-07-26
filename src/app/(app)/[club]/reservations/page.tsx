@@ -101,7 +101,7 @@ export default async function PlayerReservationsPage({
 
   const { data: club } = await supabase
     .from("clubs")
-    .select("id, name, slug, allowed_reservation_durations")
+    .select("id, name, slug, allowed_reservation_durations, archived_at")
     .eq("slug", slug)
     .eq("is_active", true)
     .single();
@@ -368,6 +368,7 @@ export default async function PlayerReservationsPage({
           myBookings={myBookings}
           prefill={prefill}
           focusReservation={focusReservation}
+          archived={!!club.archived_at}
           editingReservation={editingReservation}
         />
       )}

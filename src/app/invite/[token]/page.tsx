@@ -131,6 +131,7 @@ export default async function InvitePage({ params, searchParams }: InvitePagePro
     is_active?: boolean;
     expired?: boolean;
     max_uses_reached?: boolean;
+    archived?: boolean;
     role?: string;
     expires_at?: string;
     club_name?: string;
@@ -195,6 +196,8 @@ export default async function InvitePage({ params, searchParams }: InvitePagePro
       ? "Este link de invitación ha expirado."
       : info.max_uses_reached
       ? "Este link ya no está disponible."
+      : info.archived
+      ? "Este club se encuentra archivado."
       : !info.is_active
       ? "Este link ha sido revocado."
       : "Link de invitación inválido.";

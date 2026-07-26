@@ -17,6 +17,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   invalid_token: "Este link de invitación no es válido o ya expiró.",
   max_uses_reached: "Este link ya no está disponible.",
   not_authenticated: "Debes iniciar sesión para continuar.",
+  club_archived: "Este club se encuentra archivado y ya no acepta nuevas invitaciones.",
 };
 
 export function AcceptInviteCard({

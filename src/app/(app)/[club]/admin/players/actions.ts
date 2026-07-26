@@ -209,6 +209,7 @@ export async function approveJoinRequest(
   if (error) {
     if (error.code === "P0002") return { error: "Solicitud no encontrada." };
     if (error.code === "22023") return { error: "Esta solicitud ya fue resuelta." };
+    if (error.code === "P0005") return { error: "Este club se encuentra archivado." };
     return { error: "Error al aprobar la solicitud." };
   }
 

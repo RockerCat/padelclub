@@ -3,7 +3,7 @@
 ## Estado General
 
 * Estado: Validation Gate 1.0
-* Última actualización: 26 de julio de 2026 (modelo global de cuentas y endurecimiento de seguridad, retiro de invitaciones para PLAYER, navegación inteligente multi-club, cancelación de reservas con ventana de 2 horas, salida voluntaria de un club, desactivación de jugadores que limpia compromisos futuros en vez de bloquear, edición de reservas con protección real de concurrencia compartida entre creación/edición/aprobación)
+* Última actualización: 26 de julio de 2026 (modelo global de cuentas y endurecimiento de seguridad, retiro de invitaciones para PLAYER, navegación inteligente multi-club, cancelación de reservas con ventana de 2 horas, salida voluntaria de un club, desactivación de jugadores que limpia compromisos futuros en vez de bloquear, edición de reservas con protección real de concurrencia compartida entre creación/edición/aprobación, archivado de clubes por el OWNER)
 
 ## Visión
 
@@ -497,6 +497,53 @@ Pendiente:
 
 * Notificaciones push (fuera del navegador)
 * Preferencias de notificación por tipo
+
+---
+
+# Archivado de Clubes
+
+Estado:
+
+✅ MVP funcional — migración `supabase/migrations/20260815000001_archive_club.sql` **pendiente de aplicación manual** en la base de datos al momento de este registro.
+
+Modelo:
+
+* `clubs.archived_at timestamptz NULL`. Archivado ⇔ `archived_at IS NOT NULL`. No reutiliza `clubs.is_active` (columna ya existente pero nunca usada por ningún flujo hasta ahora — se deja reservada para un futuro toggle de suspensión a nivel de plataforma por SUPERADMIN, `/platform/clubs/[clubId]`, aún no implementado)
+* Único trigger: RPC `archive_club(p_club_id)` (`SECURITY DEFINER`), invocable solo por el OWNER activo del club — valida auth, membresía, rol y estado "no archivado ya" enteramente en servidor; nunca confía en nada enviado por el cliente
+* Atómico: bloquea la fila (`FOR UPDATE`) antes de escribir, así dos clics/llamadas concurrentes solo permiten que uno archive — el otro recibe "El club ya fue archivado"
+* Efecto exclusivo: `archived_at = now()`. Nada más se modifica — miembros, reservas (pasadas y futuras), tarifas, branding e historial permanecen intactos; ninguna reserva se cancela automáticamente
+
+Operaciones bloqueadas (validadas en servidor/SQL, nunca solo ocultando botones):
+
+* Reservas: crear (PLAYER vía `create_reservation_player`, OWNER/ADMIN vía `create_reservation_admin`), editar (`update_reservation`), aprobar solicitud pendiente (`approve_pending_reservation`) — las cuatro RPCs comparten el guard `public._require_club_not_archived(p_club_id)`
+* Ingreso: `create_join_request` y `approve_join_request` (nuevo código de error `P0005`); `join_public_club` (reutiliza el mismo resultado que un club inactivo, `P0002`)
+* Invitaciones ADMIN: `createAdminInvite` (chequeo a nivel de server action) y `claim_invitation` (nuevas membresías; un miembro que re-hace clic en su propio link ya aceptado sigue funcionando sin problema); `get_invitation_preview` marca el link como inválido con el motivo "Este club se encuentra archivado."
+
+Explícitamente sin cambios (resolver algo existente nunca crea compromiso nuevo, así que nunca se bloquea):
+
+* `cancel_reservation`, `rejectPendingReservation` (admin), `reject_join_request`
+
+Visibilidad y navegación:
+
+* Discover Clubes (`/clubs`) y el perfil público (`/[club]`, incluyendo `generateMetadata`) dejan de mostrar el club archivado (404, mismo patrón que un club con `is_active = false`)
+* `resolveClubEntryPath` ignora cualquier membresía en un club archivado al decidir a dónde entra el usuario tras iniciar sesión — nunca lo enruta automáticamente ahí, aunque sea su única membresía o su `last_club_id`
+* Un club archivado sigue siendo accesible en modo lectura para sus propios miembros — el layout `(app)/[club]` no bloquea la entrada; historial, reservas pasadas, jugadores y noticias siguen disponibles sin restricción
+
+UI:
+
+* Banner informativo visible solo para el OWNER en el layout del club ("Este club está archivado...")
+* Tarjeta "Archivar club" (danger zone) en Configuración, solo OWNER, oculta una vez archivado, con `ConfirmDialog` existente (variant destructiva)
+* Botón "Nueva reserva" (Semana), clic en slot disponible (Agenda, vista del jugador) y la página standalone `/admin/reservations/new` quedan deshabilitados/redirigidos cuando el club está archivado — la protección real sigue siendo el servidor, esto es solo la afordancia visual
+
+Notificaciones:
+
+* Nuevo tipo `club_archived`, generado una sola vez dentro del propio RPC `archive_club`, a todos los `club_members` activos del club (cualquier rol) — reutiliza la tabla/Realtime/lectura de notificaciones ya existentes, sin sistema nuevo
+
+Pendiente:
+
+* Reactivación de un club archivado (fuera de alcance del MVP)
+* Estadísticas o reportes sobre clubes archivados
+* Exportación/backup previos al archivado
 
 ---
 

@@ -15,7 +15,7 @@ export function getClubEntryPath(slug: string, role: string): string {
   return `/${slug}/home`;
 }
 
-type MembershipRow = { role: string; clubs: { id: string; slug: string } };
+type MembershipRow = { role: string; clubs: { id: string; slug: string; archived_at: string | null } };
 
 /**
  * Single source of truth for "which club (if any) should this authenticated
@@ -25,14 +25,18 @@ type MembershipRow = { role: string; clubs: { id: string; slug: string } };
  * ?next= are decided by the caller before reaching this — this function is
  * only the club-membership part of that decision.
  *
- * - 0 active memberships → "/clubs" (today's discover/create experience,
- *   unchanged).
+ * - 0 active memberships (after dropping archived clubs — see below) →
+ *   "/clubs" (today's discover/create experience, unchanged).
  * - Exactly 1 active membership → straight into it via getClubEntryPath.
  * - 2+ active memberships:
  *     - profiles.last_club_id points at one the user is still an active
  *       member of → straight into that one via getClubEntryPath.
  *     - otherwise (null, or points at a club/membership that no longer
  *       applies) → "/clubs" (the picker), unchanged.
+ *
+ * A membership at an archived club is dropped before any of the above
+ * counting/matching happens — an archived club is never auto-entered, even
+ * if it's the user's only membership or their last_club_id.
  *
  * Read-only: never writes last_club_id itself (that stays exactly as-is,
  * via UpdateLastClub on club layout mount) and never "fixes" a stale value.
@@ -43,12 +47,12 @@ export async function resolveClubEntryPath(
 ): Promise<string> {
   const { data: memberships } = await supabase
     .from("club_members")
-    .select("role, clubs!inner(id, slug)")
+    .select("role, clubs!inner(id, slug, archived_at)")
     .eq("profile_id", userId)
     .eq("is_active", true)
     .order("joined_at", { ascending: true });
 
-  const rows = (memberships ?? []) as unknown as MembershipRow[];
+  const rows = ((memberships ?? []) as unknown as MembershipRow[]).filter((m) => !m.clubs.archived_at);
 
   if (rows.length === 0) {
     return "/clubs";

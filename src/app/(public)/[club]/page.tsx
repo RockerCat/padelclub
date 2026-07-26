@@ -21,7 +21,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { club: slug } = await params;
   const supabase  = await createClient();
   const { data }  = await supabase.from("clubs").select("name, description")
-    .eq("slug", slug).eq("is_active", true).single();
+    .eq("slug", slug).eq("is_active", true).is("archived_at", null).single();
   if (!data) return { title: "Club no encontrado | MiPadelClub" };
   return { title: `${data.name} | MiPadelClub`, description: data.description ?? `Conoce ${data.name} en MiPadelClub.` };
 }
@@ -45,7 +45,7 @@ export default async function ClubRootPage({ params, searchParams }: Props) {
   const { data: clubData } = await supabase
     .from("clubs")
     .select("id, name, slug, description, logo_url, cover_image_url, primary_color, secondary_color, visibility, city, state, country, address, whatsapp, instagram, facebook, youtube, latitude, longitude, gallery_image_urls")
-    .eq("slug", slug).eq("is_active", true).single();
+    .eq("slug", slug).eq("is_active", true).is("archived_at", null).single();
 
   if (!clubData) notFound();
   const club = clubData;

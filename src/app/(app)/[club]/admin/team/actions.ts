@@ -75,6 +75,14 @@ export async function createAdminInvite(
   const { supabase, user, error: authError } = await requireOwnerRole(clubId);
   if (authError || !supabase || !user) return { error: authError! };
 
+  const { data: clubRow } = await supabase
+    .from("clubs")
+    .select("archived_at")
+    .eq("id", clubId)
+    .single();
+
+  if (clubRow?.archived_at) return { error: "Este club se encuentra archivado y no puede crear nuevas invitaciones." };
+
   const { error } = await insertSingleUseInvite(supabase, {
     clubId,
     role: "ADMIN",
