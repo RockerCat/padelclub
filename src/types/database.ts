@@ -903,6 +903,24 @@ export interface Database {
         Args: { p_club_id: string };
         Returns: void;
       };
+      // public.get_club_statistics — Phase 9: OWNER/ADMIN-only, read-only
+      // aggregated statistics (period/summary/previousSummary/timeline/
+      // statuses/courts/weekdays/hourlySlots as one jsonb object). Excludes
+      // type='block' from every metric; no monetary field. Works for an
+      // archived club's still-active OWNER/ADMIN (read-only history)
+      get_club_statistics: {
+        Args: { p_club_id: string; p_start_date: string; p_end_date: string };
+        Returns: Json;
+      };
+      // public.get_my_profile_activity — Phase 10: self-only, no
+      // parameters (never a profile/user id). Aggregates the caller's own
+      // reservation activity across every club (including left/deactivated/
+      // archived ones) as one jsonb object (summary/typeDistribution/
+      // monthlyActivity/recentReservations/activeMemberships)
+      get_my_profile_activity: {
+        Args: Record<string, never>;
+        Returns: Json;
+      };
       // public.create_reservation_player — Phase 7 concurrency fix:
       // replaces requestReservation's own inline validate-then-insert.
       // Same rules as before (any active club member, conflict-checks

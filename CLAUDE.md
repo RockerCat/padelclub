@@ -386,6 +386,12 @@ Reactivation is out of MVP scope — not yet implemented.
 
 ---
 
+## Club Statistics Principles
+
+Club-level operational statistics (`/[club]/admin/statistics`, OWNER/ADMIN only) are always computed live in PostgreSQL through a single SECURITY DEFINER RPC — never downloaded raw and aggregated in the browser, never persisted or cached. `type = 'block'` is excluded from every metric; `reservations.date`/`start_time` (never `created_at`) drive every date-based aggregation, always interpreted as America/Bogota. No monetary metric exists — `price_amount` is frequently null (unpriced admin bookings, requests with no matching tariff), so no honest revenue figure is possible with the current model. A club's `is_active`/`archived_at` never blocks reading its own historical statistics (see Club Archival Principles — read access to history is never affected by archival).
+
+---
+
 ## Notifications & Live-Update Principles
 
 There is one notification system: bell, unread badge, dropdown and `/notifications`.
@@ -424,7 +430,11 @@ During the MVP, a player can cancel or edit their own reservation up to 2 hours 
 
 ## Player Statistics Principles
 
-A player's permanent statistics are: Partidos, Victorias, Derrotas, Win %, Reservas, Cancelaciones. Per Principle 2 (Do Not Depend On Administrative Discipline), these must be derived automatically from real reservation/match data, never manually maintained or manually recalculated.
+A player's own statistics are always derived live from real reservation data (Principle 2 — never manually maintained, never a persisted/cached snapshot). Victorias/Derrotas/Win % remain unimplemented — there is no match-result tracking in the schema; do not approximate them.
+
+A reservation counts as a user's own personal participation only when they appear in `reservation_players`, or when they are `reservations.created_by` **and** their own `profiles.account_type` is exactly `'PLAYER'`. An OWNER/ADMIN's `created_by` reflects administrative authorship — booking for a third party, a class, or the club itself — never personal participation, since the product has no flow that lets an OWNER/ADMIN add themselves to `reservation_players`. This is safe because `account_type` is a global, database-enforced invariant: once set, it matches every `club_members` role a profile holds, in every club, permanently (a trigger rejects any mismatch) — so an OWNER/ADMIN's personal summary being all zeros is expected and correct, never approximated into something else.
+
+The global "Mi Perfil" page (`/profile`) is account-level, not club-scoped — it aggregates this participation across every club a user has ever belonged to, including clubs left, memberships deactivated, or since archived, because a user's own history always stays visible to them. No monetary, ranking, ELO, or attendance metric exists — "horas confirmadas" means a slot was reserved, never that it was actually played.
 
 ---
 

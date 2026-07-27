@@ -247,7 +247,10 @@ export function usePlayerReservationsRealtime(onChange: () => void) {
 }
 
 // ─── Activity status styling ────────────────────────────────────────────────
-const ACTIVITY_STATUS: Record<
+// Exported so other surfaces showing a reservation's status (e.g. the
+// account-level "Mi Perfil" activity list, which spans every club) reuse
+// the exact same colors/labels instead of a second, possibly-drifting copy.
+export const ACTIVITY_STATUS: Record<
   MyReservation["status"],
   { label: string; dot: string; text: string; bg: string }
 > = {

@@ -3,7 +3,7 @@
 ## Estado General
 
 * Estado: Validation Gate 1.0
-* Última actualización: 26 de julio de 2026 (modelo global de cuentas y endurecimiento de seguridad, retiro de invitaciones para PLAYER, navegación inteligente multi-club, cancelación de reservas con ventana de 2 horas, salida voluntaria de un club, desactivación de jugadores que limpia compromisos futuros en vez de bloquear, edición de reservas con protección real de concurrencia compartida entre creación/edición/aprobación, archivado de clubes por el OWNER)
+* Última actualización: 26 de julio de 2026 (modelo global de cuentas y endurecimiento de seguridad, retiro de invitaciones para PLAYER, navegación inteligente multi-club, cancelación de reservas con ventana de 2 horas, salida voluntaria de un club, desactivación de jugadores que limpia compromisos futuros en vez de bloquear, edición de reservas con protección real de concurrencia compartida entre creación/edición/aprobación, archivado de clubes por el OWNER, estadísticas operativas del club, perfil personal global del usuario integrado a la navegación principal)
 
 ## Visión
 
@@ -547,15 +547,78 @@ Pendiente:
 
 ---
 
+# Estadísticas Operativas del Club
+
+Estado:
+
+✅ MVP funcional — migración `supabase/migrations/20260816000001_club_statistics.sql` **pendiente de aplicación manual** en la base de datos al momento de este registro.
+
+Ruta:
+
+```text
+/[club]/admin/statistics
+```
+
+Modelo:
+
+* RPC única `get_club_statistics(p_club_id, p_start_date, p_end_date)` (`SECURITY DEFINER`) — toda la agregación ocurre en PostgreSQL, nunca se descargan reservas crudas al navegador
+* 5 periodos fijos (Últimos 7/30/90 días, Este mes, Mes anterior), calculados en `America/Bogota` vía `Intl.DateTimeFormat` (`src/lib/clubStatisticsRange.ts`) — módulo independiente de `src/lib/dashboardRange.ts` (presets distintos, ese módulo no se tocó)
+* `reservations.type = 'block'` excluido de toda métrica; `reservations.date`/`start_time` (nunca `created_at`) determinan periodo y franjas horarias
+* KPIs: Reservas del periodo (todos los estados, aclarado explícitamente en el copy), Confirmadas, Pendientes, Canceladas o rechazadas, Horas reservadas, Tasa de confirmación — con comparación vs. periodo anterior de igual longitud
+* Gráficas reutilizando el patrón CSS/SVG puro ya usado en Dashboard (sin librería de gráficos nueva): evolución de reservas (diaria o semanal según el rango), distribución por estado, uso por cancha, actividad por día de la semana, actividad por franja horaria
+* Sin índices nuevos agregados — sin evidencia `EXPLAIN` con volumen real que los justifique; `reservations.created_by` sigue sin índice, documentado para revisión futura
+
+Navegación:
+
+* "Estadísticas" agregada al sidebar de OWNER y ADMIN (`AppNav`), no visible para PLAYER; no forma parte del tab bar móvil fijo de 5 ítems (vive en el menú secundario móvil junto a Dashboard/Equipo/Configuración)
+
+Pendiente:
+
+* Validación SQL manual contra datos reales (consultas de verificación entregadas, ejecución pendiente)
+
+---
+
+# Perfil Personal del Usuario
+
+Estado:
+
+✅ MVP funcional — migración `supabase/migrations/20260817000001_profile_activity.sql` **aplicada en desarrollo**, validada con datos reales.
+
+Ruta:
+
+```text
+/profile
+```
+
+Global, a nivel de cuenta — no vive bajo `/[club]`, no depende de un club activo, agrega actividad de todos los clubes donde el usuario haya participado alguna vez (incluyendo clubes abandonados, membresías desactivadas y clubes archivados).
+
+Modelo:
+
+* RPC única `get_my_profile_activity()` (`SECURITY DEFINER`), **sin parámetros** — identidad derivada exclusivamente de `auth.uid()`, nunca acepta un `profile_id`/`user_id` de terceros
+* Regla de participación personal (ver CLAUDE.md → Player Statistics Principles): una reserva cuenta como actividad propia solo si el usuario aparece en `reservation_players`, o si es `created_by` **y** su propio `profiles.account_type` es exactamente `'PLAYER'` — nunca `created_by` por sí solo, para no confundir autoría administrativa (reservas de un OWNER/ADMIN para terceros o para el club) con participación deportiva real
+* Como el modelo actual no permite que un OWNER/ADMIN se agregue a sí mismo como jugador en ninguna reserva, es esperado y correcto que su resumen personal quede en cero — nunca se aproxima ni se inventa participación; la UI lo comunica con un estado vacío neutral, no como error
+* Métricas: reservas totales/confirmadas/pendientes/canceladas/rechazadas, partidos, clases, horas confirmadas (nunca "horas jugadas" — no se verifica asistencia real); evolución mensual (últimos 12 meses fijos, con ceros donde no hay actividad); distribución por tipo (partidos/clases); actividad reciente (15 más recientes, `date`/`start_time` descendente, nunca `created_at`); membresías activas (`is_active = true`, con indicador visual de club archivado)
+* Sin ingresos, ranking, ELO, victorias/derrotas ni comparación entre usuarios
+
+Navegación:
+
+* "Mi Perfil" (antes un placeholder bloqueado "Próx." en `AppNav`) ahora es un enlace real, con estado activo cuando `pathname === "/profile"`
+* `/profile` vive dentro del route group `(app)` (URL pública sin cambios) específicamente para reutilizar el mismo `AppNav` que usan las páginas de club — nuevo `src/app/(app)/profile/layout.tsx` resuelve un club de contexto solo para pintar el sidebar (vía nueva `resolveActiveMembership` en `src/lib/utils/navigation.ts`, que nunca escribe `last_club_id` ni filtra los datos del perfil), con fallback a un header mínimo si el usuario no tiene ninguna membresía activa
+
+Pendiente:
+
+* Verificación visual real en dispositivo/navegador (el ajuste responsive y de jerarquía visual se validó por análisis estático de clases, no por renderizado observado)
+
+---
+
 # Funcionalidades Pendientes de Alta Prioridad
 
 ## Owner Experience
 
 * Upload directo de logo
 * Upload directo de portada
-* KPIs operativos
 * Ocupación de canchas
-* Actividad reciente
+* Actividad reciente del club en el dashboard
 
 ## Club Profile
 

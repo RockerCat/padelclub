@@ -78,3 +78,92 @@ export async function resolveClubEntryPath(
 
   return "/clubs";
 }
+
+export interface NavActiveMembership {
+  role: string;
+  club: {
+    id: string;
+    name: string;
+    slug: string;
+    logo_url: string | null;
+    primary_color: string;
+    secondary_color: string;
+  };
+}
+
+type ActiveMembershipRow = {
+  role: string;
+  clubs: NavActiveMembership["club"] & { archived_at: string | null };
+};
+
+/**
+ * Same membership-selection rule as resolveClubEntryPath (active,
+ * non-archived memberships; profiles.last_club_id wins when there are 2+)
+ * but returns the club's own branding fields for rendering navigation
+ * chrome, never a redirect path, and is never used to filter any data
+ * query. Built for the global /profile route, which has no club in its
+ * own URL — this lets it still show its owner's normal club-scoped
+ * sidebar (AppNav) for visual/navigation context only.
+ *
+ * One deliberate divergence from resolveClubEntryPath: when there are 2+
+ * memberships and last_club_id doesn't match any of them, that function
+ * bails to "/clubs" (a real navigation decision — let the user choose).
+ * This function has nothing to redirect, so it falls back to the oldest
+ * membership (same joined_at ascending order already used above) instead
+ * of returning nothing — still a real club the user genuinely belongs to,
+ * never an invented one. Returns null only when the user has zero active,
+ * non-archived memberships anywhere.
+ *
+ * Read-only: never writes last_club_id (same as resolveClubEntryPath).
+ */
+export async function resolveActiveMembership(
+  supabase: SupabaseClient<Database>,
+  userId: string
+): Promise<NavActiveMembership | null> {
+  const { data: memberships } = await supabase
+    .from("club_members")
+    .select("role, clubs!inner(id, name, slug, logo_url, primary_color, secondary_color, archived_at)")
+    .eq("profile_id", userId)
+    .eq("is_active", true)
+    .order("joined_at", { ascending: true });
+
+  const rows = ((memberships ?? []) as unknown as ActiveMembershipRow[]).filter((m) => !m.clubs.archived_at);
+
+  if (rows.length === 0) {
+    return null;
+  }
+
+  function toResult(row: ActiveMembershipRow): NavActiveMembership {
+    return {
+      role: row.role,
+      club: {
+        id: row.clubs.id,
+        name: row.clubs.name,
+        slug: row.clubs.slug,
+        logo_url: row.clubs.logo_url,
+        primary_color: row.clubs.primary_color,
+        secondary_color: row.clubs.secondary_color,
+      },
+    };
+  }
+
+  if (rows.length === 1) {
+    return toResult(rows[0]);
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("last_club_id")
+    .eq("id", userId)
+    .single();
+
+  const lastClubId = profile?.last_club_id;
+  if (lastClubId) {
+    const match = rows.find((m) => m.clubs.id === lastClubId);
+    if (match) {
+      return toResult(match);
+    }
+  }
+
+  return toResult(rows[0]);
+}

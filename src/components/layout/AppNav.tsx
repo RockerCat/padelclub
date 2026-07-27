@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   Globe,
   Megaphone,
+  BarChart3,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils/cn";
@@ -105,6 +106,11 @@ function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequest
         color: "secondary" as const,
       },
       {
+        label: "Estadísticas",
+        href: `/${slug}/admin/statistics`,
+        icon: BarChart3,
+      },
+      {
         label: "Noticias",
         href: `/${slug}/admin/news`,
         icon: Megaphone,
@@ -139,6 +145,11 @@ function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequest
         icon: Users,
         color: "secondary" as const,
         badgeCount: pendingJoinRequests,
+      },
+      {
+        label: "Estadísticas",
+        href: `/${slug}/admin/statistics`,
+        icon: BarChart3,
       },
       {
         label: "Noticias",
@@ -346,14 +357,19 @@ function NavContent({
           avatarUrl={identity.avatarUrl}
           roleLabel={clubRoleLabel(role)}
         />
-        <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-brand-muted/50 cursor-not-allowed select-none">
+        <Link
+          href="/profile"
+          onClick={onLinkClick}
+          className={cn(
+            "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors",
+            pathname === "/profile"
+              ? "text-white bg-brand-primary/5"
+              : "text-brand-muted hover:text-white hover:bg-brand-primary/5"
+          )}
+        >
           <User className="w-4 h-4 shrink-0" />
-          <span className="text-sm flex-1">Mi Perfil</span>
-          <span className="text-[10px] font-medium bg-white/5 border border-white/10 text-brand-muted px-1.5 py-0.5 rounded-md flex items-center gap-1">
-            <Lock className="w-2.5 h-2.5" />
-            Próx.
-          </span>
-        </div>
+          <span>Mi Perfil</span>
+        </Link>
         {membershipCount >= 2 && (
           <Link
             href="/clubs"
@@ -595,6 +611,16 @@ export function AppNav({
                         <span>Dashboard</span>
                       </Link>
                     )}
+                    {(role === "OWNER" || role === "ADMIN") && (
+                      <Link
+                        href={`/${club.slug}/admin/statistics`}
+                        onClick={() => setSecondaryMenuOpen(false)}
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
+                      >
+                        <BarChart3 className="w-4 h-4 shrink-0" />
+                        <span>Estadísticas</span>
+                      </Link>
+                    )}
                     {role === "OWNER" && (
                       <Link
                         href={`/${club.slug}/admin/team`}
@@ -635,14 +661,19 @@ export function AppNav({
                         <span>Crear otro club</span>
                       </Link>
                     )}
-                    <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-brand-muted/50 cursor-not-allowed select-none">
+                    <Link
+                      href="/profile"
+                      onClick={() => setSecondaryMenuOpen(false)}
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors",
+                        pathname === "/profile"
+                          ? "text-white bg-brand-primary/5"
+                          : "text-brand-muted hover:text-white hover:bg-brand-primary/5"
+                      )}
+                    >
                       <User className="w-4 h-4 shrink-0" />
-                      <span className="text-sm flex-1">Mi Perfil</span>
-                      <span className="text-[10px] font-medium bg-white/5 border border-white/10 text-brand-muted px-1.5 py-0.5 rounded-md flex items-center gap-1">
-                        <Lock className="w-2.5 h-2.5" />
-                        Próx.
-                      </span>
-                    </div>
+                      <span>Mi Perfil</span>
+                    </Link>
                     <button
                       type="button"
                       onClick={() => {
