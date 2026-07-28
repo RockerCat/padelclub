@@ -1,24 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import { MapPin, Clock, Banknote, ChevronRight } from "lucide-react";
+import { MapPin, Clock, Banknote, ChevronRight, Layers } from "lucide-react";
 import { durationLabel } from "@/lib/durations";
 import { buildScheduleSummary, type OperatingHour } from "@/lib/operatingHours";
-import type { Club } from "@/types/database";
+import type { Club, SportCategory } from "@/types/database";
 import { LocationModal } from "./LocationModal";
 import { OperationModal } from "./OperationModal";
 import { PricingModal, type PricingRuleWithPrices } from "./PricingModal";
+import { DefaultPlayerCategoryModal } from "./DefaultPlayerCategoryModal";
 import { ArchiveClubButton } from "./ArchiveClubButton";
 
-type ModuleKey = "location" | "operation" | "pricing";
+type ModuleKey = "location" | "operation" | "pricing" | "defaultPlayerCategory";
 
 interface SettingsModulesProps {
   club: Club;
+  clubSlug: string;
   initialHours: OperatingHour[];
   role: "OWNER" | "ADMIN";
   pricingRules: PricingRuleWithPrices[];
   pricingCourts: { id: string; name: string }[];
   allowedDurations: number[];
+  sportCategories: SportCategory[];
 }
 
 function formatCurrency(amount: number, currency: string): string {
@@ -81,7 +84,16 @@ function ModuleCard({
   );
 }
 
-export function SettingsModules({ club, initialHours, role, pricingRules, pricingCourts, allowedDurations }: SettingsModulesProps) {
+export function SettingsModules({
+  club,
+  clubSlug,
+  initialHours,
+  role,
+  pricingRules,
+  pricingCourts,
+  allowedDurations,
+  sportCategories,
+}: SettingsModulesProps) {
   const [openModal, setOpenModal] = useState<ModuleKey | null>(null);
 
   const locationLine = [club.city, club.state, club.country].filter(Boolean).join(", ");
@@ -139,6 +151,19 @@ export function SettingsModules({ club, initialHours, role, pricingRules, pricin
             </>
           )}
         </ModuleCard>
+
+        {/* Fase 1 módulo deportivo — a diferencia de Ubicación/Operación
+            (OWNER-only) y Tarifas (ADMIN solo ve el resumen), este módulo es
+            editable tanto por OWNER como por ADMIN, tal como lo exige la
+            especificación de este bloque. Solo configura la categoría
+            predeterminada — sin puntos, ranking, ciclos ni historial. */}
+        <ModuleCard icon={Layers} title="Categoría de jugadores" onClick={() => setOpenModal("defaultPlayerCategory")}>
+          {club.default_player_category ? (
+            <p className="text-sm text-white/80">Categoría inicial: {club.default_player_category}</p>
+          ) : (
+            <p className="text-xs text-brand-muted/50">Sin configurar</p>
+          )}
+        </ModuleCard>
       </div>
 
       {/* Danger zone — OWNER only, matches the visibility rule every other
@@ -166,6 +191,15 @@ export function SettingsModules({ club, initialHours, role, pricingRules, pricin
           courts={pricingCourts}
           initialRules={pricingRules}
           allowedDurations={allowedDurations}
+          onClose={() => setOpenModal(null)}
+        />
+      )}
+      {openModal === "defaultPlayerCategory" && (
+        <DefaultPlayerCategoryModal
+          clubId={club.id}
+          clubSlug={clubSlug}
+          currentCategory={club.default_player_category}
+          categories={sportCategories}
           onClose={() => setOpenModal(null)}
         />
       )}

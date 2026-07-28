@@ -74,6 +74,12 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
     .eq("is_active", true)
     .order("sort_order", { ascending: true });
 
+  // Fase 1 módulo deportivo — catálogo global, fijo, sin scope de club.
+  const { data: sportCategories } = await supabase
+    .from("sport_categories")
+    .select("code, sort_order, created_at")
+    .order("sort_order", { ascending: true });
+
   const mergedHours: OperatingHour[] = DEFAULT_OPERATING_HOURS.map((def) => {
     const found = (dbHours ?? []).find((h) => h.day_of_week === def.day_of_week);
     if (!found) return def;
@@ -96,11 +102,13 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
 
       <SettingsModules
         club={club as Club}
+        clubSlug={slug}
         initialHours={mergedHours}
         role={membership.role as "OWNER" | "ADMIN"}
         pricingRules={pricingRules ?? []}
         pricingCourts={pricingCourts ?? []}
         allowedDurations={getClubDurations(club.allowed_reservation_durations)}
+        sportCategories={sportCategories ?? []}
       />
     </div>
   );

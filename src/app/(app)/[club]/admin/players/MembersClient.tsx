@@ -7,7 +7,7 @@ import { FilterDropdown } from "@/components/ui";
 import { MemberModal } from "./MemberModal";
 import { Users, Search } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
-import { PLAYER_CATEGORIES, type PlayerCategory } from "@/types/database";
+import { PLAYER_CATEGORIES, type PlayerCategory, type SportCategory } from "@/types/database";
 
 export type MemberRow = {
   id: string;
@@ -28,6 +28,7 @@ interface MembersClientProps {
   members: MemberRow[];
   clubSlug: string;
   clubId: string;
+  sportCategories: SportCategory[];
 }
 
 type StatusFilter = "all" | "active" | "inactive";
@@ -52,7 +53,7 @@ function formatDate(iso: string) {
   });
 }
 
-export function MembersClient({ members, clubSlug, clubId }: MembersClientProps) {
+export function MembersClient({ members, clubSlug, clubId, sportCategories }: MembersClientProps) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
   const [search, setSearch] = useState("");
@@ -167,6 +168,7 @@ export function MembersClient({ members, clubSlug, clubId }: MembersClientProps)
           member={selectedMember}
           clubId={clubId}
           clubSlug={clubSlug}
+          sportCategories={sportCategories}
           onClose={() => setSelectedMember(null)}
         />
       )}

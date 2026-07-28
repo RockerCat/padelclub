@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { addMinutes } from "@/lib/courtAvailability";
+import { sanitizeSportNote } from "@/lib/sportOperations";
 import type { PlayerCategory } from "@/types/database";
 
 export type ActionState = { success?: boolean; error?: string; data?: unknown };
@@ -237,4 +238,179 @@ export async function rejectJoinRequest(
 
   revalidatePath(`/${clubSlug}/admin/players`);
   return { success: true };
+}
+
+// ─── Fase 1 módulo deportivo: puntos y cambio de categoría ─────────────────
+// Every real rule (autorización OWNER/ADMIN, bloqueo de fila, piso en cero,
+// validación de reason_code/change_type, ledger inmutable) vive en
+// adjust_club_player_points / change_club_player_category / SECURITY
+// DEFINER (20260822000001) — estas acciones solo reenvían la llamada y
+// traducen códigos de error, nunca duplican esa lógica aquí.
+
+export type SportStateResult =
+  | { category: string; currentPoints: number; pointsReachedAt: string }
+  | { category: null; currentPoints: null; pointsReachedAt: null; error?: string };
+
+export async function getClubMemberSportState(
+  clubId: string,
+  clubMemberId: string
+): Promise<SportStateResult> {
+  const { supabase, error: authError } = await requireAdminRole(clubId);
+  if (authError || !supabase) return { category: null, currentPoints: null, pointsReachedAt: null, error: authError! };
+
+  const { data, error } = await supabase.rpc("get_club_member_sport_state", {
+    p_club_id: clubId,
+    p_club_member_id: clubMemberId,
+  });
+
+  if (error) {
+    console.error("[getClubMemberSportState] RPC failed:", { clubId, clubMemberId, supabaseError: error });
+    return { category: null, currentPoints: null, pointsReachedAt: null, error: "Error al cargar el estado deportivo." };
+  }
+
+  const row = data?.[0];
+  if (!row) return { category: null, currentPoints: null, pointsReachedAt: null };
+
+  return { category: row.category, currentPoints: row.current_points, pointsReachedAt: row.points_reached_at };
+}
+
+export type AdjustPointsState = {
+  success?: boolean;
+  error?: string;
+  previousTotal?: number;
+  delta?: number;
+  newTotal?: number;
+};
+
+function adjustPointsErrorMessage(error: { code?: string; message?: string }): string {
+  if (error.code === "42501") return "No tienes permiso para ajustar puntos en este club.";
+  if (error.code === "P0002") return "Jugador no encontrado o sin estado deportivo todavía.";
+  if (error.code === "22023") {
+    const msg = error.message ?? "";
+    if (msg.includes("cannot be zero")) return "El ajuste no puede ser cero.";
+    if (msg.includes("results in no change")) return "El ajuste no produce ningún cambio en los puntos.";
+    if (msg.includes("reason_code")) return "Selecciona un motivo válido.";
+    if (msg.includes("note must be")) return "La nota debe tener entre 1 y 500 caracteres.";
+    return "Datos inválidos.";
+  }
+  console.error("[adjustPlayerPoints] RPC failed:", error);
+  return "Error al ajustar los puntos. Intenta de nuevo.";
+}
+
+export async function adjustPlayerPoints(
+  clubId: string,
+  clubMemberId: string,
+  clubSlug: string,
+  _prevState: AdjustPointsState,
+  formData: FormData
+): Promise<AdjustPointsState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !user) return { error: "No autenticado." };
+
+  const deltaRaw = formData.get("delta_points");
+  const delta = typeof deltaRaw === "string" ? parseInt(deltaRaw, 10) : NaN;
+  if (!Number.isFinite(delta)) return { error: "Ingresa un número válido." };
+
+  const reasonCode = formData.get("reason_code");
+  if (typeof reasonCode !== "string" || reasonCode.length === 0) {
+    return { error: "Selecciona un motivo." };
+  }
+
+  const noteRaw = formData.get("note");
+  if (typeof noteRaw !== "string") return { error: "Escribe una nota." };
+  const note = sanitizeSportNote(noteRaw);
+
+  const { data, error } = await supabase.rpc("adjust_club_player_points", {
+    p_club_id: clubId,
+    p_club_member_id: clubMemberId,
+    p_delta_points: delta,
+    p_reason_code: reasonCode,
+    p_note: note,
+  });
+
+  if (error) return { error: adjustPointsErrorMessage(error) };
+
+  const result = data?.[0];
+  revalidatePath(`/${clubSlug}/admin/players`);
+  return {
+    success: true,
+    previousTotal: result?.previous_total,
+    delta: result?.delta,
+    newTotal: result?.new_total,
+  };
+}
+
+export type ChangeCategoryState = {
+  success?: boolean;
+  error?: string;
+  previousCategory?: string;
+  newCategory?: string;
+};
+
+function changeCategoryErrorMessage(error: { code?: string; message?: string }): string {
+  if (error.code === "42501") return "No tienes permiso para cambiar la categoría en este club.";
+  if (error.code === "P0002") return "Jugador no encontrado o sin estado deportivo todavía.";
+  if (error.code === "22023") {
+    const msg = error.message ?? "";
+    if (msg.includes("Invalid target category")) return "Selecciona una categoría válida.";
+    if (msg.includes("Invalid change_type")) return "Selecciona un tipo de cambio válido.";
+    if (msg.includes("note must be")) return "La nota debe tener entre 1 y 500 caracteres.";
+    if (msg.includes("same as the current category")) return "El jugador ya está en esa categoría.";
+    if (msg.includes("promotion requires")) return "Un ascenso debe ir a una categoría de orden superior.";
+    if (msg.includes("demotion requires")) return "Un descenso debe ir a una categoría de orden inferior.";
+    return "Datos inválidos.";
+  }
+  console.error("[changePlayerCategory] RPC failed:", error);
+  return "Error al cambiar la categoría. Intenta de nuevo.";
+}
+
+export async function changePlayerCategory(
+  clubId: string,
+  clubMemberId: string,
+  clubSlug: string,
+  _prevState: ChangeCategoryState,
+  formData: FormData
+): Promise<ChangeCategoryState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !user) return { error: "No autenticado." };
+
+  const targetCategory = formData.get("target_category");
+  if (typeof targetCategory !== "string" || targetCategory.length === 0) {
+    return { error: "Selecciona una categoría destino." };
+  }
+
+  const changeType = formData.get("change_type");
+  if (typeof changeType !== "string" || changeType.length === 0) {
+    return { error: "Selecciona un tipo de cambio." };
+  }
+
+  const noteRaw = formData.get("note");
+  if (typeof noteRaw !== "string") return { error: "Escribe una nota." };
+  const note = sanitizeSportNote(noteRaw);
+
+  const { data, error } = await supabase.rpc("change_club_player_category", {
+    p_club_id: clubId,
+    p_club_member_id: clubMemberId,
+    p_target_category: targetCategory,
+    p_change_type: changeType,
+    p_note: note,
+  });
+
+  if (error) return { error: changeCategoryErrorMessage(error) };
+
+  const result = data?.[0];
+  revalidatePath(`/${clubSlug}/admin/players`);
+  return {
+    success: true,
+    previousCategory: result?.previous_category,
+    newCategory: result?.new_category,
+  };
 }

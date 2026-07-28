@@ -1,0 +1,41 @@
+-- ============================================================
+-- Club default player category — Fase 1 (Módulo deportivo), paso 2
+-- Mi Pádel Club
+-- ============================================================
+-- Adds the column each club will use, in a later step, to decide which
+-- sport_categories row a new PLAYER is provisioned into. This migration
+-- only adds the column and its foreign key — no default value, no
+-- backfill, no provisioning logic, no RLS change.
+--
+-- Nullable by design (per the approved Architecture Freeze): no existing
+-- club has configured a default category yet, and none is assumed on its
+-- behalf. NULL here means "not yet regularized" — a real, expected,
+-- temporary state for every club until its OWNER/ADMIN sets one in a
+-- future step. This column is converted to NOT NULL only later, once
+-- every active club has been regularized — not in this migration.
+--
+-- No RLS/GRANT change: clubs_update_owner (20260610000001) is already a
+-- table-level policy (`club_role(id) = 'OWNER'`), not column-restricted
+-- the way club_members/profiles are — the existing policy already covers
+-- this column with no change needed here.
+--
+-- Foreign key behavior:
+--   - REFERENCES public.sport_categories(code): the same catalog used by
+--     the Fase 1 catalog step (20260818000001) — rejects any value that
+--     isn't one of the 7 fixed categories, by construction.
+--   - ON DELETE RESTRICT: sport_categories is permanent, seeded-once
+--     reference data with no INSERT/UPDATE/DELETE grant to anyone but the
+--     migration itself (20260818000001) — a delete on it should never
+--     happen in practice, but if it were ever attempted while a club
+--     still references that code, this must fail loudly rather than
+--     silently cascade into deleting a club (CASCADE) or silently
+--     clearing a club's configured category (SET NULL) — both of which
+--     the task this migration implements explicitly rules out.
+--   - No explicit ON UPDATE clause: `code` is the catalog's own primary
+--     key and is never updated by any existing grant, so the default
+--     NO ACTION is sufficient and needs no override.
+-- ============================================================
+
+ALTER TABLE public.clubs
+  ADD COLUMN IF NOT EXISTS default_player_category text
+    REFERENCES public.sport_categories(code) ON DELETE RESTRICT;

@@ -59,6 +59,12 @@ export default async function PlayersPage({ params }: PlayersPageProps) {
     p_club_id: club.id,
   });
 
+  // Fase 1 módulo deportivo — catálogo global, fijo, sin scope de club.
+  const { data: sportCategories } = await supabase
+    .from("sport_categories")
+    .select("code, sort_order, created_at")
+    .order("sort_order", { ascending: true });
+
   const memberList = (members ?? []) as Parameters<typeof MembersClient>[0]["members"];
   const requests = (joinRequests ?? []) as JoinRequestRow[];
 
@@ -73,7 +79,12 @@ export default async function PlayersPage({ params }: PlayersPageProps) {
       </div>
 
       {/* Members list */}
-      <MembersClient members={memberList} clubSlug={slug} clubId={club.id} />
+      <MembersClient
+        members={memberList}
+        clubSlug={slug}
+        clubId={club.id}
+        sportCategories={sportCategories ?? []}
+      />
 
       {/* Solicitudes de ingreso — van por encima de "Compartir club" por
           prioridad operativa. Público y privado usan el mismo flujo de

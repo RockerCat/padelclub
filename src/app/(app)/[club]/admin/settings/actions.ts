@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { revalidatePath } from "next/cache";
 import { DAY_NAMES, validateOperatingHours, type OperatingHour } from "@/lib/operatingHours";
 import { DURATION_CATALOG, getClubDurations, durationLabel } from "@/lib/durations";
 import { roundToCents } from "@/lib/reservationPricing";
@@ -560,4 +561,48 @@ export async function removeGalleryImage(
 
   if (updateError) return { error: "Error al guardar. Intenta de nuevo." };
   return {};
+}
+
+// ─── Fase 1 módulo deportivo: categoría predeterminada del club ───────────
+// Thin wrapper around configure_club_default_player_category (SECURITY
+// DEFINER, 20260821000001) — every real rule (autorización OWNER/ADMIN,
+// validación de categoría, aprovisionamiento) lives en Postgres; esta
+// acción solo reenvía la llamada y traduce códigos de error, sin duplicar
+// ninguna regla de negocio aquí.
+
+export type ConfigureDefaultCategoryState = {
+  success?: boolean;
+  error?: string;
+  provisionedCount?: number;
+};
+
+export async function configureDefaultPlayerCategory(
+  clubId: string,
+  clubSlug: string,
+  _prevState: ConfigureDefaultCategoryState,
+  formData: FormData
+): Promise<ConfigureDefaultCategoryState> {
+  const supabase = await createClient();
+  const category = formData.get("category");
+
+  if (typeof category !== "string" || category.length === 0) {
+    return { error: "Selecciona una categoría." };
+  }
+
+  const { data, error } = await supabase.rpc("configure_club_default_player_category", {
+    p_club_id: clubId,
+    p_category: category,
+  });
+
+  if (error) {
+    if (error.code === "42501") return { error: "No tienes permiso para configurar este club." };
+    if (error.code === "22023") return { error: "Categoría no válida." };
+    if (error.code === "P0002") return { error: "Club no encontrado." };
+    console.error("[configureDefaultPlayerCategory] RPC failed:", { clubId, category, supabaseError: error });
+    return { error: "Error al guardar. Intenta de nuevo." };
+  }
+
+  const result = data?.[0];
+  revalidatePath(`/${clubSlug}/admin/settings`);
+  return { success: true, provisionedCount: result?.provisioned_count ?? 0 };
 }

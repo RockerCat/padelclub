@@ -48,6 +48,9 @@ export interface Database {
           archived_at: string | null;
           allowed_reservation_durations: number[];
           gallery_image_urls: string[];
+          // Fase 1 módulo deportivo (20260819000001) — nullable until the
+          // OWNER/ADMIN regularizes the club; never defaulted/assumed.
+          default_player_category: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -76,6 +79,7 @@ export interface Database {
           archived_at?: string | null;
           allowed_reservation_durations?: number[];
           gallery_image_urls?: string[];
+          default_player_category?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -104,9 +108,18 @@ export interface Database {
           archived_at?: string | null;
           allowed_reservation_durations?: number[];
           gallery_image_urls?: string[];
+          default_player_category?: string | null;
           updated_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "clubs_default_player_category_fkey";
+            columns: ["default_player_category"];
+            isOneToOne: false;
+            referencedRelation: "sport_categories";
+            referencedColumns: ["code"];
+          },
+        ];
       };
       profiles: {
         Row: {
@@ -620,6 +633,223 @@ export interface Database {
           },
         ];
       };
+      // ─── Fase 1 módulo deportivo (20260818000001 / 20260820000001) ────────
+      // Global, read-only, platform-wide category catalog — no club_id, never
+      // club-configurable. Seeded once with exactly 7 rows.
+      sport_categories: {
+        Row: {
+          code: string;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          code: string;
+          sort_order: number;
+          created_at?: string;
+        };
+        Update: {
+          code?: string;
+          sort_order?: number;
+        };
+        Relationships: [];
+      };
+      // One ranking cycle for a (club, category) combination. ended_at IS
+      // NULL means active; at most one active row per club+category
+      // (partial unique index, not expressible here).
+      club_ranking_cycles: {
+        Row: {
+          id: string;
+          club_id: string;
+          category: string;
+          started_at: string;
+          ended_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          club_id: string;
+          category: string;
+          started_at?: string;
+          ended_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          ended_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "club_ranking_cycles_club_id_fkey";
+            columns: ["club_id"];
+            isOneToOne: false;
+            referencedRelation: "clubs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "club_ranking_cycles_category_fkey";
+            columns: ["category"];
+            isOneToOne: false;
+            referencedRelation: "sport_categories";
+            referencedColumns: ["code"];
+          },
+        ];
+      };
+      // Strict 1:1 extension of club_members (club_member_id doubles as PK
+      // and FK, same shape as profiles.id extending auth.users). category is
+      // deliberately never stored here — always derived via cycle_id. No
+      // direct client write path exists (RLS has zero policies for
+      // anon/authenticated — see 20260820000001/20260821000001).
+      club_member_sport_state: {
+        Row: {
+          club_member_id: string;
+          club_id: string;
+          cycle_id: string;
+          current_points: number;
+          points_reached_at: string;
+          created_at: string;
+        };
+        Insert: {
+          club_member_id: string;
+          club_id: string;
+          cycle_id: string;
+          current_points?: number;
+          points_reached_at?: string;
+          created_at?: string;
+        };
+        Update: Record<string, never>;
+        Relationships: [
+          {
+            foreignKeyName: "club_member_sport_state_member_club_fk";
+            columns: ["club_member_id", "club_id"];
+            isOneToOne: true;
+            referencedRelation: "club_members";
+            referencedColumns: ["id", "club_id"];
+          },
+          {
+            foreignKeyName: "club_member_sport_state_cycle_club_fk";
+            columns: ["cycle_id", "club_id"];
+            isOneToOne: false;
+            referencedRelation: "club_ranking_cycles";
+            referencedColumns: ["id", "club_id"];
+          },
+        ];
+      };
+      // Immutable, private history of category changes. No row is ever
+      // inserted by this Fase 1 provisioning block — reserved for the
+      // future category-change transactional block.
+      club_player_category_changes: {
+        Row: {
+          id: string;
+          club_id: string;
+          club_member_id: string;
+          previous_cycle_id: string;
+          new_cycle_id: string;
+          previous_category: string;
+          new_category: string;
+          previous_points: number;
+          previous_position: number | null;
+          change_type: "promotion" | "demotion" | "correction";
+          comment: string;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          club_id: string;
+          club_member_id: string;
+          previous_cycle_id: string;
+          new_cycle_id: string;
+          previous_category: string;
+          new_category: string;
+          previous_points: number;
+          previous_position?: number | null;
+          change_type: "promotion" | "demotion" | "correction";
+          comment: string;
+          created_by: string;
+          created_at?: string;
+        };
+        Update: Record<string, never>;
+        Relationships: [
+          {
+            foreignKeyName: "club_player_category_changes_member_club_fk";
+            columns: ["club_member_id", "club_id"];
+            isOneToOne: false;
+            referencedRelation: "club_members";
+            referencedColumns: ["id", "club_id"];
+          },
+        ];
+      };
+      // Immutable, append-only points ledger. No row is ever inserted by
+      // this Fase 1 provisioning block — reserved for the future manual
+      // point-adjustment / category-change-technical-movement block.
+      club_player_point_movements: {
+        Row: {
+          id: string;
+          club_id: string;
+          club_member_id: string;
+          cycle_id: string;
+          category: string;
+          previous_total: number;
+          new_total: number;
+          delta: number;
+          adjustment_mode: "delta" | "set";
+          origin: "manual" | "system";
+          system_event_code: "category_change" | null;
+          reason_code:
+            | "internal_league"
+            | "coach_clinic"
+            | "no_show_penalty"
+            | "club_representation_bonus"
+            | "special_event"
+            | "other"
+            | null;
+          comment: string;
+          category_change_id: string | null;
+          created_by: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          club_id: string;
+          club_member_id: string;
+          cycle_id: string;
+          category: string;
+          previous_total: number;
+          new_total: number;
+          delta: number;
+          adjustment_mode: "delta" | "set";
+          origin: "manual" | "system";
+          system_event_code?: "category_change" | null;
+          reason_code?:
+            | "internal_league"
+            | "coach_clinic"
+            | "no_show_penalty"
+            | "club_representation_bonus"
+            | "special_event"
+            | "other"
+            | null;
+          comment: string;
+          category_change_id?: string | null;
+          created_by: string;
+          created_at?: string;
+        };
+        Update: Record<string, never>;
+        Relationships: [
+          {
+            foreignKeyName: "club_player_point_movements_member_club_fk";
+            columns: ["club_member_id", "club_id"];
+            isOneToOne: false;
+            referencedRelation: "club_members";
+            referencedColumns: ["id", "club_id"];
+          },
+          {
+            foreignKeyName: "club_player_point_movements_category_change_id_fkey";
+            columns: ["category_change_id"];
+            isOneToOne: false;
+            referencedRelation: "club_player_category_changes";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       notifications: {
         Row: {
           id: string;
@@ -1009,6 +1239,125 @@ export interface Database {
         };
         Returns: string;
       };
+      // public.get_or_create_active_ranking_cycle — Fase 1 módulo deportivo,
+      // internal only (no GRANT to authenticated) — not callable from the
+      // client, listed here only for schema completeness
+      get_or_create_active_ranking_cycle: {
+        Args: { p_club_id: string; p_category: string };
+        Returns: string;
+      };
+      // public.provision_club_member_sport_state — internal only
+      provision_club_member_sport_state: {
+        Args: { p_club_member_id: string };
+        Returns: string | null;
+      };
+      // public.provision_club_sport_members — internal only; also the
+      // explicit backfill entry point, run manually from the SQL Editor
+      provision_club_sport_members: {
+        Args: { p_club_id: string };
+        Returns: Array<{ cycle_id: string; provisioned_count: number; skipped_count: number }>;
+      };
+      // public.configure_club_default_player_category — the one
+      // authenticated-facing RPC of this block; OWNER/ADMIN only,
+      // re-derived server-side; updates clubs.default_player_category and
+      // provisions every PLAYER still missing a sport state, atomically
+      configure_club_default_player_category: {
+        Args: { p_club_id: string; p_category: string };
+        Returns: Array<{ category: string; cycle_id: string; provisioned_count: number }>;
+      };
+      // public.adjust_club_player_points — Fase 1 módulo deportivo, bloque 5
+      // (20260822000001). OWNER/ADMIN only; manual delta-mode adjustment,
+      // floors at zero, always creates exactly one club_player_point_movements
+      // row.
+      adjust_club_player_points: {
+        Args: {
+          p_club_id: string;
+          p_club_member_id: string;
+          p_delta_points: number;
+          p_reason_code: string;
+          p_note: string;
+        };
+        Returns: Array<{
+          club_member_id: string;
+          category: string;
+          previous_total: number;
+          delta: number;
+          new_total: number;
+          movement_id: string;
+        }>;
+      };
+      // public.get_club_category_ranking — Fase 1 módulo deportivo, bloque 6
+      // (20260824000001). Authenticated + active member of p_club_id only
+      // (any role); read-only base ranking query for one club+category.
+      // Original RETURNS TABLE shape preserved exactly (no avatar_url) —
+      // change_club_player_category (20260822000001/20260823000001) already
+      // consumes this exact shape internally; see get_club_category_ranking_view
+      // below for the UI-facing variant that adds avatar_url.
+      get_club_category_ranking: {
+        Args: { p_club_id: string; p_category: string };
+        Returns: Array<{
+          ranking_position: number;
+          club_member_id: string;
+          profile_id: string;
+          full_name: string | null;
+          category: string;
+          current_points: number;
+          points_reached_at: string;
+        }>;
+      };
+      // public.get_club_category_ranking_view — Fase 1 módulo deportivo,
+      // bloque 6 (20260824000001). UI-facing wrapper: composes
+      // get_club_category_ranking (inherits its authorization) and adds
+      // avatar_url. This is the RPC the ranking page/UI calls — never the
+      // one above directly.
+      get_club_category_ranking_view: {
+        Args: { p_club_id: string; p_category: string };
+        Returns: Array<{
+          ranking_position: number;
+          club_member_id: string;
+          profile_id: string;
+          full_name: string | null;
+          avatar_url: string | null;
+          category: string;
+          current_points: number;
+          points_reached_at: string;
+        }>;
+      };
+      // public.change_club_player_category — OWNER/ADMIN only; validates
+      // promotion/demotion direction against sport_categories.sort_order,
+      // resets points to 0, inserts exactly one club_player_category_changes
+      // row, never a point movement
+      change_club_player_category: {
+        Args: {
+          p_club_id: string;
+          p_club_member_id: string;
+          p_target_category: string;
+          p_change_type: string;
+          p_note: string;
+        };
+        Returns: Array<{
+          club_member_id: string;
+          previous_category: string;
+          new_category: string;
+          previous_points: number;
+          new_points: number;
+          previous_cycle_id: string;
+          new_cycle_id: string;
+          category_change_id: string;
+        }>;
+      };
+      // public.get_club_member_sport_state — OWNER/ADMIN only; the read
+      // companion the admin UI needs since club_member_sport_state/
+      // club_ranking_cycles have zero RLS policies and no client GRANT
+      get_club_member_sport_state: {
+        Args: { p_club_id: string; p_club_member_id: string };
+        Returns: Array<{
+          club_member_id: string;
+          category: string;
+          current_points: number;
+          points_reached_at: string;
+        }>;
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
@@ -1071,6 +1420,13 @@ export type ReservationType = Reservation["type"];
 export type ReservationStatus = Reservation["status"];
 
 export type ClubOperatingHour = Tables<"club_operating_hours">;
+
+// Fase 1 módulo deportivo — global, ordered category catalog (7 fixed
+// rows). Only this table's convenience type is exported here: nothing in
+// this provisioning block reads club_ranking_cycles/club_member_sport_state/
+// club_player_category_changes/club_player_point_movements directly from
+// client code yet.
+export type SportCategory = Tables<"sport_categories">;
 
 export type ClubNews = Tables<"club_news">;
 

@@ -6,14 +6,17 @@ import { X } from "lucide-react";
 import { Badge, Button, ConfirmDialog, Toast } from "@/components/ui";
 import { PlayerAvatar } from "@/components/players/PlayerAvatar";
 import { PlayerCategoryBadge } from "@/components/players/PlayerCategoryBadge";
-import { PLAYER_CATEGORIES, type PlayerCategory } from "@/types/database";
-import { toggleMemberActive, updateMemberCategory, getMatchesPlayedCount } from "./actions";
+import { PLAYER_CATEGORIES, type PlayerCategory, type SportCategory } from "@/types/database";
+import { toggleMemberActive, updateMemberCategory, getMatchesPlayedCount, getClubMemberSportState } from "./actions";
+import { AdjustPlayerPointsModal } from "./AdjustPlayerPointsModal";
+import { ChangePlayerCategoryModal } from "./ChangePlayerCategoryModal";
 import type { MemberRow } from "./MembersClient";
 
 interface MemberModalProps {
   member: MemberRow;
   clubId: string;
   clubSlug: string;
+  sportCategories: SportCategory[];
   onClose: () => void;
 }
 
@@ -32,7 +35,7 @@ function formatDate(iso: string) {
 // updated from each action's own result, instead of re-reading `member`
 // after a router.refresh() — the grid's data refreshes in the background,
 // but this modal instance doesn't get fresh props until it remounts.
-export function MemberModal({ member, clubId, clubSlug, onClose }: MemberModalProps) {
+export function MemberModal({ member, clubId, clubSlug, sportCategories, onClose }: MemberModalProps) {
   const router = useRouter();
   const name = member.profiles?.full_name ?? "Sin nombre";
 
@@ -62,6 +65,28 @@ export function MemberModal({ member, clubId, clubSlug, onClose }: MemberModalPr
       cancelled = true;
     };
   }, [clubId, member.profile_id]);
+
+  // Fase 1 módulo deportivo — categoría/puntos vigentes, obtenidos vía RPC
+  // (club_member_sport_state no tiene lectura directa de cliente, ver
+  // 20260822000001). null = todavía cargando o el jugador no tiene estado
+  // deportivo aún (club sin default_player_category configurada) — ambos
+  // casos muestran "—", igual que el placeholder que ya existía aquí.
+  const [sportCategory, setSportCategory] = useState<string | null>(null);
+  const [sportPoints, setSportPoints] = useState<number | null>(null);
+  const [adjustPointsOpen, setAdjustPointsOpen] = useState(false);
+  const [changeCategoryOpen, setChangeCategoryOpen] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getClubMemberSportState(clubId, member.id).then((result) => {
+      if (cancelled) return;
+      setSportCategory(result.category);
+      setSportPoints(result.currentPoints);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [clubId, member.id]);
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -167,8 +192,12 @@ export function MemberModal({ member, clubId, clubSlug, onClose }: MemberModalPr
               </div>
 
               <div className="flex items-center justify-between text-sm">
-                <span className="text-brand-muted">Ranking</span>
-                <span className="text-white/60">—</span>
+                <span className="text-brand-muted">Categoría deportiva</span>
+                <span className="text-white/60">{sportCategory ?? "—"}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-brand-muted">Puntos actuales</span>
+                <span className="text-white/60">{sportPoints === null ? "—" : sportPoints}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-brand-muted">Partidos jugados</span>
@@ -178,6 +207,21 @@ export function MemberModal({ member, clubId, clubSlug, onClose }: MemberModalPr
                 <span className="text-brand-muted">Fecha de ingreso</span>
                 <span className="text-white">{formatDate(member.joined_at)}</span>
               </div>
+
+              {/* Solo disponibles una vez que el jugador tiene estado
+                  deportivo (club ya configurado) — si sportCategory sigue
+                  null tras cargar, el club aún no tiene
+                  default_player_category y no hay nada que ajustar. */}
+              {sportCategory !== null && (
+                <div className="flex items-center gap-2 pt-1">
+                  <Button type="button" variant="secondary" size="sm" onClick={() => setAdjustPointsOpen(true)}>
+                    Ajustar puntos
+                  </Button>
+                  <Button type="button" variant="secondary" size="sm" onClick={() => setChangeCategoryOpen(true)}>
+                    Cambiar categoría
+                  </Button>
+                </div>
+              )}
             </div>
 
             {/* Future sections (historial de reservas, partidos, ranking
@@ -224,6 +268,41 @@ export function MemberModal({ member, clubId, clubSlug, onClose }: MemberModalPr
       />
 
       <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />
+
+      {adjustPointsOpen && sportCategory !== null && sportPoints !== null && (
+        <AdjustPlayerPointsModal
+          clubId={clubId}
+          clubSlug={clubSlug}
+          clubMemberId={member.id}
+          playerName={name}
+          category={sportCategory}
+          currentPoints={sportPoints}
+          onClose={() => setAdjustPointsOpen(false)}
+          onSuccess={(newTotal) => {
+            setSportPoints(newTotal);
+            setAdjustPointsOpen(false);
+            setToastMessage("Puntos actualizados correctamente");
+          }}
+        />
+      )}
+
+      {changeCategoryOpen && (
+        <ChangePlayerCategoryModal
+          clubId={clubId}
+          clubSlug={clubSlug}
+          clubMemberId={member.id}
+          playerName={name}
+          currentCategory={sportCategory}
+          categories={sportCategories}
+          onClose={() => setChangeCategoryOpen(false)}
+          onSuccess={(newCategory) => {
+            setSportCategory(newCategory);
+            setSportPoints(0);
+            setChangeCategoryOpen(false);
+            setToastMessage("Categoría actualizada correctamente");
+          }}
+        />
+      )}
     </>
   );
 }

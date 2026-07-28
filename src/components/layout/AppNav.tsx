@@ -20,6 +20,7 @@ import {
   Globe,
   Megaphone,
   BarChart3,
+  Trophy,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils/cn";
@@ -106,6 +107,11 @@ function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequest
         color: "secondary" as const,
       },
       {
+        label: "Ranking",
+        href: `/${slug}/ranking`,
+        icon: Trophy,
+      },
+      {
         label: "Estadísticas",
         href: `/${slug}/admin/statistics`,
         icon: BarChart3,
@@ -147,6 +153,11 @@ function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequest
         badgeCount: pendingJoinRequests,
       },
       {
+        label: "Ranking",
+        href: `/${slug}/ranking`,
+        icon: Trophy,
+      },
+      {
         label: "Estadísticas",
         href: `/${slug}/admin/statistics`,
         icon: BarChart3,
@@ -174,6 +185,11 @@ function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequest
         label: "Reservaciones",
         href: `/${slug}/reservations`,
         icon: CalendarDays,
+      },
+      {
+        label: "Ranking",
+        href: `/${slug}/ranking`,
+        icon: Trophy,
       }
     );
   }

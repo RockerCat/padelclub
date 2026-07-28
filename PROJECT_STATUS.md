@@ -3,7 +3,7 @@
 ## Estado General
 
 * Estado: Validation Gate 1.0
-* Última actualización: 26 de julio de 2026 (modelo global de cuentas y endurecimiento de seguridad, retiro de invitaciones para PLAYER, navegación inteligente multi-club, cancelación de reservas con ventana de 2 horas, salida voluntaria de un club, desactivación de jugadores que limpia compromisos futuros en vez de bloquear, edición de reservas con protección real de concurrencia compartida entre creación/edición/aprobación, archivado de clubes por el OWNER, estadísticas operativas del club, perfil personal global del usuario integrado a la navegación principal)
+* Última actualización: 28 de julio de 2026 (Fase 1 del módulo deportivo: categorías, ciclos de ranking, ledger de puntos, cambio de categoría y vista de ranking por categoría, incluyendo una vulnerabilidad de autorización real encontrada y corregida en producción)
 
 ## Visión
 
@@ -611,6 +611,73 @@ Pendiente:
 
 ---
 
+# Módulo Deportivo (Fase 1)
+
+Estado:
+
+✅ MVP funcional — migraciones aplicadas manualmente en producción, validadas con datos reales de `alex-club-padel`.
+
+```text
+supabase/migrations/20260818000001_sport_categories.sql
+supabase/migrations/20260819000001_club_default_player_category.sql
+supabase/migrations/20260820000001_sport_schema_base.sql
+supabase/migrations/20260821000001_sport_provisioning.sql
+supabase/migrations/20260822000001_sport_points_and_category_operations.sql
+supabase/migrations/20260823000001_fix_ambiguous_club_member_id_references.sql
+supabase/migrations/20260824000001_ranking_view_authorization.sql
+supabase/migrations/20260825000001_fix_sport_state_authorization_bypass.sql
+```
+
+Ruta pública de la vista de ranking:
+
+```text
+/[club]/ranking
+```
+
+Ver CLAUDE.md → Sport / Ranking Module Principles para las reglas de arquitectura permanentes. Este apartado documenta el detalle de lo construido y su historial.
+
+**Modelo de datos:**
+
+* `sport_categories`: catálogo global (7a a 1a, `sort_order` ascendente de más débil a más fuerte), lectura pública
+* `clubs.default_player_category`: categoría por defecto configurable por el OWNER (`DefaultPlayerCategoryModal`, Configuración)
+* `club_ranking_cycles`: un ciclo activo por club+categoría (`ended_at IS NULL`); la categoría de un jugador nunca se guarda directamente, siempre se deriva por join contra su ciclo activo
+* `club_member_sport_state`: extensión 1:1 de `club_members` (PK = `club_member_id`, nunca `profiles.id`) — `current_points`, `cycle_id`, `points_reached_at`
+* `club_player_point_movements`: ledger inmutable/append-only de todo movimiento de puntos (manual u originado por un cambio de categoría)
+* `club_player_category_changes`: historial inmutable de cada cambio de categoría (promoción/descenso/corrección)
+* Aprovisionamiento automático vía trigger (`club_members_provision_sport_state`) cuando un miembro pasa a ser PLAYER activo — nunca un paso manual
+
+**RPCs (todas `SECURITY DEFINER`, `authenticated` únicamente, nunca `anon`):**
+
+* `get_or_create_active_ranking_cycle`, `provision_club_member_sport_state`, `provision_club_sport_members` (internas, sin GRANT directo a cliente)
+* `configure_club_default_player_category(p_club_id, p_category)` — OWNER/ADMIN, configura la categoría por defecto del club y aprovisiona a los miembros faltantes
+* `adjust_club_player_points(p_club_id, p_club_member_id, p_delta_points, p_reason_code, p_note)` — OWNER/ADMIN, ajuste manual con catálogo fijo de motivos (`internal_league`, `coach_clinic`, `no_show_penalty`, `club_representation_bonus`, `special_event`, `other`); los puntos nunca bajan de cero y un ajuste cuyo efecto neto sería cero se rechaza explícitamente
+* `change_club_player_category(p_club_id, p_club_member_id, p_target_category, p_change_type, p_note)` — OWNER/ADMIN, promoción/descenso/corrección validada contra `sort_order`; siempre escribe un movimiento técnico adicional que cierra el ciclo anterior en su saldo real y reinicia el jugador en 0 puntos dentro del nuevo ciclo
+* `get_club_category_ranking(p_club_id, p_category)` / `get_club_category_ranking_view(...)` (con `avatar_url`, usada por la UI) — cualquier miembro activo del club, cualquier rol
+* `get_club_member_sport_state(p_club_id, p_club_member_id)` — OWNER/ADMIN leen cualquier estado del club; un PLAYER activo únicamente el propio
+
+**UI:**
+
+* Jugadores (`/[club]/admin/players`): `AdjustPlayerPointsModal`, `ChangePlayerCategoryModal` (OWNER/ADMIN)
+* Configuración (`/[club]/admin/settings`): `DefaultPlayerCategoryModal` (OWNER/ADMIN)
+* Ranking (`/[club]/ranking`, nuevo ítem "Ranking" en `AppNav` para OWNER/ADMIN/PLAYER, fuera del tab bar móvil fijo de 5 ítems): selector de categoría sobre el catálogo real, posición/avatar/nombre/puntos respetando el `ranking_position` calculado en servidor (incluye empates), etiqueta "Tú" para la fila propia, estados de carga/vacío/error
+
+**Incidente de seguridad (encontrado y corregido dentro de esta misma fase, antes de cualquier uso real por clubes):**
+
+* Validación empírica con sesiones reales (OWNER, PLAYER y un usuario autenticado sin ninguna membresía en el club) confirmó que `get_club_member_sport_state` permitía a cualquier usuario autenticado sin membresía en el club leer el estado deportivo real de cualquier jugador — causa raíz: `v_role := public.club_role(p_club_id)` puede devolver `NULL`, y `IF v_role NOT IN ('OWNER','ADMIN')` evalúa `NULL NOT IN (...)` como `NULL`, que en `plpgsql` se trata como falso, saltando el bloque de autorización completo
+* Auditoría posterior encontró el mismo patrón, con capacidad de **escritura**, en `adjust_club_player_points`, `change_club_player_category` y `configure_club_default_player_category` — nunca llegó a explotarse con datos reales (no se probó a propósito, para no escribir datos), pero el código lo permitía
+* Corregido en `20260825000001`: autorización explícita y positiva en las cuatro funciones — cada una consulta directamente `club_members` por una membresía ACTIVA real del caller (nunca depende solo de `club_role()`), compara el rol con `IN (...)` (nunca `NOT IN`), y rechaza con `42501` en cualquier rama no contemplada, sin caminos implícitos. `change_club_player_category` recibió además una guarda explícita de `NULL` en `p_change_type`
+* Revalidado íntegramente con datos reales tras aplicar el hotfix: los mismos intentos de bypass (usuario sin membresía, PLAYER contra otro PLAYER, PLAYER desactivado, `anon`) ahora reciben `42501` sin excepción, sin ninguna escritura parcial; el comportamiento legítimo (OWNER ajustando puntos, autolectura de un PLAYER) se confirmó intacto
+
+Pendiente:
+
+* Ranking global/cross-club
+* Torneos, ladder, medallas
+* Registro de resultados de partido y asignación automática de puntos (Fase 1 es exclusivamente manual vía OWNER/ADMIN — no hay todavía ningún flujo que otorgue puntos a partir de un resultado real)
+* Victorias/Derrotas/Win % (sin tracking de resultados en el esquema)
+* Reactivación de un jugador desactivado y su efecto (si alguno) sobre su estado deportivo
+
+---
+
 # Funcionalidades Pendientes de Alta Prioridad
 
 ## Owner Experience
@@ -632,7 +699,7 @@ Pendiente:
 
 No prioritarias para el MVP:
 
-* Rankings
+* Ranking global/cross-club (el ranking por categoría dentro de un club ya está implementado — ver Módulo Deportivo)
 * Torneos
 * Clínicas
 * Ladder

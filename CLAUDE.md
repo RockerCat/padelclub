@@ -160,7 +160,7 @@ Features such as:
 
 should not be prioritized over operational workflows unless explicitly requested.
 
-The following are explicitly out of MVP scope — do not implement yet, even opportunistically: club ownership transfer, ranking, guest players, global "delete my Mi Pádel Club account" (see Club Membership Principles), and any membership/subscription-tier strategy.
+The following are explicitly out of MVP scope — do not implement yet, even opportunistically: club ownership transfer, guest players, global "delete my Mi Pádel Club account" (see Club Membership Principles), and any membership/subscription-tier strategy. Per-club category ranking (see Sport / Ranking Module Principles) was explicitly requested and is now implemented; global cross-club ranking, tournaments, ladders, and automatic points from match results remain out of scope.
 
 When there is uncertainty:
 
@@ -448,7 +448,19 @@ Leaving a club (the player's own voluntary equivalent of the above) only ends th
 
 Before a player leaves, the platform warns them that their own future reservations will be cancelled and that they will stop participating in others' future reservations. Only after the player confirms — reusing the exact same reservation-cleanup rule deactivation uses above (own reservations cancelled in full, participation in others' removed, nothing about a reservation already underway or in the past ever touched) — is the membership itself deactivated. Ownership of a reservation is never transferred to another participant; the MVP has no such mechanism.
 
-Leaving marks the membership inactive (a voluntary departure), never deletes it. Rejoining afterward follows the normal join rules: instant for a public club, a new request for a private club. Historical stats are preserved across a departure. Once ranking exists (not yet implemented), leaving a club will mean losing that club's ranking points specifically.
+Leaving marks the membership inactive (a voluntary departure), never deletes it. Rejoining afterward follows the normal join rules: instant for a public club, a new request for a private club. Historical stats are preserved across a departure. Deactivation and leaving do not touch a member's sport state (see Sport / Ranking Module Principles) — points and category history are preserved untouched either way; the member simply stops appearing in the club's ranking view because it only ever lists active PLAYER members.
+
+---
+
+## Sport / Ranking Module Principles
+
+Fase 1 of the sport module adds a per-club category ranking — a data foundation (`sport_categories`, `club_ranking_cycles`, `club_member_sport_state`, plus two immutable history tables) and a read-only ranking view (`/[club]/ranking`, all roles). It is not tournaments, ladders, or automatic match-result scoring.
+
+`club_members.id` (never `profiles.id`) is the sport identity anchor. A member's category is never stored directly — it is always derived by joining through the club's currently active ranking cycle (one active cycle per club+category). Points move only through an immutable, append-only ledger (`club_player_point_movements`); a category change always writes exactly one additional technical movement that closes the old cycle's balance at its true final total. Points floor at zero, and an adjustment whose effective delta would be zero is rejected outright, never silently absorbed.
+
+Provisioning a member's sport state is automatic (a trigger on `club_members`, for every active PLAYER), never a manual admin step, consistent with Principle 2. What remains manual in Fase 1 is the actual awarding of points and category changes (`adjust_club_player_points`, `change_club_player_category`, OWNER/ADMIN only, from Jugadores) — there is no match/tournament result flow yet to drive this automatically; that is a future phase, not yet designed.
+
+Every sport RPC derives authorization from an explicit, direct query against `club_members` for an ACTIVE membership of the caller in that specific club — never solely from a role-returning helper whose result can be `NULL`, and never `NOT IN` (or any other comparison that silently passes on `NULL`) over a value that can be `NULL`. A caller with no active membership is always rejected explicitly (`42501`); there is never a fall-through to an unguarded read or write. This is a hard-won rule — a real authorization bypass of exactly this shape reached production once and was fixed (see PROJECT_STATUS.md).
 
 ---
 
