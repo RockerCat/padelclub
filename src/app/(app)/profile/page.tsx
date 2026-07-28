@@ -47,9 +47,15 @@ export default async function ProfilePage() {
 
   // Información personal: resolved the same way every other surface in the
   // app already resolves it (getSidebarIdentity) — independent of the
-  // activity RPC below, so a failure in one never hides the other.
-  const identity = await getSidebarIdentity(supabase, user.id, user.email ?? null);
-  const { data: activity, error } = await getMyProfileActivity(supabase);
+  // activity RPC below, so a failure in one never hides the other. phone
+  // no es parte de getSidebarIdentity (esa función también alimenta el
+  // sidebar, que no lo necesita) — se resuelve aparte, en paralelo, solo
+  // para esta pantalla.
+  const [identity, { data: activity, error }, { data: phoneRow }] = await Promise.all([
+    getSidebarIdentity(supabase, user.id, user.email ?? null),
+    getMyProfileActivity(supabase),
+    supabase.from("profiles").select("phone").eq("id", user.id).single(),
+  ]);
 
   const hasMemberships = !!activity && activity.activeMemberships.length > 0;
   const hasActivity = !!activity && activity.summary.totalReservations > 0;
@@ -78,7 +84,12 @@ export default async function ProfilePage() {
           lg (1024px)+, where there's genuinely enough width for both. */}
       <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6 lg:gap-8 items-start">
         <div className="flex flex-col gap-6">
-          <PersonalInfoCard name={identity.name} email={identity.email} avatarUrl={identity.avatarUrl} />
+          <PersonalInfoCard
+            name={identity.name}
+            email={identity.email}
+            avatarUrl={identity.avatarUrl}
+            phone={phoneRow?.phone ?? null}
+          />
 
           {activity && (
             <SectionCard title="Membresías actuales">

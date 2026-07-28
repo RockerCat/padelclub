@@ -452,15 +452,33 @@ Leaving marks the membership inactive (a voluntary departure), never deletes it.
 
 ---
 
+## Player Contact Principles
+
+A valid WhatsApp phone is mandatory for every new PLAYER account — it is the platform's replacement for the WhatsApp-thread coordination clubs already do manually, so an OWNER/ADMIN must always be able to reach a player directly. Phone normalization and validation live in one shared utility (`src/lib/utils/phone.ts`); every entry point that can turn an account into an active PLAYER membership (signup during a join flow, `join_public_club`, `create_join_request`/`approve_join_request`, membership reactivation) re-validates through the same rule server-side — never trusted from client input alone, and never a second copy of the validation logic. Accounts created before this rule existed are grandfathered with a possibly-missing phone; the gap is closed opportunistically as they touch a gated flow again (e.g. reactivation) or edit their own number from Mi Perfil, never by a bulk forced migration during the MVP.
+
+A player's WhatsApp number is only ever exposed to OWNER/ADMIN of a club the player belongs to, and only as a "Contactar por WhatsApp" action (a `wa.me` deep link), never displayed as raw text — consistent with the Privacy Principles above.
+
+## Profile Photo Principles
+
+A user's profile photo is personal-account-level, not club-scoped, stored in the `profile-avatars` Storage bucket under a folder keyed by the owning `auth.uid()`, with RLS restricting writes to that same folder. It is edited only from the global "Mi Perfil" page and immediately reflected everywhere that profile's avatar is shown.
+
+Sporting identity (a PLAYER's photo plus their per-club category and Top-3 ranking crown) is always rendered through the shared `PlayerSportAvatar`/`RankMedalCrown` components (`src/components/players/`), reused verbatim across Ranking, the Jugadores admin view, and the member detail modal. Never re-implement this presentation per screen. This applies only to PLAYER identity — a club's own logo and an OWNER/ADMIN's avatar are separate concerns and never route through these components.
+
+---
+
 ## Sport / Ranking Module Principles
 
 Fase 1 of the sport module adds a per-club category ranking — a data foundation (`sport_categories`, `club_ranking_cycles`, `club_member_sport_state`, plus two immutable history tables) and a read-only ranking view (`/[club]/ranking`, all roles). It is not tournaments, ladders, or automatic match-result scoring.
 
 `club_members.id` (never `profiles.id`) is the sport identity anchor. A member's category is never stored directly — it is always derived by joining through the club's currently active ranking cycle (one active cycle per club+category). Points move only through an immutable, append-only ledger (`club_player_point_movements`); a category change always writes exactly one additional technical movement that closes the old cycle's balance at its true final total. Points floor at zero, and an adjustment whose effective delta would be zero is rejected outright, never silently absorbed.
 
+The legacy `club_members.category` free-text field (the pre-Fase-1 "Principiante"/skill-level label) is retired from every UI surface — the ranking-cycle category above is now the only category a player is ever shown. The column itself is left in place, unread by the UI, never resurrected as a second source of truth.
+
 Provisioning a member's sport state is automatic (a trigger on `club_members`, for every active PLAYER), never a manual admin step, consistent with Principle 2. What remains manual in Fase 1 is the actual awarding of points and category changes (`adjust_club_player_points`, `change_club_player_category`, OWNER/ADMIN only, from Jugadores) — there is no match/tournament result flow yet to drive this automatically; that is a future phase, not yet designed.
 
 Every sport RPC derives authorization from an explicit, direct query against `club_members` for an ACTIVE membership of the caller in that specific club — never solely from a role-returning helper whose result can be `NULL`, and never `NOT IN` (or any other comparison that silently passes on `NULL`) over a value that can be `NULL`. A caller with no active membership is always rejected explicitly (`42501`); there is never a fall-through to an unguarded read or write. This is a hard-won rule — a real authorization bypass of exactly this shape reached production once and was fixed (see PROJECT_STATUS.md).
+
+Ordinary `type='match'` reservations may count toward "partidos jugados" once confirmed and finished, but they never have an official result, winner, wins, losses, points, or ranking impact. Only matches belonging to the future tournaments module will be able to record results and affect points or ranking — that module does not exist yet and is not designed. A brief, real precedent for why this is stated explicitly: a first attempt (`20260831000001`/`20260831000002`) wired official match results directly onto `reservations`, was applied, and had to be withdrawn (`20260901000001`) once this rule was confirmed — never repeat that coupling.
 
 ---
 

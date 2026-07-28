@@ -1358,6 +1358,13 @@ export interface Database {
           points_reached_at: string;
         }>;
       };
+      // public.get_club_member_email — OWNER/ADMIN only; profiles has no
+      // email column, the real value lives in auth.users only reachable
+      // via a SECURITY DEFINER join (20260828000001)
+      get_club_member_email: {
+        Args: { p_club_id: string; p_club_member_id: string };
+        Returns: string | null;
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

@@ -3,7 +3,7 @@
 ## Estado General
 
 * Estado: Validation Gate 1.0
-* Última actualización: 28 de julio de 2026 (Fase 1 del módulo deportivo: categorías, ciclos de ranking, ledger de puntos, cambio de categoría y vista de ranking por categoría, incluyendo una vulnerabilidad de autorización real encontrada y corregida en producción)
+* Última actualización: 28 de julio de 2026 (Fase 1 del módulo deportivo: categorías, ciclos de ranking, ledger de puntos, cambio de categoría y vista de ranking por categoría, incluyendo una vulnerabilidad de autorización real encontrada y corregida en producción; además, en esta misma fecha: rediseño visual del Ranking (podio + posición propia), avatar deportivo unificado en Ranking/Jugadores/modal de miembro, carga de foto de perfil y edición de WhatsApp desde Mi Perfil, WhatsApp obligatorio para nuevas cuentas PLAYER en todos los puntos de entrada, sección de contacto en el modal de miembro, y un intento de resultados de partido implementado y luego revertido por regla de negocio — ver Módulo Deportivo (Fase 1))
 
 ## Visión
 
@@ -462,6 +462,10 @@ Incluye:
 * Multi-club
 * **Desactivar jugador** (`deactivate_player`, RPC `SECURITY DEFINER`): OWNER/ADMIN puede desactivar a un PLAYER activo de su propio club desde `MemberModal`. Ya no bloquea la acción cuando el jugador tiene reservas activas — en su lugar, la propia operación las limpia de forma atómica: cancela toda reserva futura `pending`/`confirmed` creada por el jugador (mismo modelo de cancelación que cualquier otra — `status`/`cancelled_at`/`cancelled_by`, con `cancelled_by` = el OWNER/ADMIN ejecutor, sin la ventana de 2 horas por ser una cancelación operativa del club) y retira únicamente su participación futura en reservas creadas por otros (sin tocar esa reserva, su creador ni sus demás participantes). `club_members` queda con `is_active = false`; `account_type`, el perfil y el historial nunca se tocan. El jugador recibe una notificación `player_deactivated` ("Tu acceso a [club] fue desactivado por el club"); los afectados por las reservas canceladas/retiradas reciben las notificaciones normales de cancelación/participación
 * "Partidos jugados" en el detalle del miembro muestra el número real (o `0`), calculado en el momento desde `reservations`/`reservation_players` (partido, confirmado, ya finalizado, sin duplicar cuando el jugador es creador y participante a la vez)
+* **Avatar deportivo unificado**: nuevos componentes reutilizables `PlayerSportAvatar`/`RankMedalCrown` (`src/components/players/`) reemplazan toda representación de avatar de jugador — tarjeta de Jugadores, modal de miembro y tabla de Ranking comparten exactamente el mismo componente (foto + esquina de categoría + corona si está en el Top 3), sin lógica duplicada por pantalla. No aplica a avatares de club/OWNER/ADMIN
+* Tarjeta de Jugadores simplificada: se retiró el badge duplicado de categoría legacy ("Principiante") y se redujo ~25-30% la altura vertical de cada tarjeta
+* Categoría legacy `club_members.category` retirada de toda la UI (ver CLAUDE.md → Sport / Ranking Module Principles) — la única categoría que se muestra ahora es la del ciclo de ranking Fase 1
+* **Modal "Miembro del club" ampliado**: sección "Información deportiva" ahora incluye posición de ranking y usa skeleton de carga real (nunca muestra "—" mientras carga, solo cuando la carga termina y no hay dato); nueva sección "Contacto" (una sola fila: email en texto plano no clicable + botón "Contactar por WhatsApp" vía `wa.me`, mostrado solo si el miembro tiene teléfono) — el email se resuelve mediante un nuevo RPC `get_club_member_email` (`SECURITY DEFINER`, OWNER/ADMIN del mismo club únicamente)
 
 Pendiente:
 
@@ -492,6 +496,7 @@ Incluye:
 * Corregido: el estado "resuelta" (aprobada/rechazada) de una solicitud de ingreso o de reserva ahora es compartido entre **todos** los OWNER/ADMIN notificados — antes cada quien veía su propio estado local en cuanto la abría, sin reflejar que otro administrador ya la había resuelto. Se agregaron columnas `resolved_status`/`resolved_at` a `notifications` (actualizadas atómicamente dentro de las mismas RPCs que resuelven la solicitud); `read_at` sigue siendo estrictamente por-usuario y nunca se usa para inferir si la solicitud fue resuelta
 * Corregido: un club configurado como público seguía enviando al jugador por el flujo de solicitud+aprobación de un club privado. El botón "Unirme al club" y su server action (`createJoinRequest`) ahora releen `clubs.visibility` en el servidor (nunca confían en el dato ya cargado en el cliente) y, si es público, invocan el RPC `join_public_club` (ya existía pero no estaba conectado a ninguna vista real) — crea la membresía PLAYER activa de inmediato, sin fila en `club_join_requests`, y redirige al jugador a su dashboard real (`getClubEntryPath`, con el rol tomado de la membresía recién confirmada, nunca hardcodeado). El flujo de clubes privados no cambió. También se corrigió una causa de "Ya eres miembro de este club" apareciendo por error: el CTA de unión se montaba tres veces a la vez (hero + 2 bloques inferiores) y las tres disparaban el auto-envío al volver de signup/login; ahora solo una lo dispara
 * Nuevo: cuando un jugador se une directo a un club público, OWNER y cada ADMIN activo reciben una notificación informativa ("Nuevo jugador en el club") que enlaza a Jugadores — sin solicitud de ingreso, sin acciones de aprobar/rechazar, sin notificar al jugador. Se genera atómicamente dentro del mismo RPC `join_public_club`, solo cuando la membresía se crea de verdad (nunca en el camino idempotente de "ya era miembro"), reutilizando la tabla/Realtime/lectura individual de notificaciones ya existentes
+* **WhatsApp obligatorio para nuevas cuentas PLAYER** (ver CLAUDE.md → Player Contact Principles): utilidad compartida `src/lib/utils/phone.ts` (`normalizePhone`/`isValidPhone`/`toWhatsAppLink`) reutilizada por el signup, la edición en Mi Perfil y todas las validaciones server-side. Se cerraron los cuatro puntos de entrada por los que una cuenta podía volverse PLAYER activo sin teléfono válido: `SignupForm` exige el campo cuando el flujo viene de un `?intent=join-club`, y `join_public_club`/`create_join_request`+`approve_join_request`/la reactivación de membresía rechazan la operación (`P0006`) si el perfil no tiene un teléfono válido en ese momento. Cuentas anteriores a esta regla quedan sin forzar (sin migración masiva); el hueco se cierra al tocar de nuevo un flujo protegido o al editar el teléfono desde Mi Perfil. Existe además `scripts/backfillLocalPlayerPhones.ts` (dry-run por defecto, `--apply` para escribir) para un backfill puntual local de un número de prueba — nunca se ejecuta automáticamente ni desde una migración
 
 Pendiente:
 
@@ -582,7 +587,7 @@ Pendiente:
 
 Estado:
 
-✅ MVP funcional — migración `supabase/migrations/20260817000001_profile_activity.sql` **aplicada en desarrollo**, validada con datos reales.
+✅ MVP funcional — migración `supabase/migrations/20260817000001_profile_activity.sql` **aplicada en desarrollo**, validada con datos reales. Ampliado con carga de foto de perfil y edición de WhatsApp (migración `20260827000001_profile_avatars_storage.sql`, aplicada).
 
 Ruta:
 
@@ -599,6 +604,8 @@ Modelo:
 * Como el modelo actual no permite que un OWNER/ADMIN se agregue a sí mismo como jugador en ninguna reserva, es esperado y correcto que su resumen personal quede en cero — nunca se aproxima ni se inventa participación; la UI lo comunica con un estado vacío neutral, no como error
 * Métricas: reservas totales/confirmadas/pendientes/canceladas/rechazadas, partidos, clases, horas confirmadas (nunca "horas jugadas" — no se verifica asistencia real); evolución mensual (últimos 12 meses fijos, con ceros donde no hay actividad); distribución por tipo (partidos/clases); actividad reciente (15 más recientes, `date`/`start_time` descendente, nunca `created_at`); membresías activas (`is_active = true`, con indicador visual de club archivado)
 * Sin ingresos, ranking, ELO, victorias/derrotas ni comparación entre usuarios
+* **Foto de perfil**: nuevo bucket de Storage `profile-avatars`, con carpeta por usuario (`auth.uid()`) y políticas RLS que solo permiten a cada usuario escribir dentro de su propia carpeta; subir/reemplazar/eliminar desde `ProfileAvatarUpload`, propagado de inmediato a todo componente que ya usaba `profiles.avatar_url`
+* **Edición de WhatsApp**: `PhoneEditField` + server action `updateOwnPhone`, reutiliza la misma validación/normalización de `src/lib/utils/phone.ts` que el resto de la plataforma (ver CLAUDE.md → Player Contact Principles)
 
 Navegación:
 
@@ -668,11 +675,18 @@ Ver CLAUDE.md → Sport / Ranking Module Principles para las reglas de arquitect
 * Corregido en `20260825000001`: autorización explícita y positiva en las cuatro funciones — cada una consulta directamente `club_members` por una membresía ACTIVA real del caller (nunca depende solo de `club_role()`), compara el rol con `IN (...)` (nunca `NOT IN`), y rechaza con `42501` en cualquier rama no contemplada, sin caminos implícitos. `change_club_player_category` recibió además una guarda explícita de `NULL` en `p_change_type`
 * Revalidado íntegramente con datos reales tras aplicar el hotfix: los mismos intentos de bypass (usuario sin membresía, PLAYER contra otro PLAYER, PLAYER desactivado, `anon`) ahora reciben `42501` sin excepción, sin ninguna escritura parcial; el comportamiento legítimo (OWNER ajustando puntos, autolectura de un PLAYER) se confirmó intacto
 
+**Intento de resultados de partido, implementado y luego revertido (mismo periodo, antes de cualquier uso real por clubes):**
+
+* Se implementó un primer bloque de "resultados de partido" (equipos, marcador, ganador y estadísticas derivadas de victorias/derrotas/win%) acoplado directamente a `reservations` — migraciones `20260831000001_match_results_schema.sql` y `20260831000002_record_match_result_rpc.sql`, ambas aplicadas manualmente en producción
+* Se confirmó una regla de negocio definitiva que cambia por completo el alcance: una reserva ordinaria (`type='match'`) nunca puede tener un resultado oficial — eso queda reservado exclusivamente a un futuro módulo de torneos, todavía sin diseñar (ver CLAUDE.md → Sport / Ranking Module Principles)
+* Se revirtió por completo: migración compensatoria `20260901000001_remove_reservation_match_results.sql` (aplicada, sin `CASCADE`, elimina limpiamente lo introducido) y reversión de toda la UI/TS asociada (`MatchResultForm` eliminado, `ReservationTicketPanel` restaurado, "Partidos jugados" restaurado a su definición basada en reservas confirmadas y finalizadas, sin resultado)
+* Las dos migraciones originales **se conservan intactas** como registro histórico (nunca se editan/renombran/eliminan) — la compensación siempre se hace con una migración nueva, nunca modificando una ya aplicada
+
 Pendiente:
 
 * Ranking global/cross-club
 * Torneos, ladder, medallas
-* Registro de resultados de partido y asignación automática de puntos (Fase 1 es exclusivamente manual vía OWNER/ADMIN — no hay todavía ningún flujo que otorgue puntos a partir de un resultado real)
+* Registro de resultados de partido y asignación automática de puntos — sigue exclusivamente fuera de alcance; ver el intento-y-reversión arriba y la regla permanente en CLAUDE.md antes de volver a intentarlo
 * Victorias/Derrotas/Win % (sin tracking de resultados en el esquema)
 * Reactivación de un jugador desactivado y su efecto (si alguno) sobre su estado deportivo
 

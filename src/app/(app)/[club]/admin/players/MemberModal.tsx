@@ -2,12 +2,17 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { X } from "lucide-react";
+import { X, MessageCircle } from "lucide-react";
 import { Badge, Button, ConfirmDialog, Toast } from "@/components/ui";
-import { PlayerAvatar } from "@/components/players/PlayerAvatar";
-import { PlayerCategoryBadge } from "@/components/players/PlayerCategoryBadge";
-import { PLAYER_CATEGORIES, type PlayerCategory, type SportCategory } from "@/types/database";
-import { toggleMemberActive, updateMemberCategory, getMatchesPlayedCount, getClubMemberSportState } from "./actions";
+import { PlayerSportAvatar } from "@/components/players/PlayerSportAvatar";
+import type { SportCategory } from "@/types/database";
+import { toWhatsAppLink } from "@/lib/utils/phone";
+import {
+  toggleMemberActive,
+  getMatchesPlayedCount,
+  getClubMemberSportState,
+  getClubMemberEmail,
+} from "./actions";
 import { AdjustPlayerPointsModal } from "./AdjustPlayerPointsModal";
 import { ChangePlayerCategoryModal } from "./ChangePlayerCategoryModal";
 import type { MemberRow } from "./MembersClient";
@@ -17,6 +22,13 @@ interface MemberModalProps {
   clubId: string;
   clubSlug: string;
   sportCategories: SportCategory[];
+  // Posición vigente en el ranking de su categoría — ya resuelta por el
+  // padre (MembersClient) a partir del mismo sportStateByMember calculado
+  // una vez en page.tsx; ninguna consulta nueva se agrega aquí. Solo para
+  // la corona del avatar (1/2/3); la categoría del avatar sigue viniendo
+  // del propio estado `sportCategory` de este modal (ya se mantenía
+  // reactivo a un cambio de categoría hecho desde aquí mismo).
+  rankingPosition?: number | null;
   onClose: () => void;
 }
 
@@ -28,38 +40,60 @@ function formatDate(iso: string) {
   });
 }
 
+// Same bg-white/10 + animate-pulse convention as RankingSkeleton
+// (ranking/RankingView.tsx) — reserva aproximadamente el ancho/alto del
+// contenido real que va a reemplazar, para que la sección deportiva no
+// cambie de altura al terminar de cargar.
+function SkeletonBar({ width, height = "h-4", rounded = "rounded" }: { width: string; height?: string; rounded?: string }) {
+  return <span className={`inline-block ${height} ${width} ${rounded} bg-white/10 animate-pulse`} />;
+}
+
 // Replaces the standalone /admin/players/[id] page for PLAYER members — same
 // content (avatar/name/status header, "Información deportiva", activate/
 // deactivate), just inline so the grid's filters/search/scroll never reset.
-// Status and category are tracked as local state seeded from the prop and
-// updated from each action's own result, instead of re-reading `member`
-// after a router.refresh() — the grid's data refreshes in the background,
-// but this modal instance doesn't get fresh props until it remounts.
-export function MemberModal({ member, clubId, clubSlug, sportCategories, onClose }: MemberModalProps) {
+// Status is tracked as local state seeded from the prop and updated from
+// the toggle action's own result, instead of re-reading `member` after a
+// router.refresh() — the grid's data refreshes in the background, but this
+// modal instance doesn't get fresh props until it remounts.
+//
+// "Categoría" here means the sport-module category (club_member_sport_
+// state.category, e.g. "6a") — the only one shown anywhere in this modal.
+// club_members.category (the legacy Principiante/5ta/... field) is no
+// longer displayed or editable here; updateMemberCategory (actions.ts)
+// still exists and still works, it's simply never called from this UI
+// anymore.
+export function MemberModal({ member, clubId, clubSlug, sportCategories, rankingPosition, onClose }: MemberModalProps) {
   const router = useRouter();
   const name = member.profiles?.full_name ?? "Sin nombre";
 
   const [isActive, setIsActive] = useState(member.is_active);
-  const [category, setCategory] = useState<PlayerCategory>(member.category ?? "Principiante");
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [savePending, startSave] = useTransition();
   const [togglePending, startToggle] = useTransition();
 
   // "Partidos jugados" — computed on demand, not stored on the member row,
-  // so it can never drift out of sync with reservations. null = still
-  // loading (renders the same "—" placeholder this field already had),
-  // fetched fresh every time this modal opens for a member (a different
-  // selectedMember always remounts this component — see MembersClient).
+  // so it can never drift out of sync with reservations. null = no
+  // resuelto todavía; matchesPlayedLoading distingue "cargando" (skeleton)
+  // de "ya resolvió pero sin conteo" (error silencioso preexistente, mismo
+  // fallback "—" de siempre) — así el skeleton nunca queda pulsando para
+  // siempre si esta consulta puntual llegara a fallar. Se refetchea cada
+  // vez que este modal se abre para un miembro (un selectedMember distinto
+  // siempre remonta este componente — ver MembersClient). Cuenta reservas
+  // type='match' confirmadas y finalizadas — nunca resultados oficiales
+  // (una reservation ordinaria no tiene ganador/victorias/derrotas, ver
+  // Sport / Ranking Module Principles).
   const [matchesPlayed, setMatchesPlayed] = useState<number | null>(null);
+  const [matchesPlayedLoading, setMatchesPlayedLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     getMatchesPlayedCount(clubId, member.profile_id).then((result) => {
-      if (!cancelled && typeof result.count === "number") setMatchesPlayed(result.count);
+      if (cancelled) return;
+      if (typeof result.count === "number") setMatchesPlayed(result.count);
+      setMatchesPlayedLoading(false);
     });
     return () => {
       cancelled = true;
@@ -68,11 +102,15 @@ export function MemberModal({ member, clubId, clubSlug, sportCategories, onClose
 
   // Fase 1 módulo deportivo — categoría/puntos vigentes, obtenidos vía RPC
   // (club_member_sport_state no tiene lectura directa de cliente, ver
-  // 20260822000001). null = todavía cargando o el jugador no tiene estado
-  // deportivo aún (club sin default_player_category configurada) — ambos
-  // casos muestran "—", igual que el placeholder que ya existía aquí.
+  // 20260822000001). sportStateLoading separa explícitamente "cargando"
+  // (skeleton) de "ya resolvió y el jugador no tiene estado deportivo aún"
+  // (sportCategory sigue null, pero ya no es loading — muestra "—", el
+  // placeholder real de "sin datos" que ya existía) y de "falló la
+  // consulta" (sportStateError, mensaje real en vez de skeleton infinito).
   const [sportCategory, setSportCategory] = useState<string | null>(null);
   const [sportPoints, setSportPoints] = useState<number | null>(null);
+  const [sportStateLoading, setSportStateLoading] = useState(true);
+  const [sportStateError, setSportStateError] = useState<string | null>(null);
   const [adjustPointsOpen, setAdjustPointsOpen] = useState(false);
   const [changeCategoryOpen, setChangeCategoryOpen] = useState(false);
 
@@ -82,6 +120,35 @@ export function MemberModal({ member, clubId, clubSlug, sportCategories, onClose
       if (cancelled) return;
       setSportCategory(result.category);
       setSportPoints(result.currentPoints);
+      setSportStateError("error" in result ? (result.error ?? null) : null);
+      setSportStateLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [clubId, member.id]);
+
+  // Ficha de contacto — el correo no llega con `member` (profiles no tiene
+  // esa columna, ver getClubMemberEmail), así que se resuelve aparte, bajo
+  // demanda, igual que sportState/matchesPlayed arriba. El teléfono sí
+  // viene ya incluido en member.profiles.phone (misma consulta de
+  // page.tsx que ya se usaba) — no requiere ningún fetch.
+  //
+  // Todo jugador registrado tiene correo (se registra e inicia sesión con
+  // uno) — emailLoading solo cubre el breve instante del fetch; una vez
+  // resuelto, `email` siendo null sí sería una inconsistencia real de
+  // datos (o un fallo del RPC, ya registrado con console.error dentro de
+  // getClubMemberEmail), nunca el estado esperado.
+  const [email, setEmail] = useState<string | null>(null);
+  const [emailLoading, setEmailLoading] = useState(true);
+  const phone = member.profiles?.phone ?? null;
+
+  useEffect(() => {
+    let cancelled = false;
+    getClubMemberEmail(clubId, member.id).then((result) => {
+      if (cancelled) return;
+      setEmail(result.email);
+      setEmailLoading(false);
     });
     return () => {
       cancelled = true;
@@ -99,19 +166,6 @@ export function MemberModal({ member, clubId, clubSlug, sportCategories, onClose
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [onClose]);
-
-  function handleSave() {
-    setError(null);
-    startSave(async () => {
-      const result = await updateMemberCategory(clubId, member.id, category, clubSlug);
-      if (result.error) {
-        setError(result.error);
-        return;
-      }
-      router.refresh();
-      setToastMessage("Cambios guardados correctamente");
-    });
-  }
 
   function handleConfirmToggle() {
     const nextActive = !isActive;
@@ -158,14 +212,18 @@ export function MemberModal({ member, clubId, clubSlug, sportCategories, onClose
           <div className="overflow-y-auto flex-1 px-5 py-5 flex flex-col gap-6">
             {/* ─── Encabezado ─────────────────────────────────────────────── */}
             <div className="flex items-center gap-4">
-              <PlayerAvatar player={{ id: member.profile_id, ...member.profiles }} size="lg" />
+              <PlayerSportAvatar
+                player={{ id: member.profile_id, ...member.profiles }}
+                size="lg"
+                sportCategory={sportCategory}
+                rankingPosition={rankingPosition}
+              />
               <div className="flex flex-col gap-1.5 min-w-0">
                 <p className="text-base font-semibold text-white truncate">{name}</p>
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <Badge variant={isActive ? "success" : "default"} size="sm">
                     {isActive ? "Activo" : "Inactivo"}
                   </Badge>
-                  <PlayerCategoryBadge category={category} size="sm" />
                 </div>
               </div>
             </div>
@@ -176,32 +234,45 @@ export function MemberModal({ member, clubId, clubSlug, sportCategories, onClose
                 Información deportiva
               </h3>
 
-              <div className="flex items-center justify-between text-sm gap-4">
-                <span className="text-brand-muted">Categoría</span>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value as PlayerCategory)}
-                  className="w-40 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20"
-                >
-                  {PLAYER_CATEGORIES.map((c) => (
-                    <option key={c} value={c} className="bg-[#001A24]">
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-brand-muted">Categoría deportiva</span>
-                <span className="text-white/60">{sportCategory ?? "—"}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-brand-muted">Puntos actuales</span>
-                <span className="text-white/60">{sportPoints === null ? "—" : sportPoints}</span>
-              </div>
+              {sportStateError ? (
+                <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
+                  {sportStateError}
+                </p>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-brand-muted">Categoría</span>
+                    {sportStateLoading ? (
+                      <SkeletonBar width="w-8" />
+                    ) : (
+                      <span className="text-white/60">{sportCategory ?? "—"}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-brand-muted">Puntos actuales</span>
+                    {sportStateLoading ? (
+                      <SkeletonBar width="w-6" />
+                    ) : (
+                      <span className="text-white/60">{sportPoints === null ? "—" : sportPoints}</span>
+                    )}
+                  </div>
+                </>
+              )}
               <div className="flex items-center justify-between text-sm">
                 <span className="text-brand-muted">Partidos jugados</span>
-                <span className="text-white/60">{matchesPlayed === null ? "—" : matchesPlayed}</span>
+                {matchesPlayedLoading ? (
+                  <SkeletonBar width="w-6" />
+                ) : (
+                  <span className="text-white/60">{matchesPlayed === null ? "—" : matchesPlayed}</span>
+                )}
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-brand-muted">Ranking</span>
+                {sportStateLoading ? (
+                  <SkeletonBar width="w-8" />
+                ) : (
+                  <span className="text-white/60">{rankingPosition != null ? `#${rankingPosition}` : "—"}</span>
+                )}
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-brand-muted">Fecha de ingreso</span>
@@ -211,22 +282,68 @@ export function MemberModal({ member, clubId, clubSlug, sportCategories, onClose
               {/* Solo disponibles una vez que el jugador tiene estado
                   deportivo (club ya configurado) — si sportCategory sigue
                   null tras cargar, el club aún no tiene
-                  default_player_category y no hay nada que ajustar. */}
-              {sportCategory !== null && (
+                  default_player_category y no hay nada que ajustar. Durante
+                  la carga se reserva el mismo espacio con skeletons — los
+                  botones reales nunca quedan disponibles antes de tiempo. */}
+              {sportStateLoading ? (
                 <div className="flex items-center gap-2 pt-1">
-                  <Button type="button" variant="secondary" size="sm" onClick={() => setAdjustPointsOpen(true)}>
-                    Ajustar puntos
-                  </Button>
-                  <Button type="button" variant="secondary" size="sm" onClick={() => setChangeCategoryOpen(true)}>
-                    Cambiar categoría
-                  </Button>
+                  <SkeletonBar width="w-[104px]" height="h-8" rounded="rounded-xl" />
+                  <SkeletonBar width="w-[130px]" height="h-8" rounded="rounded-xl" />
                 </div>
+              ) : (
+                !sportStateError &&
+                sportCategory !== null && (
+                  <div className="flex items-center gap-2 pt-1">
+                    <Button type="button" variant="secondary" size="sm" onClick={() => setAdjustPointsOpen(true)}>
+                      Ajustar puntos
+                    </Button>
+                    <Button type="button" variant="secondary" size="sm" onClick={() => setChangeCategoryOpen(true)}>
+                      Cambiar categoría
+                    </Button>
+                  </div>
+                )
               )}
             </div>
 
-            {/* Future sections (historial de reservas, partidos, ranking
-                interno, torneos/clínicas inscritas, estadísticas) will be
-                added here as additional sibling blocks — not implemented yet. */}
+            {/* ─── Contacto ───────────────────────────────────────────────── */}
+            <div className="flex flex-col gap-3">
+              <h3 className="text-xs font-semibold text-brand-muted uppercase tracking-wider">Contacto</h3>
+
+              {/* Correo/WhatsApp en una sola fila — correo como texto plano
+                  (nunca clicable, sin mailto:, sin decoración de enlace),
+                  truncado si es largo; el botón nunca pierde su ancho
+                  natural. flex-wrap: en mobile, si no caben lado a lado,
+                  el botón baja a su propia línea en vez de desbordar. */}
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                {emailLoading ? (
+                  <SkeletonBar width="w-32" />
+                ) : (
+                  <span className="text-sm text-white/60 truncate min-w-0">{email ?? "—"}</span>
+                )}
+
+                {/* Solo si hay teléfono almacenado — jugadores legacy (antes
+                    del requisito obligatorio) pueden no tenerlo todavía;
+                    nunca se inventa un número ni un país (ver
+                    toWhatsAppLink). window.open (no <a> envolviendo el
+                    botón) para no anidar dos elementos interactivos. */}
+                {phone && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => window.open(toWhatsAppLink(phone), "_blank", "noopener,noreferrer")}
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    Contactar por WhatsApp
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Future sections (historial de reservas, ranking interno,
+                torneos/clínicas inscritas, estadísticas) will be added here
+                as additional sibling blocks — not implemented yet. */}
 
             {error && (
               <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
@@ -236,7 +353,7 @@ export function MemberModal({ member, clubId, clubSlug, sportCategories, onClose
           </div>
 
           {/* ─── Acciones ───────────────────────────────────────────────── */}
-          <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-white/10 shrink-0">
+          <div className="flex items-center gap-3 px-5 py-4 border-t border-white/10 shrink-0">
             <Button
               type="button"
               variant={isActive ? "danger" : "secondary"}
@@ -244,9 +361,6 @@ export function MemberModal({ member, clubId, clubSlug, sportCategories, onClose
               onClick={() => setConfirmOpen(true)}
             >
               {isActive ? "Desactivar jugador" : "Activar miembro"}
-            </Button>
-            <Button type="button" loading={savePending} onClick={handleSave}>
-              Guardar cambios
             </Button>
           </div>
         </div>

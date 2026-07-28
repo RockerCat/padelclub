@@ -2,7 +2,83 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Button, Input } from "@/components/ui";
 import { createJoinRequest } from "./actions";
+import { updateOwnPhone } from "@/app/(app)/profile/actions";
+
+// Modal mínimo — solo se abre cuando createJoinRequest/join_public_club
+// rechaza la operación por falta de un WhatsApp válido (ERRCODE P0006,
+// ver migración 20260830000001). Reutiliza la misma mutación
+// (updateOwnPhone) que la edición de WhatsApp en Mi Perfil — nunca una
+// segunda fuente de verdad para profiles.phone. Nunca se muestra si el
+// usuario ya tiene un teléfono válido, porque en ese caso la RPC nunca
+// devuelve P0006 en primer lugar.
+function WhatsAppRequiredModal({
+  open,
+  onCancel,
+  onSaved,
+}: {
+  open: boolean;
+  onCancel: () => void;
+  onSaved: () => void;
+}) {
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!open) return null;
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    const result = await updateOwnPhone(value);
+    setSaving(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    onSaved();
+  }
+
+  return (
+    <div className="fixed inset-0 z-[500] flex items-center justify-center px-4">
+      <div
+        className="fixed inset-0 bg-black/60"
+        style={{ backdropFilter: "blur(4px)" }}
+        onClick={onCancel}
+        aria-hidden
+      />
+      <div className="relative w-full max-w-sm bg-[#082735] border border-white/10 rounded-2xl shadow-2xl p-5 flex flex-col gap-4">
+        <div>
+          <h2 className="text-base font-semibold text-white">Completa tu WhatsApp</h2>
+          <p className="text-sm text-brand-muted mt-1">
+            Agrega tu número de WhatsApp para unirte al club. El club lo utilizará para contactarte.
+          </p>
+        </div>
+        <Input
+          label="WhatsApp"
+          type="tel"
+          inputMode="tel"
+          autoComplete="tel"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="+57 317 367 2033"
+          hint="Incluye el código de país."
+          autoFocus
+        />
+        {error && <p className="text-xs text-red-400">{error}</p>}
+        <div className="flex items-center justify-end gap-2">
+          <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={saving}>
+            Cancelar
+          </Button>
+          <Button type="button" size="sm" loading={saving} onClick={handleSave}>
+            Guardar y continuar
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface Props {
   clubId: string;
@@ -31,6 +107,7 @@ export function RequestAccessButton({
   const router = useRouter();
   const [sent, setSent] = useState(requestStatus === "pending");
   const [error, setError] = useState<string | null>(null);
+  const [phoneModalOpen, setPhoneModalOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const autoSubmitted = useRef(false);
   // Synchronous guard against a fast double-click/double-Enter firing a
@@ -47,6 +124,15 @@ export function RequestAccessButton({
     startTransition(async () => {
       const result = await createJoinRequest(clubId, clubSlug);
       submitting.current = false;
+
+      // Backend rejected for missing/invalid WhatsApp (P0006) — never a
+      // technical error banner: open the small "completa tu WhatsApp"
+      // modal instead. Saving there retries this exact same action, so a
+      // user who already has a valid phone never sees this at all.
+      if (result.missingPhone) {
+        setPhoneModalOpen(true);
+        return;
+      }
       if (result.error) {
         setError(result.error);
         return;
@@ -105,6 +191,18 @@ export function RequestAccessButton({
         {pending ? "Enviando…" : isPublic ? "Unirme al club" : "Solicitar ingreso"}
       </button>
       {error && <p className="text-xs text-red-400">{error}</p>}
+
+      <WhatsAppRequiredModal
+        open={phoneModalOpen}
+        onCancel={() => setPhoneModalOpen(false)}
+        onSaved={() => {
+          setPhoneModalOpen(false);
+          // El número ya quedó guardado — reintenta la misma acción
+          // original automáticamente, sin que el usuario tenga que volver
+          // a pulsar "Unirme al club"/"Solicitar acceso".
+          handleRequestJoin();
+        }}
+      />
     </div>
   );
 }

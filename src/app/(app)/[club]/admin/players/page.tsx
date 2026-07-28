@@ -6,6 +6,7 @@ import { MembersClient } from "./MembersClient";
 import { ShareClubSection } from "./ShareClubSection";
 import { JoinRequestsSection } from "./JoinRequestsSection";
 import type { JoinRequestRow } from "./JoinRequestsSection";
+import { getClubMatchesPlayedByMember } from "./actions";
 
 interface PlayersPageProps {
   params: Promise<{ club: string }>;
@@ -65,6 +66,37 @@ export default async function PlayersPage({ params }: PlayersPageProps) {
     .select("code, sort_order, created_at")
     .order("sort_order", { ascending: true });
 
+  const categoryList = sportCategories ?? [];
+
+  // Categoría deportiva + posición vigente por jugador, para las tarjetas de
+  // la grilla — reutiliza exactamente get_club_category_ranking_view, el
+  // mismo RPC ya autorizado que usa /[club]/ranking (20260824000001), nunca
+  // una consulta directa a club_member_sport_state/club_ranking_cycles (esas
+  // tablas nacen cerradas por RLS, sin GRANT a authenticated). Se llama una
+  // vez por categoría del catálogo (acotado, ~7 como mucho) en paralelo, no
+  // una vez por jugador — evita el N+1 sin duplicar ni recalcular el
+  // ranking. Un jugador sin estado deportivo aprovisionado simplemente no
+  // aparece en ninguna de estas filas.
+  // "Partidos" de la tarjeta — misma regla exacta de getMatchesPlayedCount
+  // (MemberModal), resuelta una vez para todo el club (2 consultas totales)
+  // en paralelo con lo de arriba, nunca una vez por jugador.
+  const [rankingByCategory, matchesPlayedByMember] = await Promise.all([
+    Promise.all(
+      categoryList.map((c) =>
+        supabase.rpc("get_club_category_ranking_view", { p_club_id: club.id, p_category: c.code })
+      )
+    ),
+    getClubMatchesPlayedByMember(club.id),
+  ]);
+
+  const sportStateByMember: Record<string, { category: string; position: number }> = {};
+  for (const { data: rankingRows, error: rankingError } of rankingByCategory) {
+    if (rankingError || !rankingRows) continue;
+    for (const row of rankingRows) {
+      sportStateByMember[row.club_member_id] = { category: row.category, position: row.ranking_position };
+    }
+  }
+
   const memberList = (members ?? []) as Parameters<typeof MembersClient>[0]["members"];
   const requests = (joinRequests ?? []) as JoinRequestRow[];
 
@@ -83,7 +115,9 @@ export default async function PlayersPage({ params }: PlayersPageProps) {
         members={memberList}
         clubSlug={slug}
         clubId={club.id}
-        sportCategories={sportCategories ?? []}
+        sportCategories={categoryList}
+        sportStateByMember={sportStateByMember}
+        matchesPlayedByMember={matchesPlayedByMember}
       />
 
       {/* Solicitudes de ingreso — van por encima de "Compartir club" por

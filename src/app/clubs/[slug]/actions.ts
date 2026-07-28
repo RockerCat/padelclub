@@ -4,7 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { getClubEntryPath } from "@/lib/utils/navigation";
 
-type ActionResult = { error?: string; redirectTo?: string };
+type ActionResult = { error?: string; redirectTo?: string; missingPhone?: boolean };
+
+const MISSING_PHONE_MESSAGE = "Agrega tu número de WhatsApp para unirte al club. El club lo utilizará para contactarte.";
 
 // Public and private clubs diverge here, decided from clubs.visibility
 // re-read fresh from Supabase — never from a client-supplied flag, which
@@ -49,6 +51,7 @@ export async function createJoinRequest(clubId: string, clubSlug: string): Promi
     if (error) {
       if (error.code === "42501") return { error: "Este club no permite unirse libremente." };
       if (error.code === "P0002") return { error: "Club no encontrado." };
+      if (error.code === "P0006") return { error: MISSING_PHONE_MESSAGE, missingPhone: true };
       return { error: "Error al unirte al club." };
     }
 
@@ -77,6 +80,7 @@ export async function createJoinRequest(clubId: string, clubSlug: string): Promi
       return { error: "Tu solicitud anterior fue rechazada. Contacta al club directamente." };
     }
     if (error.code === "P0005") return { error: "Este club se encuentra archivado." };
+    if (error.code === "P0006") return { error: MISSING_PHONE_MESSAGE, missingPhone: true };
     return { error: "Error al enviar la solicitud." };
   }
 

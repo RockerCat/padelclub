@@ -44,6 +44,31 @@ body {
   75% { transform: rotate(2deg); }
 }
 
+/* Ranking podium — a single, very subtle fade+rise on mount (never
+   retriggers on category change, only used for the initial mount of the
+   podium block itself). Disabled entirely under reduced-motion, same
+   posture as the rest of the app's motion. */
+@keyframes ranking-podium-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-ranking-podium-in {
+  animation: ranking-podium-in 0.45s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-ranking-podium-in {
+    animation: none;
+  }
+}
+
 @supports (animation-timeline: view()) {
   .scroll-fade {
     animation: fade-in-up linear both;

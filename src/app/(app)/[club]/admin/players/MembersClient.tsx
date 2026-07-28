@@ -1,13 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { PlayerAvatar } from "@/components/players/PlayerAvatar";
-import { PlayerCategoryBadge } from "@/components/players/PlayerCategoryBadge";
+import { PlayerSportAvatar } from "@/components/players/PlayerSportAvatar";
 import { FilterDropdown } from "@/components/ui";
 import { MemberModal } from "./MemberModal";
 import { Users, Search } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
-import { PLAYER_CATEGORIES, type PlayerCategory, type SportCategory } from "@/types/database";
+import type { PlayerCategory, SportCategory } from "@/types/database";
 
 export type MemberRow = {
   id: string;
@@ -29,20 +28,27 @@ interface MembersClientProps {
   clubSlug: string;
   clubId: string;
   sportCategories: SportCategory[];
+  // Fase 1 módulo deportivo — categoría deportiva vigente + posición en el
+  // ranking de su categoría, ya resueltas en el servidor (page.tsx) vía el
+  // mismo RPC get_club_category_ranking_view que usa /[club]/ranking. Nunca
+  // se recalcula el ranking ni se consulta nada nuevo aquí — solo lectura.
+  sportStateByMember: Record<string, { category: string; position: number }>;
+  // "Partidos" — resuelto una sola vez para todo el club en page.tsx
+  // (getClubMatchesPlayedByMember), nunca por jugador. Cuenta reservas
+  // type='match' confirmadas y ya finalizadas (ver Sport / Ranking Module
+  // Principles — una reservation ordinaria nunca tiene resultado oficial),
+  // clave por profile_id. null = la consulta en sí falló (muestra "—"); un
+  // profile_id ausente del mapa (pero el mapa no es null) significa cero
+  // partidos, nunca "—".
+  matchesPlayedByMember: Record<string, number> | null;
 }
 
 type StatusFilter = "all" | "active" | "inactive";
-type CategoryFilter = "all" | PlayerCategory;
 
 const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: "all", label: "Todos" },
   { value: "active", label: "Activos" },
   { value: "inactive", label: "Inactivos" },
-];
-
-const CATEGORY_OPTIONS: { value: CategoryFilter; label: string }[] = [
-  { value: "all", label: "Todas" },
-  ...PLAYER_CATEGORIES.map((c) => ({ value: c, label: c })),
 ];
 
 function formatDate(iso: string) {
@@ -53,9 +59,15 @@ function formatDate(iso: string) {
   });
 }
 
-export function MembersClient({ members, clubSlug, clubId, sportCategories }: MembersClientProps) {
+export function MembersClient({
+  members,
+  clubSlug,
+  clubId,
+  sportCategories,
+  sportStateByMember,
+  matchesPlayedByMember,
+}: MembersClientProps) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
   const [search, setSearch] = useState("");
   const [selectedMember, setSelectedMember] = useState<MemberRow | null>(null);
 
@@ -64,10 +76,6 @@ export function MembersClient({ members, clubSlug, clubId, sportCategories }: Me
       if (statusFilter === "active") return m.is_active;
       if (statusFilter === "inactive") return !m.is_active;
       return true;
-    })
-    .filter((m) => {
-      if (categoryFilter === "all") return true;
-      return (m.category ?? "Principiante") === categoryFilter;
     })
     .filter((m) => {
       if (!search.trim()) return true;
@@ -97,13 +105,6 @@ export function MembersClient({ members, clubSlug, clubId, sportCategories }: Me
             options={STATUS_OPTIONS}
             onChange={setStatusFilter}
           />
-          <FilterDropdown
-            label="Categoría"
-            value={categoryFilter}
-            defaultValue="all"
-            options={CATEGORY_OPTIONS}
-            onChange={setCategoryFilter}
-          />
         </div>
       </div>
 
@@ -127,36 +128,38 @@ export function MembersClient({ members, clubSlug, clubId, sportCategories }: Me
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filtered.map((member) => {
             const name = member.profiles?.full_name ?? "Sin nombre";
+            const sportState = sportStateByMember[member.id];
+            const matchesPlayed = matchesPlayedByMember === null ? null : (matchesPlayedByMember[member.profile_id] ?? 0);
 
             return (
               <button
                 key={member.id}
                 type="button"
                 onClick={() => setSelectedMember(member)}
-                className="flex flex-col items-center text-center gap-1 p-5 rounded-2xl bg-brand-surface border border-white/10 hover:border-brand-primary/25 hover:bg-brand-primary/5 transition-colors"
+                className="flex flex-col items-center text-center gap-2 p-4 rounded-2xl bg-brand-surface border border-white/10 hover:border-brand-primary/25 hover:bg-brand-primary/5 transition-colors"
               >
-                <PlayerAvatar
+                <PlayerSportAvatar
                   player={{ id: member.profile_id, ...member.profiles }}
                   size="2xl"
-                  className="mb-3"
+                  sportCategory={sportState?.category ?? null}
+                  rankingPosition={sportState?.position ?? null}
                 />
 
                 <p className="text-sm font-semibold text-white truncate w-full">{name}</p>
 
-                <PlayerCategoryBadge category={member.category} size="sm" className="mt-1" />
-
-                <p className="text-[11px] text-brand-muted/60 mt-2">
-                  Partidos: <span className="text-white/70 font-medium">—</span>
+                <p className="text-[11px] text-brand-muted/60">
+                  Partidos: <span className="text-white/70 font-medium">{matchesPlayed ?? "—"}</span>
                   <span className="mx-1.5 text-brand-muted/30">·</span>
-                  Ranking: <span className="text-white/70 font-medium">—</span>
+                  Ranking: <span className="text-white/70 font-medium">{sportState?.position ?? "—"}</span>
                 </p>
 
-                <p className={cn("text-xs mt-1", member.is_active ? "text-emerald-400" : "text-brand-muted/70")}>
-                  {member.is_active ? "Activo" : "Inactivo"}
+                <p className="text-xs">
+                  <span className={cn("font-medium", member.is_active ? "text-emerald-400" : "text-brand-muted/70")}>
+                    {member.is_active ? "Activo" : "Inactivo"}
+                  </span>
+                  <span className="mx-1.5 text-brand-muted/30">·</span>
+                  <span className="text-brand-muted/60">Desde {formatDate(member.joined_at)}</span>
                 </p>
-
-                <p className="text-[11px] text-brand-muted/60 mt-3">Miembro desde</p>
-                <p className="text-xs text-white/80">{formatDate(member.joined_at)}</p>
               </button>
             );
           })}
@@ -169,6 +172,7 @@ export function MembersClient({ members, clubSlug, clubId, sportCategories }: Me
           clubId={clubId}
           clubSlug={clubSlug}
           sportCategories={sportCategories}
+          rankingPosition={sportStateByMember[selectedMember.id]?.position ?? null}
           onClose={() => setSelectedMember(null)}
         />
       )}

@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Button, Card, CardHeader, CardContent, Input } from "@/components/ui";
 import { Mail, ArrowRight } from "lucide-react";
 import { getSafeInternalPath } from "@/lib/utils/safeRedirect";
+import { normalizePhone, isValidPhone } from "@/lib/utils/phone";
 
 export type InviteBranding = {
   clubName: string;
@@ -36,9 +37,21 @@ export function SignupForm({ inviteToken, branding, next: rawNext }: SignupFormP
       ? `/auth/login?next=${encodeURIComponent(next)}`
       : "/auth/login";
 
+  // El único momento, hoy, donde este formulario compartido (usado por
+  // cualquier account_type todavía sin definir — ver Role Philosophy en
+  // CLAUDE.md) sabe con certeza que la cuenta será PLAYER: llegó desde
+  // "Unirme al club"/"Solicitar acceso" en la página pública de un club
+  // (ClubPublicView → /auth/signup?next=<slug>?intent=join-club). La
+  // invitación de ADMIN (inviteToken) nunca pasa por aquí. Un registro
+  // genérico (sin invite ni next) sigue sin saber si será OWNER o PLAYER,
+  // así que el WhatsApp no se pide ahí — se completará más tarde desde Mi
+  // Perfil o por el backfill del administrador si hiciera falta.
+  const requiresWhatsapp = !inviteToken && !!next && next.includes("intent=join-club");
+
   const [fullName, setFullName]             = useState("");
   const [email, setEmail]                   = useState("");
   const [password, setPassword]             = useState("");
+  const [phone, setPhone]                   = useState("");
   const [error, setError]                   = useState<ReactNode | null>(null);
   const [loading, setLoading]               = useState(false);
   const [verificationSent, setVerificationSent] = useState(false);
@@ -51,6 +64,22 @@ export function SignupForm({ inviteToken, branding, next: rawNext }: SignupFormP
     if (password.length < 6) {
       setError("La contraseña debe tener al menos 6 caracteres.");
       return;
+    }
+
+    if (requiresWhatsapp) {
+      const trimmedPhone = phone.trim();
+      if (!trimmedPhone) {
+        setError("Ingresa tu número de WhatsApp.");
+        return;
+      }
+      if (!isValidPhone(trimmedPhone)) {
+        setError(
+          normalizePhone(trimmedPhone).length < 10
+            ? "Incluye el código de país."
+            : "El número de WhatsApp no es válido."
+        );
+        return;
+      }
     }
 
     setLoading(true);
@@ -69,6 +98,7 @@ export function SignupForm({ inviteToken, branding, next: rawNext }: SignupFormP
         options: {
           data: {
             full_name: fullName,
+            ...(requiresWhatsapp ? { phone: normalizePhone(phone.trim()) } : {}),
             ...(branding
               ? { invite_club_name: branding.clubName, invite_role: branding.roleLabel }
               : {}),
@@ -255,6 +285,20 @@ export function SignupForm({ inviteToken, branding, next: rawNext }: SignupFormP
             required
             autoComplete="new-password"
           />
+
+          {requiresWhatsapp && (
+            <Input
+              label="WhatsApp"
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="+57 317 367 2033"
+              hint="Incluye el código de país. Ejemplo: +57 317 367 2033."
+              required
+              autoComplete="tel"
+              inputMode="tel"
+            />
+          )}
 
           {error && (
             <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">

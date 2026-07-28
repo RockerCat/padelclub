@@ -99,7 +99,20 @@ export async function toggleMemberActive(
     .eq("id", memberId)
     .eq("club_id", clubId);
 
-  if (error) return { error: "Error al cambiar el estado del miembro." };
+  if (error) {
+    if (error.code === "P0006") {
+      return { error: "Este jugador todavía no tiene un WhatsApp válido registrado. Debe completarlo antes de reactivar su membresía." };
+    }
+    console.error("[toggleMemberActive] Failed to activate member", {
+      clubId,
+      memberId,
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+    });
+    return { error: "Error al cambiar el estado del miembro." };
+  }
 
   revalidatePath(`/${clubSlug}/admin/players`);
   return { success: true };
@@ -146,6 +159,12 @@ export async function updateMemberCategory(
 // related to it as creator (created_by) OR as an added participant
 // (reservation_players) — deduped by reservation id via a Map so a player
 // who is both never counts twice.
+//
+// Regla definitiva (ver CLAUDE.md → Sport / Ranking Module Principles): una
+// reservation ordinaria type='match' puede sumar aquí cuando está
+// confirmada y finalizada, pero nunca tiene marcador, equipos, ganador,
+// victorias, derrotas ni efecto en puntos/ranking — eso queda reservado al
+// futuro módulo de torneos. No depende de ninguna tabla de resultados.
 export async function getMatchesPlayedCount(
   clubId: string,
   profileId: string
@@ -191,6 +210,72 @@ export async function getMatchesPlayedCount(
   return { count };
 }
 
+// ─── getClubMatchesPlayedByMember ──────────────────────────────────────────
+// Bulk counterpart of getMatchesPlayedCount above, for the Jugadores grid
+// (one card per PLAYER member, not a single on-demand modal) — exact same
+// counting rule (type='match', status='confirmed', ya terminada vía
+// reservationEndDatetime, creador O participante, deduplicado por id de
+// reserva), pero resuelta UNA vez para todo el club en dos consultas, en
+// vez de dos consultas POR jugador — así la grilla nunca se vuelve un N+1
+// sin importar cuántos jugadores tenga el club.
+//
+// Devuelve null únicamente si las consultas mismas fallan (un "no se pudo
+// calcular" real, que el caller debe mostrar como "—"). Un jugador con cero
+// partidos que sí califican está presente en el resultado con el valor 0 —
+// nunca ausente, nunca "—".
+export async function getClubMatchesPlayedByMember(clubId: string): Promise<Record<string, number> | null> {
+  const { supabase, error: authError } = await requireAdminRole(clubId);
+  if (authError || !supabase) return null;
+
+  type MatchRow = ActiveReservationRow & { id: string };
+
+  const [ownRes, participantRes] = await Promise.all([
+    supabase
+      .from("reservations")
+      .select("id, date, start_time, duration_minutes, created_by")
+      .eq("club_id", clubId)
+      .eq("type", "match")
+      .eq("status", "confirmed")
+      .limit(5000),
+    supabase
+      .from("reservation_players")
+      .select("profile_id, reservations!inner(id, date, start_time, duration_minutes, type, status, club_id)")
+      .eq("reservations.club_id", clubId)
+      .eq("reservations.type", "match")
+      .eq("reservations.status", "confirmed")
+      .limit(5000),
+  ]);
+
+  if (ownRes.error || participantRes.error) {
+    console.error("[getClubMatchesPlayedByMember] failed:", {
+      clubId,
+      ownError: ownRes.error,
+      participantError: participantRes.error,
+    });
+    return null;
+  }
+
+  const byProfile = new Map<string, Map<string, MatchRow>>();
+  function addMatch(profileId: string, row: MatchRow) {
+    const existing = byProfile.get(profileId) ?? new Map<string, MatchRow>();
+    existing.set(row.id, row);
+    byProfile.set(profileId, existing);
+  }
+
+  for (const row of (ownRes.data ?? []) as (MatchRow & { created_by: string })[]) {
+    addMatch(row.created_by, row);
+  }
+  for (const row of (participantRes.data ?? []) as unknown as { profile_id: string; reservations: MatchRow }[]) {
+    addMatch(row.profile_id, row.reservations);
+  }
+
+  const result: Record<string, number> = {};
+  for (const [profileId, matches] of byProfile) {
+    result[profileId] = [...matches.values()].filter((r) => reservationEndDatetime(r).getTime() < Date.now()).length;
+  }
+  return result;
+}
+
 // ─── approveJoinRequest ────────────────────────────────────────────────────────
 // approve_join_request (SECURITY DEFINER) re-checks the caller's role for
 // this exact club, the request's club_id and its pending status, inserts
@@ -211,6 +296,9 @@ export async function approveJoinRequest(
     if (error.code === "P0002") return { error: "Solicitud no encontrada." };
     if (error.code === "22023") return { error: "Esta solicitud ya fue resuelta." };
     if (error.code === "P0005") return { error: "Este club se encuentra archivado." };
+    if (error.code === "P0006") {
+      return { error: "Este jugador todavía no tiene un WhatsApp válido registrado. Debe completarlo antes de poder aprobar su solicitud." };
+    }
     return { error: "Error al aprobar la solicitud." };
   }
 
@@ -272,6 +360,30 @@ export async function getClubMemberSportState(
   if (!row) return { category: null, currentPoints: null, pointsReachedAt: null };
 
   return { category: row.category, currentPoints: row.current_points, pointsReachedAt: row.points_reached_at };
+}
+
+// ─── getClubMemberEmail ─────────────────────────────────────────────────────
+// Ficha de contacto del modal — el correo real vive únicamente en
+// auth.users (profiles no tiene columna de email), así que se resuelve vía
+// get_club_member_email (SECURITY DEFINER, 20260828000001), el mismo patrón
+// ya usado por get_club_join_requests para lo mismo. Una sola fila, bajo
+// demanda al abrir el modal — nunca en lote para toda la grilla, no hace
+// falta (no se muestra en la tarjeta, solo en este modal).
+export async function getClubMemberEmail(clubId: string, clubMemberId: string): Promise<{ email: string | null }> {
+  const { supabase, error: authError } = await requireAdminRole(clubId);
+  if (authError || !supabase) return { email: null };
+
+  const { data, error } = await supabase.rpc("get_club_member_email", {
+    p_club_id: clubId,
+    p_club_member_id: clubMemberId,
+  });
+
+  if (error) {
+    console.error("[getClubMemberEmail] RPC failed:", { clubId, clubMemberId, code: error.code, message: error.message });
+    return { email: null };
+  }
+
+  return { email: data ?? null };
 }
 
 export type AdjustPointsState = {
