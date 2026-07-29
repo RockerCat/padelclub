@@ -1,0 +1,351 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Plus, Users } from "lucide-react";
+import { Button, ConfirmDialog, Toast } from "@/components/ui";
+import { EntryCard } from "./EntryCard";
+import { RegisterEntryModal } from "./RegisterEntryModal";
+import {
+  confirmTournamentEntryAction,
+  withdrawTournamentEntryAction,
+} from "@/lib/tournamentEntryActions";
+import { isOwnEntry, type TournamentEntriesCapacity, type TournamentEntryWithMembers } from "@/lib/tournamentEntries";
+import { tournamentCategoryLabel } from "@/lib/tournamentLabels";
+import type { Tournament, TournamentEntryRow } from "@/types/database";
+
+interface EntriesSectionProps {
+  tournament: Pick<Tournament, "id" | "club_id" | "category" | "secondary_category" | "bracket_size" | "status">;
+  initialEntries: TournamentEntryWithMembers[];
+  capacity: TournamentEntriesCapacity;
+  role: "OWNER" | "ADMIN" | "PLAYER";
+  ownClubMemberId: string;
+  ownUserId: string;
+  ownFullName: string | null;
+  ownAvatarUrl: string | null;
+  // null = no sport state resolvable for this category at all — PLAYER-only
+  // eligibility gate (see Bloque 2.2 spec §18); backend does not enforce
+  // category matching itself (audited: register_tournament_entry only
+  // freezes tournament.category onto the entry, never compares it against
+  // either player's own sport state), so this is a client-side UX curation,
+  // never a security boundary.
+  ownCategory: string | null;
+  revalidatePaths: string[];
+}
+
+type PendingAction = { type: "confirm" | "withdraw"; entryId: string } | null;
+
+function CapacityBar({ capacity }: { capacity: TournamentEntriesCapacity }) {
+  const pct = capacity.total > 0 ? Math.min(100, Math.round((capacity.occupied / capacity.total) * 100)) : 0;
+  const full = capacity.occupied >= capacity.total;
+  const almostFull = !full && capacity.occupied >= capacity.total - 1;
+  const barColor = full ? "bg-red-400" : almostFull ? "bg-amber-400" : "bg-brand-primary";
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p className="text-sm text-white">
+        {capacity.occupied} de {capacity.total} parejas inscritas
+      </p>
+      <div className="h-1.5 w-full max-w-xs rounded-full bg-white/10 overflow-hidden">
+        <div className={`h-full ${barColor} transition-all`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+export function EntriesSection({
+  tournament,
+  initialEntries,
+  capacity,
+  role,
+  ownClubMemberId,
+  ownUserId,
+  ownFullName,
+  ownAvatarUrl,
+  ownCategory,
+  revalidatePaths,
+}: EntriesSectionProps) {
+  const router = useRouter();
+  const isAdmin = role === "OWNER" || role === "ADMIN";
+  const [entries, setEntries] = useState(initialEntries);
+  const [registering, setRegistering] = useState(false);
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  const registeredMemberIds = entries
+    .filter((e) => e.status === "pending" || e.status === "confirmed")
+    .flatMap((e) => e.members.map((m) => m.club_member_id));
+
+  const full = capacity.occupied >= capacity.total;
+  const canRegisterStatus = tournament.status === "registration_open";
+  const canConfirmStatus = tournament.status === "registration_open";
+  const canWithdrawStatus = tournament.status === "registration_open" || tournament.status === "registration_closed";
+
+  const ownActiveEntry = entries.find(
+    (e) => (e.status === "pending" || e.status === "confirmed") && isOwnEntry(e, ownUserId, ownClubMemberId)
+  );
+  const ownAnyEntry = entries.find((e) => isOwnEntry(e, ownUserId, ownClubMemberId));
+
+  function handleRegisterSuccess(entry: TournamentEntryRow | undefined) {
+    setRegistering(false);
+    setToastMessage(
+      isAdmin ? "Pareja registrada correctamente" : "Tu inscripción fue enviada y está pendiente de aprobación."
+    );
+    if (entry) {
+      // Optimistic local append so the new entry is visible immediately —
+      // members will resolve fully on the next router.refresh() (server
+      // re-fetch), consistent with how the rest of this section stays in
+      // sync with the server.
+      setEntries((prev) => [...prev, { ...entry, members: [] }]);
+    }
+    router.refresh();
+  }
+
+  function handleConfirmAction() {
+    if (!pendingAction) return;
+    setActionError(null);
+    startTransition(async () => {
+      const result =
+        pendingAction.type === "confirm"
+          ? await confirmTournamentEntryAction(tournament.club_id, pendingAction.entryId, revalidatePaths)
+          : await withdrawTournamentEntryAction(tournament.club_id, pendingAction.entryId, revalidatePaths);
+
+      if (result.error) {
+        setActionError(result.error);
+        return;
+      }
+
+      if (result.entry) {
+        setEntries((prev) => prev.map((e) => (e.id === result.entry!.id ? { ...e, ...result.entry! } : e)));
+      }
+      setPendingAction(null);
+      setToastMessage(pendingAction.type === "confirm" ? "Pareja confirmada correctamente" : "Inscripción retirada correctamente");
+      router.refresh();
+    });
+  }
+
+  function entryActions(entry: TournamentEntryWithMembers) {
+    const isMine = isOwnEntry(entry, ownUserId, ownClubMemberId);
+    const showConfirm = isAdmin && entry.status === "pending" && canConfirmStatus;
+    const showWithdraw =
+      canWithdrawStatus &&
+      (entry.status === "pending" || entry.status === "confirmed") &&
+      (isAdmin || isMine);
+
+    if (!showConfirm && !showWithdraw) return null;
+
+    return (
+      <>
+        {showConfirm && (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              setActionError(null);
+              setPendingAction({ type: "confirm", entryId: entry.id });
+            }}
+          >
+            Confirmar
+          </Button>
+        )}
+        {showWithdraw && (
+          <Button
+            size="sm"
+            variant="danger"
+            onClick={() => {
+              setActionError(null);
+              setPendingAction({ type: "withdraw", entryId: entry.id });
+            }}
+          >
+            Retirar
+          </Button>
+        )}
+      </>
+    );
+  }
+
+  const confirmed = entries.filter((e) => e.status === "confirmed");
+  const pending = entries.filter((e) => e.status === "pending");
+  const withdrawn = entries.filter((e) => e.status === "withdrawn");
+
+  // A player is eligible when their own current category is either of the
+  // two categories the tournament accepts (single or combined) — the exact
+  // H+L/L+H/L+L pairing rule between the TWO players of a pair is not
+  // implemented yet (Hotfix 2.2.1B); this is only "can this player see a
+  // register action at all", never the final composition check.
+  const ownCategoryMatches =
+    !!ownCategory && (ownCategory === tournament.category || ownCategory === tournament.secondary_category);
+
+  const eligibleToRegister =
+    canRegisterStatus && !full && (isAdmin || (ownCategoryMatches && !ownActiveEntry));
+
+  return (
+    <div className="flex flex-col gap-5 max-w-3xl">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <h2 className="text-lg font-semibold text-white">Inscripciones</h2>
+        {isAdmin && eligibleToRegister && (
+          <Button size="sm" onClick={() => setRegistering(true)}>
+            <Plus className="w-3.5 h-3.5" />
+            Registrar pareja
+          </Button>
+        )}
+      </div>
+
+      <CapacityBar capacity={capacity} />
+
+      {tournament.status === "draft" && (
+        <p className="text-sm text-brand-muted bg-white/5 border border-white/10 rounded-xl px-4 py-3">
+          Abre las inscripciones para comenzar a registrar parejas.
+        </p>
+      )}
+
+      {full && tournament.status === "registration_open" && (
+        <p className="text-sm text-amber-400 bg-amber-400/10 border border-amber-400/20 rounded-xl px-4 py-3">
+          El torneo alcanzó su cupo máximo de parejas.
+        </p>
+      )}
+
+      {/* PLAYER: own pending/withdrawn entry surfaced explicitly (never
+          duplicated with the confirmed list below, which already shows a
+          confirmed own entry tagged "Tu pareja"). */}
+      {!isAdmin && ownAnyEntry && ownAnyEntry.status !== "confirmed" && (
+        <div>
+          <p className="text-xs font-medium text-brand-muted mb-2">Tu inscripción</p>
+          <EntryCard entry={ownAnyEntry} isOwn actions={entryActions(ownAnyEntry)} />
+        </div>
+      )}
+
+      {!isAdmin && !ownAnyEntry && (
+        <>
+          {eligibleToRegister ? (
+            <Button size="sm" onClick={() => setRegistering(true)} className="self-start">
+              <Plus className="w-3.5 h-3.5" />
+              Inscribirme
+            </Button>
+          ) : canRegisterStatus && !full && !ownCategoryMatches ? (
+            <p className="text-sm text-brand-muted bg-white/5 border border-white/10 rounded-xl px-4 py-3">
+              No perteneces a la categoría {tournamentCategoryLabel(tournament.category, tournament.secondary_category)} de
+              este torneo, así que no puedes inscribirte.
+            </p>
+          ) : null}
+        </>
+      )}
+
+      {isAdmin ? (
+        <div className="flex flex-col gap-5">
+          <EntryGroup title="Pendientes" entries={pending} entryActions={entryActions} emptyText={null} />
+          <EntryGroup title="Confirmadas" entries={confirmed} entryActions={entryActions} ownUserId={ownUserId} ownClubMemberId={ownClubMemberId} emptyText={null} />
+          <EntryGroup title="Retiradas" entries={withdrawn} entryActions={entryActions} emptyText={null} />
+          {entries.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-4">
+                <Users className="w-6 h-6 text-brand-muted" />
+              </div>
+              <h3 className="text-base font-semibold text-white mb-1">Aún no hay parejas inscritas</h3>
+              <p className="text-sm text-brand-muted max-w-sm">
+                {tournament.status === "registration_open"
+                  ? "Todavía no hay parejas inscritas. Registra la primera pareja del torneo."
+                  : "Cuando abras las inscripciones podrás registrar parejas para el torneo."}
+              </p>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <p className="text-xs font-medium text-brand-muted">Parejas confirmadas</p>
+          {confirmed.length === 0 ? (
+            <p className="text-sm text-brand-muted">Aún no hay parejas confirmadas.</p>
+          ) : (
+            confirmed.map((entry) => (
+              <EntryCard
+                key={entry.id}
+                entry={entry}
+                isOwn={isOwnEntry(entry, ownUserId, ownClubMemberId)}
+                actions={entryActions(entry)}
+              />
+            ))
+          )}
+        </div>
+      )}
+
+      {registering && (
+        <RegisterEntryModal
+          clubId={tournament.club_id}
+          tournamentId={tournament.id}
+          category={tournament.category}
+          secondaryCategory={tournament.secondary_category}
+          excludeClubMemberIds={registeredMemberIds}
+          revalidatePaths={revalidatePaths}
+          mode={
+            isAdmin
+              ? { type: "admin" }
+              : { type: "player", ownClubMemberId, ownFullName, ownAvatarUrl }
+          }
+          onClose={() => setRegistering(false)}
+          onSuccess={handleRegisterSuccess}
+        />
+      )}
+
+      {pendingAction && (
+        <ConfirmDialog
+          open={!!pendingAction}
+          title={pendingAction.type === "confirm" ? "¿Confirmar esta pareja?" : "¿Retirar esta inscripción?"}
+          message={
+            (pendingAction.type === "confirm"
+              ? "La pareja quedará oficialmente inscrita en el torneo."
+              : "La pareja dejará de ocupar un cupo en el torneo.") + (actionError ? `\n\n${actionError}` : "")
+          }
+          confirmLabel={pendingAction.type === "confirm" ? "Confirmar" : "Retirar inscripción"}
+          confirmVariant={pendingAction.type === "confirm" ? "primary" : "danger"}
+          loading={isPending}
+          onConfirm={handleConfirmAction}
+          onCancel={() => {
+            setPendingAction(null);
+            setActionError(null);
+          }}
+        />
+      )}
+
+      <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />
+    </div>
+  );
+}
+
+function EntryGroup({
+  title,
+  entries,
+  entryActions,
+  ownUserId,
+  ownClubMemberId,
+  emptyText,
+}: {
+  title: string;
+  entries: TournamentEntryWithMembers[];
+  entryActions: (entry: TournamentEntryWithMembers) => React.ReactNode;
+  ownUserId?: string;
+  ownClubMemberId?: string;
+  emptyText: string | null;
+}) {
+  if (entries.length === 0 && !emptyText) return null;
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-xs font-medium text-brand-muted">
+        {title} ({entries.length})
+      </p>
+      {entries.length === 0 ? (
+        <p className="text-sm text-brand-muted">{emptyText}</p>
+      ) : (
+        entries.map((entry) => (
+          <EntryCard
+            key={entry.id}
+            entry={entry}
+            isOwn={ownUserId && ownClubMemberId ? isOwnEntry(entry, ownUserId, ownClubMemberId) : false}
+            actions={entryActions(entry)}
+          />
+        ))
+      )}
+    </div>
+  );
+}

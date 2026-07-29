@@ -902,6 +902,320 @@ export interface Database {
           },
         ];
       };
+      // Torneos (Bloque 1.2-1.11) — administration lifecycle only exposes
+      // this table's own columns for now; tournament_court_allocations/
+      // tournament_entries/tournament_entry_members/tournament_matches are
+      // not yet queried from client code (out of scope for Bloque 2.1).
+      tournaments: {
+        Row: {
+          id: string;
+          club_id: string;
+          name: string;
+          description: string | null;
+          category: string;
+          bracket_size: number;
+          status: string;
+          visibility: string;
+          registration_opens_at: string | null;
+          registration_closes_at: string | null;
+          starts_at: string | null;
+          ends_at: string | null;
+          bracket_generated_at: string | null;
+          completed_at: string | null;
+          completed_by: string | null;
+          cancelled_at: string | null;
+          cancelled_by: string | null;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+          // Bloque 2.2.1A — NULL = torneo de categoría única; NOT NULL =
+          // combinado (category es siempre la superior, secondary_category
+          // la inferior, exigido por sort_order real de sport_categories).
+          secondary_category: string | null;
+        };
+        Insert: {
+          id?: string;
+          club_id: string;
+          name: string;
+          description?: string | null;
+          category: string;
+          bracket_size: number;
+          status?: string;
+          visibility?: string;
+          registration_opens_at?: string | null;
+          registration_closes_at?: string | null;
+          starts_at?: string | null;
+          ends_at?: string | null;
+          bracket_generated_at?: string | null;
+          completed_at?: string | null;
+          completed_by?: string | null;
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          created_by: string;
+          created_at?: string;
+          updated_at?: string;
+          secondary_category?: string | null;
+        };
+        Update: {
+          name?: string;
+          description?: string | null;
+          category?: string;
+          bracket_size?: number;
+          status?: string;
+          visibility?: string;
+          registration_opens_at?: string | null;
+          registration_closes_at?: string | null;
+          starts_at?: string | null;
+          ends_at?: string | null;
+          bracket_generated_at?: string | null;
+          completed_at?: string | null;
+          completed_by?: string | null;
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          updated_at?: string;
+          secondary_category?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "tournaments_club_id_fkey";
+            columns: ["club_id"];
+            isOneToOne: false;
+            referencedRelation: "clubs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tournaments_category_fkey";
+            columns: ["category"];
+            isOneToOne: false;
+            referencedRelation: "sport_categories";
+            referencedColumns: ["code"];
+          },
+          {
+            foreignKeyName: "tournaments_secondary_category_fkey";
+            columns: ["secondary_category"];
+            isOneToOne: false;
+            referencedRelation: "sport_categories";
+            referencedColumns: ["code"];
+          },
+        ];
+      };
+      // Torneos (Bloque 2.2) — pairs registration. category is frozen from
+      // tournaments.category at creation time (20260905000001), never
+      // recalculated.
+      tournament_entries: {
+        Row: {
+          id: string;
+          tournament_id: string;
+          club_id: string;
+          category: string;
+          status: string;
+          confirmed_at: string | null;
+          confirmed_by: string | null;
+          withdrawn_at: string | null;
+          withdrawn_by: string | null;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+          // Bloque 2.2.1A — congela tournament.secondary_category en el
+          // momento de crear la inscripción; NULL para torneos/entries de
+          // categoría única.
+          secondary_category: string | null;
+        };
+        Insert: {
+          id?: string;
+          tournament_id: string;
+          club_id: string;
+          category: string;
+          status?: string;
+          confirmed_at?: string | null;
+          confirmed_by?: string | null;
+          withdrawn_at?: string | null;
+          withdrawn_by?: string | null;
+          created_by: string;
+          created_at?: string;
+          updated_at?: string;
+          secondary_category?: string | null;
+        };
+        Update: {
+          status?: string;
+          confirmed_at?: string | null;
+          confirmed_by?: string | null;
+          withdrawn_at?: string | null;
+          withdrawn_by?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "tournament_entries_tournament_club_fk";
+            columns: ["tournament_id", "club_id"];
+            isOneToOne: false;
+            referencedRelation: "tournaments";
+            referencedColumns: ["id", "club_id"];
+          },
+          {
+            foreignKeyName: "tournament_entries_secondary_category_fkey";
+            columns: ["secondary_category"];
+            isOneToOne: false;
+            referencedRelation: "sport_categories";
+            referencedColumns: ["code"];
+          },
+        ];
+      };
+      // Torneos (Bloque 2.2) — exactamente dos filas por entry, sin
+      // status/is_active propio (fuente única de verdad: tournament_entries.
+      // status). Nunca consultada por jugador individual — siempre agrupada
+      // por tournament_id (20260906000001).
+      tournament_entry_members: {
+        Row: {
+          id: string;
+          tournament_entry_id: string;
+          tournament_id: string;
+          club_id: string;
+          club_member_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          tournament_entry_id: string;
+          tournament_id: string;
+          club_id: string;
+          club_member_id: string;
+          created_at?: string;
+        };
+        Update: never;
+        Relationships: [
+          {
+            foreignKeyName: "tournament_entry_members_entry_tournament_fk";
+            columns: ["tournament_entry_id", "tournament_id"];
+            isOneToOne: false;
+            referencedRelation: "tournament_entries";
+            referencedColumns: ["id", "tournament_id"];
+          },
+          {
+            foreignKeyName: "tournament_entry_members_member_club_fk";
+            columns: ["club_member_id", "club_id"];
+            isOneToOne: false;
+            referencedRelation: "club_members";
+            referencedColumns: ["id", "club_id"];
+          },
+        ];
+      };
+      // Torneos (Bloque 2.3) — read-only from client code so far (bracket
+      // display). Writes only via generate_tournament_bracket for now; a
+      // future block (scheduling/results) will add mutating RPCs.
+      tournament_matches: {
+        Row: {
+          id: string;
+          tournament_id: string;
+          club_id: string;
+          round_number: number;
+          match_number: number;
+          status: string;
+          source_match_one_id: string | null;
+          source_match_two_id: string | null;
+          entry_one_id: string | null;
+          entry_two_id: string | null;
+          tournament_court_allocation_id: string | null;
+          court_id: string | null;
+          scheduled_date: string | null;
+          scheduled_start_time: string | null;
+          scheduled_end_time: string | null;
+          set_one_entry_one: number | null;
+          set_one_entry_two: number | null;
+          set_two_entry_one: number | null;
+          set_two_entry_two: number | null;
+          set_three_entry_one: number | null;
+          set_three_entry_two: number | null;
+          winner_entry_id: string | null;
+          started_at: string | null;
+          completed_at: string | null;
+          completed_by: string | null;
+          cancelled_at: string | null;
+          cancelled_by: string | null;
+          created_by: string;
+          updated_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          tournament_id: string;
+          club_id: string;
+          round_number: number;
+          match_number: number;
+          status?: string;
+          source_match_one_id?: string | null;
+          source_match_two_id?: string | null;
+          entry_one_id?: string | null;
+          entry_two_id?: string | null;
+          tournament_court_allocation_id?: string | null;
+          court_id?: string | null;
+          scheduled_date?: string | null;
+          scheduled_start_time?: string | null;
+          scheduled_end_time?: string | null;
+          set_one_entry_one?: number | null;
+          set_one_entry_two?: number | null;
+          set_two_entry_one?: number | null;
+          set_two_entry_two?: number | null;
+          set_three_entry_one?: number | null;
+          set_three_entry_two?: number | null;
+          winner_entry_id?: string | null;
+          started_at?: string | null;
+          completed_at?: string | null;
+          completed_by?: string | null;
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          created_by: string;
+          updated_by: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: never;
+        Relationships: [
+          {
+            foreignKeyName: "tournament_matches_tournament_club_fk";
+            columns: ["tournament_id", "club_id"];
+            isOneToOne: false;
+            referencedRelation: "tournaments";
+            referencedColumns: ["id", "club_id"];
+          },
+          {
+            foreignKeyName: "tournament_matches_source_one_tournament_fk";
+            columns: ["source_match_one_id", "tournament_id"];
+            isOneToOne: false;
+            referencedRelation: "tournament_matches";
+            referencedColumns: ["id", "tournament_id"];
+          },
+          {
+            foreignKeyName: "tournament_matches_source_two_tournament_fk";
+            columns: ["source_match_two_id", "tournament_id"];
+            isOneToOne: false;
+            referencedRelation: "tournament_matches";
+            referencedColumns: ["id", "tournament_id"];
+          },
+          {
+            foreignKeyName: "tournament_matches_entry_one_tournament_fk";
+            columns: ["entry_one_id", "tournament_id"];
+            isOneToOne: false;
+            referencedRelation: "tournament_entries";
+            referencedColumns: ["id", "tournament_id"];
+          },
+          {
+            foreignKeyName: "tournament_matches_entry_two_tournament_fk";
+            columns: ["entry_two_id", "tournament_id"];
+            isOneToOne: false;
+            referencedRelation: "tournament_entries";
+            referencedColumns: ["id", "tournament_id"];
+          },
+          {
+            foreignKeyName: "tournament_matches_winner_tournament_fk";
+            columns: ["winner_entry_id", "tournament_id"];
+            isOneToOne: false;
+            referencedRelation: "tournament_entries";
+            referencedColumns: ["id", "tournament_id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -1365,6 +1679,82 @@ export interface Database {
         Args: { p_club_id: string; p_club_member_id: string };
         Returns: string | null;
       };
+      // Torneos, Bloque 1.5 (20260909000001) — the 5 admin lifecycle RPCs.
+      // All 5 share the exact same RETURNS TABLE shape as tournaments.Row.
+      create_tournament: {
+        Args: {
+          p_club_id: string;
+          p_name: string;
+          p_category: string;
+          p_bracket_size: number;
+          p_description?: string | null;
+          p_visibility?: string;
+          p_registration_opens_at?: string | null;
+          p_registration_closes_at?: string | null;
+          p_starts_at?: string | null;
+          p_ends_at?: string | null;
+          // Bloque 2.2.1A (20260916000001) — categoría inferior de un
+          // torneo combinado; NULL (default) = torneo de categoría única.
+          p_secondary_category?: string | null;
+        };
+        Returns: Array<Database["public"]["Tables"]["tournaments"]["Row"]>;
+      };
+      update_tournament: {
+        Args: {
+          p_tournament_id: string;
+          p_name: string;
+          p_description: string | null;
+          p_category: string;
+          p_bracket_size: number;
+          p_visibility: string;
+          p_registration_opens_at: string | null;
+          p_registration_closes_at: string | null;
+          p_starts_at: string | null;
+          p_ends_at: string | null;
+          // Bloque 2.2.1A (20260916000001) — sin DEFAULT, igual que el
+          // resto de los parámetros de esta función (full-replace, nunca
+          // actualización parcial).
+          p_secondary_category: string | null;
+        };
+        Returns: Array<Database["public"]["Tables"]["tournaments"]["Row"]>;
+      };
+      open_tournament_registration: {
+        Args: { p_tournament_id: string };
+        Returns: Array<Database["public"]["Tables"]["tournaments"]["Row"]>;
+      };
+      close_tournament_registration: {
+        Args: { p_tournament_id: string };
+        Returns: Array<Database["public"]["Tables"]["tournaments"]["Row"]>;
+      };
+      cancel_tournament: {
+        Args: { p_tournament_id: string };
+        Returns: Array<Database["public"]["Tables"]["tournaments"]["Row"]>;
+      };
+      // Torneos, Bloque 1.6 (20260910000001) — the 3 entry registration
+      // RPCs. All 3 share the exact same RETURNS TABLE shape as
+      // tournament_entries.Row.
+      register_tournament_entry: {
+        Args: {
+          p_tournament_id: string;
+          p_club_member_one_id: string;
+          p_club_member_two_id: string;
+        };
+        Returns: Array<Database["public"]["Tables"]["tournament_entries"]["Row"]>;
+      };
+      confirm_tournament_entry: {
+        Args: { p_tournament_entry_id: string };
+        Returns: Array<Database["public"]["Tables"]["tournament_entries"]["Row"]>;
+      };
+      withdraw_tournament_entry: {
+        Args: { p_tournament_entry_id: string };
+        Returns: Array<Database["public"]["Tables"]["tournament_entries"]["Row"]>;
+      };
+      // Torneos, Bloque 1.7 (20260911000001) — generates every
+      // tournament_matches row for the bracket in one transaction.
+      generate_tournament_bracket: {
+        Args: { p_tournament_id: string };
+        Returns: Array<Database["public"]["Tables"]["tournaments"]["Row"]>;
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
@@ -1441,3 +1831,17 @@ export type ClubNews = Tables<"club_news">;
 export type ClubNewsWithAuthor = ClubNews & {
   created_by_profile: Pick<Profile, "full_name"> | null;
 };
+
+// Torneos (Bloque 2.1) — administration only for now.
+export type Tournament = Tables<"tournaments">;
+export type TournamentStatus = Tournament["status"];
+export type TournamentVisibility = Tournament["visibility"];
+
+// Torneos (Bloque 2.2) — pairs registration.
+export type TournamentEntryRow = Tables<"tournament_entries">;
+export type TournamentEntryStatus = TournamentEntryRow["status"];
+export type TournamentEntryMemberRow = Tables<"tournament_entry_members">;
+
+// Torneos (Bloque 2.3) — bracket display.
+export type TournamentMatchRow = Tables<"tournament_matches">;
+export type TournamentMatchStatus = TournamentMatchRow["status"];

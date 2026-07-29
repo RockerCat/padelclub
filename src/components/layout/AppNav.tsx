@@ -21,6 +21,7 @@ import {
   Megaphone,
   BarChart3,
   Trophy,
+  Swords,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils/cn";
@@ -112,6 +113,11 @@ function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequest
         icon: Trophy,
       },
       {
+        label: "Torneos",
+        href: `/${slug}/admin/tournaments`,
+        icon: Swords,
+      },
+      {
         label: "Estadísticas",
         href: `/${slug}/admin/statistics`,
         icon: BarChart3,
@@ -158,6 +164,11 @@ function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequest
         icon: Trophy,
       },
       {
+        label: "Torneos",
+        href: `/${slug}/admin/tournaments`,
+        icon: Swords,
+      },
+      {
         label: "Estadísticas",
         href: `/${slug}/admin/statistics`,
         icon: BarChart3,
@@ -190,6 +201,11 @@ function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequest
         label: "Ranking",
         href: `/${slug}/ranking`,
         icon: Trophy,
+      },
+      {
+        label: "Torneos",
+        href: `/${slug}/tournaments`,
+        icon: Swords,
       }
     );
   }
@@ -635,6 +651,16 @@ export function AppNav({
                       >
                         <BarChart3 className="w-4 h-4 shrink-0" />
                         <span>Estadísticas</span>
+                      </Link>
+                    )}
+                    {(role === "OWNER" || role === "ADMIN") && (
+                      <Link
+                        href={`/${club.slug}/admin/tournaments`}
+                        onClick={() => setSecondaryMenuOpen(false)}
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
+                      >
+                        <Swords className="w-4 h-4 shrink-0" />
+                        <span>Torneos</span>
                       </Link>
                     )}
                     {role === "OWNER" && (

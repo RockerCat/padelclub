@@ -1,0 +1,33 @@
+-- ============================================================
+-- Courts — prerrequisito UNIQUE(id, club_id)
+-- Mi Pádel Club
+-- ============================================================
+-- Bloque 1.3 del módulo de Torneos (preparación exclusiva de este
+-- prerrequisito): futuras claves foráneas compuestas del módulo
+-- (tournament_court_allocations, tournament_matches) necesitarán
+-- referenciar (court_id, club_id) para garantizar declarativamente que
+-- una cancha referenciada pertenece al mismo club que el registro que la
+-- referencia — mismo patrón exacto ya usado por club_members
+-- (club_members_id_club_id_key) y club_ranking_cycles
+-- (club_ranking_cycles_id_club_id_key), ambos en 20260820000001.
+--
+-- Auditado antes de escribir esta migración: public.courts, desde su
+-- creación (20260611000001_sprint2a_courts.sql), solo tiene
+-- PRIMARY KEY (id) y club_id uuid NOT NULL REFERENCES clubs(id)
+-- ON DELETE CASCADE. Ninguna de las migraciones posteriores que tocan
+-- courts (streaming_url, RLS pública, grants) agregó nunca un UNIQUE ni
+-- un índice único sobre (id, club_id) ni (club_id, id).
+--
+-- Puramente aditivo: id ya es la clave primaria de courts, por lo que
+-- ninguna fila existente puede violar esta restricción (id ya es único
+-- por sí solo; agregar club_id a la combinación nunca introduce un
+-- duplicado que no existiera ya). No se modifica ningún dato, no hace
+-- falta backfill, no se toca la PK, la nulabilidad de club_id, ni el
+-- ON DELETE CASCADE ya existente hacia clubs.
+--
+-- No crea ninguna tabla, función, trigger ni política del módulo de
+-- Torneos — exclusivamente este prerrequisito sobre courts.
+-- ============================================================
+
+ALTER TABLE public.courts
+  ADD CONSTRAINT courts_id_club_id_key UNIQUE (id, club_id);

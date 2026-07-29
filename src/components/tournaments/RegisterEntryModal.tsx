@@ -1,0 +1,256 @@
+"use client";
+
+import { useEffect, useState, useTransition } from "react";
+import { X } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import { Button, Spinner } from "@/components/ui";
+import { PlayerAvatar } from "@/components/players/PlayerAvatar";
+import { PlayerCombobox, type PlayerComboboxCandidate } from "./PlayerCombobox";
+import { registerTournamentEntryAction } from "@/lib/tournamentEntryActions";
+import { tournamentCategoryLabel } from "@/lib/tournamentLabels";
+import type { TournamentEntryRow } from "@/types/database";
+
+interface RegisterEntryModalProps {
+  clubId: string;
+  tournamentId: string;
+  category: string;
+  // Bloque 2.2.1A — when set, candidates are combined from both categories.
+  // Hotfix 2.2.1B: the composition rule (H+L/L+H/L+L, never H+H, never a
+  // category outside {H, L}) is now enforced both here (UI, via candidate
+  // filtering — never a security boundary) and in register_tournament_entry
+  // (the real authority).
+  secondaryCategory: string | null;
+  excludeClubMemberIds: string[];
+  revalidatePaths: string[];
+  // Player mode auto-includes the caller as one of the two members and
+  // hides that slot from selection entirely (spec: "no poder removerse del
+  // formulario"). Admin mode shows two free selectors.
+  mode: { type: "admin" } | { type: "player"; ownClubMemberId: string; ownFullName: string | null; ownAvatarUrl: string | null };
+  onClose: () => void;
+  onSuccess: (entry: TournamentEntryRow | undefined) => void;
+}
+
+export function RegisterEntryModal({
+  clubId,
+  tournamentId,
+  category,
+  secondaryCategory,
+  excludeClubMemberIds,
+  revalidatePaths,
+  mode,
+  onClose,
+  onSuccess,
+}: RegisterEntryModalProps) {
+  const [candidates, setCandidates] = useState<PlayerComboboxCandidate[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [memberOneId, setMemberOneId] = useState<string | null>(mode.type === "player" ? mode.ownClubMemberId : null);
+  const [memberTwoId, setMemberTwoId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = "";
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onClose]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const supabase = createClient();
+    // One call per category the tournament accepts (max 2, never a query
+    // per player) — combined tournaments must offer candidates from BOTH
+    // category/secondaryCategory, not just the primary one.
+    const categoriesToLoad = secondaryCategory ? [category, secondaryCategory] : [category];
+
+    Promise.all(
+      categoriesToLoad.map((cat) => supabase.rpc("get_club_category_ranking_view", { p_club_id: clubId, p_category: cat }))
+    ).then((results) => {
+      if (cancelled) return;
+      if (results.some((r) => r.error)) {
+        setLoadError("No se pudo cargar la lista de jugadores.");
+        return;
+      }
+      const byMemberId = new Map<string, PlayerComboboxCandidate>();
+      for (const { data } of results) {
+        for (const r of data ?? []) {
+          byMemberId.set(r.club_member_id, {
+            club_member_id: r.club_member_id,
+            full_name: r.full_name,
+            avatar_url: r.avatar_url,
+            category: r.category,
+          });
+        }
+      }
+      setCandidates([...byMemberId.values()]);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function categoryOf(id: string | null): string | undefined {
+    if (!id || !candidates) return undefined;
+    return candidates.find((c) => c.club_member_id === id)?.category;
+  }
+
+  // Composition rule, expressed purely via category codes (never sort_order,
+  // never a sum, never string comparison beyond equality) — "the first slot"
+  // is unrestricted (H or L); once it holds an H, the companion slot is
+  // narrowed to L only, exactly mirroring the backend's H+L/L+H/L+L rule.
+  // For a simple tournament (secondaryCategory null) every already-loaded
+  // candidate already shares the single category, so no extra filtering is
+  // needed here.
+  function companionCandidates(firstMemberId: string | null): PlayerComboboxCandidate[] {
+    if (!candidates) return [];
+    if (!secondaryCategory) return candidates;
+    const firstCategory = categoryOf(firstMemberId);
+    if (firstCategory === category) return candidates.filter((c) => c.category === secondaryCategory);
+    return candidates;
+  }
+
+  // Player mode: slot 1 is the caller, fixed — resolved once from the
+  // already-loaded candidates (they must appear there to be eligible at
+  // all; EntriesSection never renders the "Inscribirme" action otherwise).
+  const slotOneId = mode.type === "player" ? mode.ownClubMemberId : memberOneId;
+  const companionOptions = companionCandidates(slotOneId);
+
+  function handleMemberOneChange(id: string | null) {
+    setMemberOneId(id);
+    // If the previously-chosen companion is no longer valid under the new
+    // slot-1 category, clear it instead of silently keeping an invalid pair.
+    const nextCompanionOptions = companionCandidates(id);
+    if (memberTwoId && !nextCompanionOptions.some((c) => c.club_member_id === memberTwoId)) {
+      setMemberTwoId(null);
+    }
+  }
+
+  function handleSubmit() {
+    setError(null);
+    if (!memberOneId || !memberTwoId) {
+      setError(mode.type === "player" ? "Selecciona a tu compañero." : "Selecciona a los dos jugadores.");
+      return;
+    }
+    if (memberOneId === memberTwoId) {
+      setError("Los dos jugadores deben ser distintos.");
+      return;
+    }
+    startTransition(async () => {
+      const result = await registerTournamentEntryAction(clubId, tournamentId, memberOneId, memberTwoId, revalidatePaths);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      onSuccess(result.entry);
+    });
+  }
+
+  const excludeIds = mode.type === "player" ? [...excludeClubMemberIds, mode.ownClubMemberId] : excludeClubMemberIds;
+
+  const helpText = secondaryCategory
+    ? `Puedes registrar una pareja formada por una persona de ${category} y una de ${secondaryCategory}, o por dos personas de ${secondaryCategory}. No se permiten dos jugadores de ${category}.`
+    : `Ambos jugadores deben pertenecer a la categoría ${category}.`;
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 bg-black/60 z-[400]"
+        style={{ backdropFilter: "blur(4px)" }}
+        onClick={onClose}
+        aria-hidden
+      />
+      <div className="fixed inset-x-0 bottom-0 md:inset-0 md:flex md:items-center md:justify-center z-[401] pointer-events-none">
+        <div
+          className="pointer-events-auto w-full md:w-[560px] bg-[#082735] border border-white/10 rounded-t-2xl md:rounded-2xl shadow-2xl flex flex-col"
+          style={{ maxHeight: "90dvh" }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 shrink-0">
+            <h2 className="text-base font-semibold text-white">Registrar pareja</h2>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-brand-muted hover:text-white hover:bg-white/10 transition-colors"
+              aria-label="Cerrar"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="overflow-y-auto flex-1 px-5 py-5 flex flex-col gap-4">
+            <p className="text-xs text-brand-muted bg-white/5 border border-white/10 rounded-xl px-3 py-2.5">{helpText}</p>
+
+            {candidates === null && !loadError && (
+              <div className="flex items-center justify-center py-8">
+                <Spinner />
+              </div>
+            )}
+
+            {loadError && (
+              <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">{loadError}</p>
+            )}
+
+            {candidates !== null && (
+              <>
+                {mode.type === "player" && (
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-sm font-medium text-white/80">Jugador 1</label>
+                    <div className="flex items-center gap-2.5 h-12 px-3 rounded-xl border border-white/10 bg-white/5">
+                      <PlayerAvatar player={{ id: mode.ownClubMemberId, full_name: mode.ownFullName, avatar_url: mode.ownAvatarUrl }} size="sm" />
+                      <span className="text-sm text-white">{mode.ownFullName ?? "Tú"} (Tú)</span>
+                    </div>
+                  </div>
+                )}
+
+                {mode.type === "admin" && (
+                  <PlayerCombobox
+                    label="Jugador 1"
+                    candidates={candidates}
+                    excludeIds={[...excludeIds, ...(memberTwoId ? [memberTwoId] : [])]}
+                    value={memberOneId}
+                    onChange={handleMemberOneChange}
+                  />
+                )}
+
+                <PlayerCombobox
+                  label={mode.type === "player" ? "Tu compañero" : "Jugador 2"}
+                  candidates={companionOptions}
+                  excludeIds={[...excludeIds, ...(slotOneId ? [slotOneId] : [])]}
+                  value={memberTwoId}
+                  onChange={setMemberTwoId}
+                  disabled={mode.type === "admin" && !memberOneId}
+                />
+
+                {candidates.length === 0 && (
+                  <p className="text-xs text-brand-muted">
+                    No hay jugadores disponibles en la categoría {tournamentCategoryLabel(category, secondaryCategory)} para
+                    inscribirse.
+                  </p>
+                )}
+              </>
+            )}
+
+            {error && (
+              <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">{error}</p>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3 px-5 py-4 border-t border-white/10 shrink-0">
+            <Button type="button" loading={pending} onClick={handleSubmit} disabled={candidates === null}>
+              Registrar pareja
+            </Button>
+            <Button type="button" variant="secondary" disabled={pending} onClick={onClose}>
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
