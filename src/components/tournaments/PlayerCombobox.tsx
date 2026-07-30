@@ -25,7 +25,7 @@ interface PlayerComboboxProps {
 // Small, module-specific combobox — no equivalent reusable component exists
 // yet elsewhere (audited: FilterDropdown is a fixed-options menu, not a
 // searchable player list). Candidate lists here are always small (a club's
-// players in a single category, bracket_size ≤ 16), so a plain filtered
+// players in a single category, max_pairs typically small), so a plain filtered
 // list with no virtualization/debounce is enough — never a generic global
 // combobox system.
 export function PlayerCombobox({

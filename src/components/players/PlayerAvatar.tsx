@@ -23,18 +23,20 @@ const SIZE_CLASSES: Record<"sm" | "md" | "lg" | "xl" | "2xl", string> = {
   "2xl": "w-24 h-24 text-3xl",
 };
 
-// Brand-aligned solid colors (lime/teal family, matching --color-brand-primary
-// and --color-brand-secondary) — the fallback picks one per player via a stable
-// hash, so avatars vary without straying from PadelClub's palette. Kept as
-// flat solid fills on purpose — no gradients, no decorative shapes — so it
-// reads as a clean initials avatar, not an attempt at an illustration.
+// Brand-aligned solid colors — dark teal-family shades derived from
+// --color-brand-secondary (#037172), never the bright cyan primary
+// (#00ffff), which would fail contrast behind light/white initials text —
+// the fallback picks one per player via a stable hash, so avatars vary
+// without straying from PadelClub's palette. Kept as flat solid fills on
+// purpose — no gradients, no decorative shapes — so it reads as a clean
+// initials avatar, not an attempt at an illustration.
 const PALETTE = [
-  "#1698BE",
-  "#0E7C86",
-  "#2E8B9E",
-  "#3A7D00",
-  "#1B5E6B",
-  "#0B4A5E",
+  "#037172",
+  "#04595A",
+  "#0A8A8C",
+  "#065658",
+  "#0E6B6D",
+  "#023F40",
 ];
 
 function hashString(input: string): number {

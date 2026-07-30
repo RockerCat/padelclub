@@ -10,11 +10,11 @@ export interface PairMemberSlotPlayer {
   category?: string | null;
 }
 
-// Shared by EntryCard (Bloque 2.2) and MatchCard (Bloque 2.3) — one pair
-// always shows its two members the same way, never two slightly different
-// versions of the same presentation. `member` undefined means RLS hid that
-// row (documented tradeoff, see tournamentEntries.ts) — never a raw UUID,
-// never a crash, just an honest placeholder.
+// Shared by EntryCard — a pair always shows its two members the same way,
+// never two slightly different versions of the same presentation. `member`
+// undefined means RLS hid that row (documented tradeoff, see
+// tournamentEntries.ts) — never a raw UUID, never a crash, just an honest
+// placeholder.
 //
 // `category` (prop) is the tournament/entry's own frozen category — still
 // correct and sufficient for a single-category tournament (both players

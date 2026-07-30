@@ -3,6 +3,7 @@ import { CheckCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, Button } from "@/components/ui";
 import { AcceptInviteCard } from "./AcceptInviteCard";
+import { CLUB_PRIMARY_COLOR, CLUB_SECONDARY_COLOR } from "@/lib/constants/clubTheme";
 
 interface InvitePageProps {
   params: Promise<{ token: string }>;
@@ -143,12 +144,12 @@ export default async function InvitePage({ params, searchParams }: InvitePagePro
 
   // Extract branding whenever we have it (valid or not — club identity doesn't change)
   const branding: ClubBranding | null =
-    info?.club_name && info.primary_color && info.secondary_color
+    info?.club_name
       ? {
           clubName: info.club_name,
           logoUrl: info.club_logo_url ?? null,
-          primaryColor: info.primary_color,
-          secondaryColor: info.secondary_color,
+          primaryColor: CLUB_PRIMARY_COLOR,
+          secondaryColor: CLUB_SECONDARY_COLOR,
           roleLabel: ROLE_LABELS[info.role ?? "PLAYER"] ?? "miembro",
         }
       : null;

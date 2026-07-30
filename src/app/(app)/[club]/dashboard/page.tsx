@@ -288,7 +288,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
 
   const { data: club } = await supabase
     .from("clubs")
-    .select("id, slug, name, description, city, state, country, address, latitude, longitude, logo_url, cover_image_url, visibility, primary_color, secondary_color, whatsapp, instagram, facebook, youtube, allowed_reservation_durations")
+    .select("id, slug, name, description, city, state, country, address, latitude, longitude, logo_url, cover_image_url, visibility, whatsapp, instagram, facebook, youtube, allowed_reservation_durations")
     .eq("slug", slug)
     .eq("is_active", true)
     .single();

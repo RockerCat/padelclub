@@ -23,7 +23,7 @@ export function HourlySlotsChart({ hourlySlots }: { hourlySlots: ClubStatisticsH
               <span className="text-[10px] text-brand-muted tabular-nums mb-1 leading-none">{h.count}</span>
               <div
                 className="w-full rounded-t-md"
-                style={{ height: `${heightPct}%`, backgroundColor: "var(--club-secondary, #1698BE)", opacity: 0.85 }}
+                style={{ height: `${heightPct}%`, backgroundColor: "var(--club-secondary, #037172)", opacity: 0.85 }}
               />
               <span className="text-[9px] text-brand-muted/70 mt-1.5 leading-none whitespace-nowrap">
                 {h.label}

@@ -77,7 +77,7 @@ export default async function ProfileLayout({ children }: { children: React.Reac
   ]);
 
   return (
-    <ClubThemeProvider initialPrimary={active.club.primary_color} initialSecondary={active.club.secondary_color}>
+    <ClubThemeProvider>
       <AppNav
         club={active.club}
         role={active.role as ClubRole}

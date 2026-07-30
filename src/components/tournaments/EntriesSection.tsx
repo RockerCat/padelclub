@@ -2,12 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Users } from "lucide-react";
+import { Plus, Users, X } from "lucide-react";
 import { Button, ConfirmDialog, Toast } from "@/components/ui";
 import { EntryCard } from "./EntryCard";
 import { RegisterEntryModal } from "./RegisterEntryModal";
+import { ReplaceMemberModal } from "./ReplaceMemberModal";
 import {
   confirmTournamentEntryAction,
+  rejectTournamentEntryAction,
   withdrawTournamentEntryAction,
 } from "@/lib/tournamentEntryActions";
 import { isOwnEntry, type TournamentEntriesCapacity, type TournamentEntryWithMembers } from "@/lib/tournamentEntries";
@@ -15,7 +17,7 @@ import { tournamentCategoryLabel } from "@/lib/tournamentLabels";
 import type { Tournament, TournamentEntryRow } from "@/types/database";
 
 interface EntriesSectionProps {
-  tournament: Pick<Tournament, "id" | "club_id" | "category" | "secondary_category" | "bracket_size" | "status">;
+  tournament: Pick<Tournament, "id" | "club_id" | "category" | "secondary_category" | "max_pairs" | "status">;
   initialEntries: TournamentEntryWithMembers[];
   capacity: TournamentEntriesCapacity;
   role: "OWNER" | "ADMIN" | "PLAYER";
@@ -34,6 +36,7 @@ interface EntriesSectionProps {
 }
 
 type PendingAction = { type: "confirm" | "withdraw"; entryId: string } | null;
+type RejectingEntry = { entryId: string } | null;
 
 function CapacityBar({ capacity }: { capacity: TournamentEntriesCapacity }) {
   const pct = capacity.total > 0 ? Math.min(100, Math.round((capacity.occupied / capacity.total) * 100)) : 0;
@@ -70,6 +73,9 @@ export function EntriesSection({
   const [entries, setEntries] = useState(initialEntries);
   const [registering, setRegistering] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const [rejecting, setRejecting] = useState<RejectingEntry>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [replacingEntry, setReplacingEntry] = useState<TournamentEntryWithMembers | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -79,8 +85,17 @@ export function EntriesSection({
     .flatMap((e) => e.members.map((m) => m.club_member_id));
 
   const full = capacity.occupied >= capacity.total;
-  const canRegisterStatus = tournament.status === "registration_open";
-  const canConfirmStatus = tournament.status === "registration_open";
+  // El organizador puede seguir registrando parejas directamente durante
+  // registration_closed/in_progress ("agregar nuevas duplas durante el
+  // torneo", sin restricción de cupo fuera de registration_open) — un
+  // jugador solo puede inscribirse mientras las inscripciones están
+  // abiertas.
+  const canPlayerRegister = tournament.status === "registration_open" && !full;
+  const canAdminRegister =
+    tournament.status === "registration_open"
+      ? !full
+      : tournament.status === "registration_closed" || tournament.status === "in_progress";
+  const canConfirmOrRejectStatus = tournament.status === "registration_open" || tournament.status === "registration_closed";
   const canWithdrawStatus = tournament.status === "registration_open" || tournament.status === "registration_closed";
 
   const ownActiveEntry = entries.find(
@@ -128,13 +143,18 @@ export function EntriesSection({
 
   function entryActions(entry: TournamentEntryWithMembers) {
     const isMine = isOwnEntry(entry, ownUserId, ownClubMemberId);
-    const showConfirm = isAdmin && entry.status === "pending" && canConfirmStatus;
+    const showConfirm = isAdmin && entry.status === "pending" && canConfirmOrRejectStatus;
+    const showReject = isAdmin && entry.status === "pending" && canConfirmOrRejectStatus;
     const showWithdraw =
       canWithdrawStatus &&
       (entry.status === "pending" || entry.status === "confirmed") &&
       (isAdmin || isMine);
+    // Reemplazo/corrección de integrante — solo sobre una pareja
+    // confirmada, solo mientras el torneo está in_progress (backend:
+    // replace_tournament_entry_member).
+    const showReplace = isAdmin && entry.status === "confirmed" && tournament.status === "in_progress";
 
-    if (!showConfirm && !showWithdraw) return null;
+    if (!showConfirm && !showReject && !showWithdraw && !showReplace) return null;
 
     return (
       <>
@@ -148,6 +168,31 @@ export function EntriesSection({
             }}
           >
             Confirmar
+          </Button>
+        )}
+        {showReject && (
+          <Button
+            size="sm"
+            variant="danger"
+            onClick={() => {
+              setActionError(null);
+              setRejectReason("");
+              setRejecting({ entryId: entry.id });
+            }}
+          >
+            Rechazar
+          </Button>
+        )}
+        {showReplace && (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              setActionError(null);
+              setReplacingEntry(entry);
+            }}
+          >
+            Reemplazar integrante
           </Button>
         )}
         {showWithdraw && (
@@ -166,20 +211,42 @@ export function EntriesSection({
     );
   }
 
+  function handleReject() {
+    if (!rejecting) return;
+    if (!rejectReason.trim()) {
+      setActionError("Escribe un motivo para el rechazo.");
+      return;
+    }
+    setActionError(null);
+    startTransition(async () => {
+      const result = await rejectTournamentEntryAction(tournament.club_id, rejecting.entryId, rejectReason.trim(), revalidatePaths);
+      if (result.error) {
+        setActionError(result.error);
+        return;
+      }
+      if (result.entry) {
+        setEntries((prev) => prev.map((e) => (e.id === result.entry!.id ? { ...e, ...result.entry! } : e)));
+      }
+      setRejecting(null);
+      setToastMessage("Solicitud rechazada correctamente");
+      router.refresh();
+    });
+  }
+
   const confirmed = entries.filter((e) => e.status === "confirmed");
   const pending = entries.filter((e) => e.status === "pending");
   const withdrawn = entries.filter((e) => e.status === "withdrawn");
+  const rejected = entries.filter((e) => e.status === "rejected");
 
   // A player is eligible when their own current category is either of the
   // two categories the tournament accepts (single or combined) — the exact
   // H+L/L+H/L+L pairing rule between the TWO players of a pair is not
-  // implemented yet (Hotfix 2.2.1B); this is only "can this player see a
-  // register action at all", never the final composition check.
+  // implemented yet; this is only "can this player see a register action at
+  // all", never the final composition check.
   const ownCategoryMatches =
     !!ownCategory && (ownCategory === tournament.category || ownCategory === tournament.secondary_category);
 
-  const eligibleToRegister =
-    canRegisterStatus && !full && (isAdmin || (ownCategoryMatches && !ownActiveEntry));
+  const eligibleToRegister = isAdmin ? canAdminRegister : (canPlayerRegister && ownCategoryMatches && !ownActiveEntry);
 
   return (
     <div className="flex flex-col gap-5 max-w-3xl">
@@ -207,9 +274,9 @@ export function EntriesSection({
         </p>
       )}
 
-      {/* PLAYER: own pending/withdrawn entry surfaced explicitly (never
-          duplicated with the confirmed list below, which already shows a
-          confirmed own entry tagged "Tu pareja"). */}
+      {/* PLAYER: own pending/withdrawn/rejected entry surfaced explicitly
+          (never duplicated with the confirmed list below, which already
+          shows a confirmed own entry tagged "Tu pareja"). */}
       {!isAdmin && ownAnyEntry && ownAnyEntry.status !== "confirmed" && (
         <div>
           <p className="text-xs font-medium text-brand-muted mb-2">Tu inscripción</p>
@@ -224,7 +291,7 @@ export function EntriesSection({
               <Plus className="w-3.5 h-3.5" />
               Inscribirme
             </Button>
-          ) : canRegisterStatus && !full && !ownCategoryMatches ? (
+          ) : canPlayerRegister && !ownCategoryMatches ? (
             <p className="text-sm text-brand-muted bg-white/5 border border-white/10 rounded-xl px-4 py-3">
               No perteneces a la categoría {tournamentCategoryLabel(tournament.category, tournament.secondary_category)} de
               este torneo, así que no puedes inscribirte.
@@ -237,6 +304,7 @@ export function EntriesSection({
         <div className="flex flex-col gap-5">
           <EntryGroup title="Pendientes" entries={pending} entryActions={entryActions} emptyText={null} />
           <EntryGroup title="Confirmadas" entries={confirmed} entryActions={entryActions} ownUserId={ownUserId} ownClubMemberId={ownClubMemberId} emptyText={null} />
+          <EntryGroup title="Rechazadas" entries={rejected} entryActions={entryActions} emptyText={null} />
           <EntryGroup title="Retiradas" entries={withdrawn} entryActions={entryActions} emptyText={null} />
           {entries.length === 0 && (
             <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -288,6 +356,24 @@ export function EntriesSection({
         />
       )}
 
+      {replacingEntry && (
+        <ReplaceMemberModal
+          clubId={tournament.club_id}
+          tournamentEntryId={replacingEntry.id}
+          category={tournament.category}
+          secondaryCategory={tournament.secondary_category}
+          members={replacingEntry.members}
+          excludeClubMemberIds={registeredMemberIds}
+          revalidatePaths={revalidatePaths}
+          onClose={() => setReplacingEntry(null)}
+          onSuccess={() => {
+            setReplacingEntry(null);
+            setToastMessage("Integrante reemplazado correctamente");
+            router.refresh();
+          }}
+        />
+      )}
+
       {pendingAction && (
         <ConfirmDialog
           open={!!pendingAction}
@@ -306,6 +392,59 @@ export function EntriesSection({
             setActionError(null);
           }}
         />
+      )}
+
+      {rejecting && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/60 z-[400]"
+            style={{ backdropFilter: "blur(4px)" }}
+            onClick={() => setRejecting(null)}
+            aria-hidden
+          />
+          <div className="fixed inset-x-0 bottom-0 md:inset-0 md:flex md:items-center md:justify-center z-[401] pointer-events-none">
+            <div
+              className="pointer-events-auto w-full md:w-[480px] bg-[#082735] border border-white/10 rounded-t-2xl md:rounded-2xl shadow-2xl flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+                <h2 className="text-base font-semibold text-white">Rechazar solicitud</h2>
+                <button
+                  type="button"
+                  onClick={() => setRejecting(null)}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-brand-muted hover:text-white hover:bg-white/10 transition-colors"
+                  aria-label="Cerrar"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="px-5 py-5 flex flex-col gap-3">
+                <label className="text-sm font-medium text-white/80">Motivo del rechazo</label>
+                <textarea
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  rows={3}
+                  autoFocus
+                  placeholder="Explica brevemente por qué se rechaza esta solicitud..."
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-base md:text-sm text-white placeholder:text-brand-muted/60 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20 resize-none"
+                />
+                {actionError && (
+                  <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
+                    {actionError}
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-3 px-5 py-4 border-t border-white/10">
+                <Button variant="danger" loading={isPending} onClick={handleReject}>
+                  Rechazar solicitud
+                </Button>
+                <Button variant="secondary" disabled={isPending} onClick={() => setRejecting(null)}>
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />

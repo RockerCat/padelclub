@@ -3,10 +3,12 @@
 import { useActionState, useEffect, useState } from "react";
 import { Button, Input } from "@/components/ui";
 import { isoToBogotaWallClock } from "@/lib/utils/bogotaDatetime";
+import { TournamentImageUpload } from "./TournamentImageUpload";
 import type { Tournament, SportCategory } from "@/types/database";
 import type { TournamentActionState } from "./actions";
 
 interface TournamentFormProps {
+  clubId: string;
   tournament?: Tournament;
   categories: Pick<SportCategory, "code" | "sort_order">[];
   action: (prevState: TournamentActionState, formData: FormData) => Promise<TournamentActionState>;
@@ -14,21 +16,22 @@ interface TournamentFormProps {
   onCancel: () => void;
 }
 
-const BRACKET_SIZE_OPTIONS = [4, 8, 16];
-
 const initialState: TournamentActionState = {};
 
 // Shared by CreateTournamentModal and EditTournamentModal — the only
 // difference between create/edit is the bound `action` and whether
-// `tournament` is passed. Field-level lock rules for registration_open come
-// straight from update_tournament's own validation (20260909000001): category,
-// bracket_size and registration_opens_at are frozen once registration is
-// open — never guessed, and the real backend error still surfaces if a race
-// slips through (e.g. someone opened registration in another tab).
-export function TournamentForm({ tournament, categories, action, onSuccess, onCancel }: TournamentFormProps) {
+// `tournament` is passed. Field-level lock rules come straight from
+// update_tournament's own validation: category, max_pairs and
+// registration_opens_at are frozen once registration is open OR closed
+// (only draft and, before starting, plain informational fields stay
+// editable past that point) — never guessed, and the real backend error
+// still surfaces if a race slips through (e.g. someone opened
+// registration in another tab).
+export function TournamentForm({ clubId, tournament, categories, action, onSuccess, onCancel }: TournamentFormProps) {
   const [state, formAction, pending] = useActionState(action, initialState);
   const isEdit = !!tournament;
-  const lockedByRegistrationOpen = tournament?.status === "registration_open";
+  const structuralFieldsLocked =
+    tournament?.status === "registration_open" || tournament?.status === "registration_closed";
 
   // Controlled (unlike the rest of this form's uncontrolled defaultValue
   // fields) only because the secondary-category options depend reactively
@@ -36,6 +39,14 @@ export function TournamentForm({ tournament, categories, action, onSuccess, onCa
   // never a string/number comparison of the code itself.
   const [categoryCode, setCategoryCode] = useState(tournament?.category ?? "");
   const [secondaryCategoryCode, setSecondaryCategoryCode] = useState(tournament?.secondary_category ?? "");
+
+  // Al crear: la hora local actual, calculada en el momento en que este
+  // formulario se monta (nunca al momento del build, nunca una constante
+  // global) — el usuario puede editarla libremente después. Al editar: el
+  // valor ya guardado del torneo, nunca reemplazado por la hora actual.
+  const [initialRegistrationOpensAt] = useState(() =>
+    isEdit ? isoToBogotaWallClock(tournament!.registration_opens_at) : isoToBogotaWallClock(new Date().toISOString())
+  );
 
   const primarySortOrder = categories.find((c) => c.code === categoryCode)?.sort_order;
   const secondaryOptions = categories.filter(
@@ -60,114 +71,124 @@ export function TournamentForm({ tournament, categories, action, onSuccess, onCa
   }, [state.success]);
 
   return (
-    <form action={formAction} className="flex flex-col gap-4">
-      <Input
-        name="name"
-        label="Nombre del torneo"
-        type="text"
-        defaultValue={tournament?.name ?? ""}
-        required
-        placeholder="Torneo de verano"
-      />
-
-      <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-white/80">Descripción</label>
-        <textarea
-          name="description"
-          defaultValue={tournament?.description ?? ""}
-          placeholder="Descripción opcional..."
-          rows={3}
-          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-base md:text-sm text-white placeholder:text-brand-muted/60 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20 resize-none"
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-white/80">Categoría principal</label>
-          <select
-            name="category"
-            value={categoryCode}
-            onChange={(e) => handleCategoryChange(e.target.value)}
-            disabled={lockedByRegistrationOpen}
+    <form action={formAction} className="flex flex-col gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* Columna izquierda: identidad y configuración del evento */}
+        <div className="flex flex-col gap-4 min-w-0">
+          <Input
+            name="name"
+            label="Nombre del torneo"
+            type="text"
+            defaultValue={tournament?.name ?? ""}
             required
-            className="w-full h-10 rounded-xl border border-white/10 bg-white/5 px-3 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <option value="" disabled className="bg-[#001A24]">
-              Selecciona...
-            </option>
-            {categories.map((c) => (
-              <option key={c.code} value={c.code} className="bg-[#001A24]">
-                {c.code}
-              </option>
-            ))}
-          </select>
-          {lockedByRegistrationOpen && (
-            <p className="text-xs text-brand-muted">No editable con inscripciones abiertas.</p>
+            placeholder="Torneo de verano"
+          />
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-white/80">Descripción</label>
+            <textarea
+              name="description"
+              defaultValue={tournament?.description ?? ""}
+              placeholder="Descripción o reglas opcionales..."
+              rows={3}
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-base md:text-sm text-white placeholder:text-brand-muted/60 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20 resize-none"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-white/80">Categoría principal</label>
+              <select
+                name="category"
+                value={categoryCode}
+                onChange={(e) => handleCategoryChange(e.target.value)}
+                disabled={structuralFieldsLocked}
+                required
+                className="w-full h-10 rounded-xl border border-white/10 bg-white/5 px-3 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <option value="" disabled className="bg-[#001A24]">
+                  Selecciona...
+                </option>
+                {categories.map((c) => (
+                  <option key={c.code} value={c.code} className="bg-[#001A24]">
+                    {c.code}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-white/80">Categoría secundaria</label>
+              <select
+                name="secondary_category"
+                value={secondaryCategoryCode}
+                onChange={(e) => setSecondaryCategoryCode(e.target.value)}
+                disabled={structuralFieldsLocked || !categoryCode}
+                className="w-full h-10 rounded-xl border border-white/10 bg-white/5 px-3 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <option value="" className="bg-[#001A24]">
+                  Ninguna
+                </option>
+                {secondaryOptions.map((c) => (
+                  <option key={c.code} value={c.code} className="bg-[#001A24]">
+                    {c.code}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <p className="text-xs text-brand-muted -mt-2">
+            Selecciona una segunda categoría para un torneo combinado. La principal debe ser superior a la secundaria.
+          </p>
+          {structuralFieldsLocked && (
+            <p className="text-xs text-brand-muted -mt-2">
+              Categoría, cupo máximo y apertura de inscripciones ya no son editables.
+            </p>
           )}
+
+          <Input
+            name="max_pairs"
+            label="Cupo máximo de parejas"
+            type="number"
+            min={1}
+            step={1}
+            defaultValue={tournament?.max_pairs ?? 8}
+            disabled={structuralFieldsLocked}
+            required
+          />
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-white/80">Premios (opcional)</label>
+            <textarea
+              name="prize_description"
+              defaultValue={tournament?.prize_description ?? ""}
+              placeholder={"Ej.\n🥇 1er lugar: Trofeo + $500.000\n🥈 2do lugar: Gatorade + bonos\n🎁 Rifas de patrocinadores"}
+              rows={4}
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-base md:text-sm text-white placeholder:text-brand-muted/60 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20 resize-none"
+            />
+          </div>
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-white/80">Categoría secundaria (opcional)</label>
-          <select
-            name="secondary_category"
-            value={secondaryCategoryCode}
-            onChange={(e) => setSecondaryCategoryCode(e.target.value)}
-            disabled={lockedByRegistrationOpen || !categoryCode}
-            className="w-full h-10 rounded-xl border border-white/10 bg-white/5 px-3 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <option value="" className="bg-[#001A24]">
-              Ninguna (categoría única)
-            </option>
-            {secondaryOptions.map((c) => (
-              <option key={c.code} value={c.code} className="bg-[#001A24]">
-                {c.code}
+        {/* Columna derecha: imagen y visibilidad */}
+        <div className="flex flex-col gap-4 min-w-0">
+          <TournamentImageUpload clubId={clubId} currentImageUrl={tournament?.cover_image_url} />
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-white/80">Visibilidad</label>
+            <select
+              name="visibility"
+              defaultValue={tournament?.visibility ?? "private"}
+              className="w-full h-10 rounded-xl border border-white/10 bg-white/5 px-3 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20"
+            >
+              <option value="private" className="bg-[#001A24]">
+                Privado
               </option>
-            ))}
-          </select>
-          {lockedByRegistrationOpen && (
-            <p className="text-xs text-brand-muted">No editable con inscripciones abiertas.</p>
-          )}
+              <option value="public" className="bg-[#001A24]">
+                Público
+              </option>
+            </select>
+          </div>
         </div>
-      </div>
-
-      <p className="text-xs text-brand-muted -mt-2">
-        Selecciona una segunda categoría para crear un torneo combinado. La categoría principal debe ser superior a la secundaria.
-      </p>
-
-      <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-white/80">Tamaño del cuadro</label>
-        <select
-          name="bracket_size"
-          defaultValue={tournament?.bracket_size ?? 8}
-          disabled={lockedByRegistrationOpen}
-          required
-          className="w-full h-10 rounded-xl border border-white/10 bg-white/5 px-3 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {BRACKET_SIZE_OPTIONS.map((size) => (
-            <option key={size} value={size} className="bg-[#001A24]">
-              {size} parejas
-            </option>
-          ))}
-        </select>
-        {lockedByRegistrationOpen && (
-          <p className="text-xs text-brand-muted">No editable con inscripciones abiertas.</p>
-        )}
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-white/80">Visibilidad</label>
-        <select
-          name="visibility"
-          defaultValue={tournament?.visibility ?? "private"}
-          className="w-full h-10 rounded-xl border border-white/10 bg-white/5 px-3 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20"
-        >
-          <option value="private" className="bg-[#001A24]">
-            Privado
-          </option>
-          <option value="public" className="bg-[#001A24]">
-            Público
-          </option>
-        </select>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -176,8 +197,8 @@ export function TournamentForm({ tournament, categories, action, onSuccess, onCa
           <input
             type="datetime-local"
             name="registration_opens_at"
-            defaultValue={isoToBogotaWallClock(tournament?.registration_opens_at ?? null)}
-            disabled={lockedByRegistrationOpen}
+            defaultValue={initialRegistrationOpensAt}
+            disabled={structuralFieldsLocked}
             className="w-full h-10 rounded-xl border border-white/10 bg-white/5 px-3 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
           />
         </div>

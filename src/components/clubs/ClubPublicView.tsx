@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ClubHero, type ClubHeroClub } from "./ClubHero";
+import { CLUB_PRIMARY_COLOR } from "@/lib/constants/clubTheme";
 import { GalleryLightbox } from "./GalleryLightbox";
 import { PublicNewsCard } from "./PublicNewsCard";
 import { RequestAccessButton } from "@/app/clubs/[slug]/RequestAccessButton";
@@ -240,7 +241,7 @@ export function ClubPublicView({ club, courts, schedule, playerCount, news, view
     };
   }, [initialViewerContext.kind, club.id]);
 
-  const p            = club.primary_color;
+  const p            = CLUB_PRIMARY_COLOR;
   const isPublic     = club.visibility === "public";
   const locFull      = [club.city, club.state, club.country].filter(Boolean).join(", ");
   const isAdmin      = viewerContext.kind === "member" && (viewerContext.role === "OWNER" || viewerContext.role === "ADMIN");

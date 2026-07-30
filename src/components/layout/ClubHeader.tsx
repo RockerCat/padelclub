@@ -1,11 +1,11 @@
 import { clubRoleLabel } from "@/lib/roleLabels";
+import { CLUB_PRIMARY_COLOR } from "@/lib/constants/clubTheme";
 
 interface ClubHeaderProps {
   club: {
     name: string;
     slug: string;
     logo_url: string | null;
-    primary_color: string;
   };
   role: string;
 }
@@ -39,8 +39,8 @@ export function ClubHeader({ club, role }: ClubHeaderProps) {
           style={
             !club.logo_url
               ? {
-                  backgroundColor: `${club.primary_color}22`,
-                  color: club.primary_color,
+                  backgroundColor: `${CLUB_PRIMARY_COLOR}22`,
+                  color: CLUB_PRIMARY_COLOR,
                 }
               : undefined
           }

@@ -902,10 +902,10 @@ export interface Database {
           },
         ];
       };
-      // Torneos (Bloque 1.2-1.11) — administration lifecycle only exposes
-      // this table's own columns for now; tournament_court_allocations/
-      // tournament_entries/tournament_entry_members/tournament_matches are
-      // not yet queried from client code (out of scope for Bloque 2.1).
+      // Torneos — reconstrucción del núcleo (Bloque 1, nueva especificación
+      // funcional): el torneo es únicamente un evento de club. Sin
+      // partidos/rondas/llaves/canchas — tournament_matches y
+      // tournament_court_allocations fueron retiradas del esquema.
       tournaments: {
         Row: {
           id: string;
@@ -913,25 +913,25 @@ export interface Database {
           name: string;
           description: string | null;
           category: string;
-          bracket_size: number;
+          secondary_category: string | null;
+          max_pairs: number;
           status: string;
           visibility: string;
           registration_opens_at: string | null;
           registration_closes_at: string | null;
           starts_at: string | null;
           ends_at: string | null;
-          bracket_generated_at: string | null;
+          started_at: string | null;
+          started_by: string | null;
           completed_at: string | null;
           completed_by: string | null;
           cancelled_at: string | null;
           cancelled_by: string | null;
+          prize_description: string | null;
+          cover_image_url: string | null;
           created_by: string;
           created_at: string;
           updated_at: string;
-          // Bloque 2.2.1A — NULL = torneo de categoría única; NOT NULL =
-          // combinado (category es siempre la superior, secondary_category
-          // la inferior, exigido por sort_order real de sport_categories).
-          secondary_category: string | null;
         };
         Insert: {
           id?: string;
@@ -939,41 +939,47 @@ export interface Database {
           name: string;
           description?: string | null;
           category: string;
-          bracket_size: number;
+          secondary_category?: string | null;
+          max_pairs: number;
           status?: string;
           visibility?: string;
           registration_opens_at?: string | null;
           registration_closes_at?: string | null;
           starts_at?: string | null;
           ends_at?: string | null;
-          bracket_generated_at?: string | null;
+          started_at?: string | null;
+          started_by?: string | null;
           completed_at?: string | null;
           completed_by?: string | null;
           cancelled_at?: string | null;
           cancelled_by?: string | null;
+          prize_description?: string | null;
+          cover_image_url?: string | null;
           created_by: string;
           created_at?: string;
           updated_at?: string;
-          secondary_category?: string | null;
         };
         Update: {
           name?: string;
           description?: string | null;
           category?: string;
-          bracket_size?: number;
+          secondary_category?: string | null;
+          max_pairs?: number;
           status?: string;
           visibility?: string;
           registration_opens_at?: string | null;
           registration_closes_at?: string | null;
           starts_at?: string | null;
           ends_at?: string | null;
-          bracket_generated_at?: string | null;
+          started_at?: string | null;
+          started_by?: string | null;
           completed_at?: string | null;
           completed_by?: string | null;
           cancelled_at?: string | null;
           cancelled_by?: string | null;
+          prize_description?: string | null;
+          cover_image_url?: string | null;
           updated_at?: string;
-          secondary_category?: string | null;
         };
         Relationships: [
           {
@@ -999,49 +1005,58 @@ export interface Database {
           },
         ];
       };
-      // Torneos (Bloque 2.2) — pairs registration. category is frozen from
-      // tournaments.category at creation time (20260905000001), never
-      // recalculated.
+      // Torneos — inscripciones (duplas). points es la clasificación en
+      // vivo de la dupla — misma fuente que finalize_tournament aplica al
+      // ranking, nunca una tabla paralela.
       tournament_entries: {
         Row: {
           id: string;
           tournament_id: string;
           club_id: string;
           category: string;
+          secondary_category: string | null;
           status: string;
+          points: number;
           confirmed_at: string | null;
           confirmed_by: string | null;
           withdrawn_at: string | null;
           withdrawn_by: string | null;
+          rejected_at: string | null;
+          rejected_by: string | null;
+          rejection_reason: string | null;
           created_by: string;
           created_at: string;
           updated_at: string;
-          // Bloque 2.2.1A — congela tournament.secondary_category en el
-          // momento de crear la inscripción; NULL para torneos/entries de
-          // categoría única.
-          secondary_category: string | null;
         };
         Insert: {
           id?: string;
           tournament_id: string;
           club_id: string;
           category: string;
+          secondary_category?: string | null;
           status?: string;
+          points?: number;
           confirmed_at?: string | null;
           confirmed_by?: string | null;
           withdrawn_at?: string | null;
           withdrawn_by?: string | null;
+          rejected_at?: string | null;
+          rejected_by?: string | null;
+          rejection_reason?: string | null;
           created_by: string;
           created_at?: string;
           updated_at?: string;
-          secondary_category?: string | null;
         };
         Update: {
           status?: string;
+          points?: number;
           confirmed_at?: string | null;
           confirmed_by?: string | null;
           withdrawn_at?: string | null;
           withdrawn_by?: string | null;
+          rejected_at?: string | null;
+          rejected_by?: string | null;
+          rejection_reason?: string | null;
           updated_at?: string;
         };
         Relationships: [
@@ -1061,10 +1076,9 @@ export interface Database {
           },
         ];
       };
-      // Torneos (Bloque 2.2) — exactamente dos filas por entry, sin
-      // status/is_active propio (fuente única de verdad: tournament_entries.
-      // status). Nunca consultada por jugador individual — siempre agrupada
-      // por tournament_id (20260906000001).
+      // Torneos — jugadores de una dupla. is_active distingue al integrante
+      // final (participa en clasificación/finalización) de uno ya
+      // reemplazado (conservado como historial, nunca borrado).
       tournament_entry_members: {
         Row: {
           id: string;
@@ -1072,6 +1086,9 @@ export interface Database {
           tournament_id: string;
           club_id: string;
           club_member_id: string;
+          is_active: boolean;
+          replaced_at: string | null;
+          replaced_by: string | null;
           created_at: string;
         };
         Insert: {
@@ -1080,6 +1097,9 @@ export interface Database {
           tournament_id: string;
           club_id: string;
           club_member_id: string;
+          is_active?: boolean;
+          replaced_at?: string | null;
+          replaced_by?: string | null;
           created_at?: string;
         };
         Update: never;
@@ -1097,170 +1117,6 @@ export interface Database {
             isOneToOne: false;
             referencedRelation: "club_members";
             referencedColumns: ["id", "club_id"];
-          },
-        ];
-      };
-      // Torneos (Bloque 2.4) — OWNER/ADMIN only for reads (RLS:
-      // tournament_court_allocations_select_admin); writes only via
-      // create/update/deactivate_tournament_court_allocation, never direct.
-      tournament_court_allocations: {
-        Row: {
-          id: string;
-          tournament_id: string;
-          club_id: string;
-          court_id: string;
-          allocation_date: string;
-          start_time: string;
-          end_time: string;
-          is_active: boolean;
-          created_by: string;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          tournament_id: string;
-          club_id: string;
-          court_id: string;
-          allocation_date: string;
-          start_time: string;
-          end_time: string;
-          is_active?: boolean;
-          created_by: string;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: never;
-        Relationships: [
-          {
-            foreignKeyName: "tournament_court_allocations_tournament_club_fk";
-            columns: ["tournament_id", "club_id"];
-            isOneToOne: false;
-            referencedRelation: "tournaments";
-            referencedColumns: ["id", "club_id"];
-          },
-          {
-            foreignKeyName: "tournament_court_allocations_court_club_fk";
-            columns: ["court_id", "club_id"];
-            isOneToOne: false;
-            referencedRelation: "courts";
-            referencedColumns: ["id", "club_id"];
-          },
-        ];
-      };
-      // Torneos (Bloque 2.3) — read-only from client code so far (bracket
-      // display). Bloque 2.4 adds writes to its scheduling columns via
-      // schedule_tournament_match only, never direct.
-      tournament_matches: {
-        Row: {
-          id: string;
-          tournament_id: string;
-          club_id: string;
-          round_number: number;
-          match_number: number;
-          status: string;
-          source_match_one_id: string | null;
-          source_match_two_id: string | null;
-          entry_one_id: string | null;
-          entry_two_id: string | null;
-          tournament_court_allocation_id: string | null;
-          court_id: string | null;
-          scheduled_date: string | null;
-          scheduled_start_time: string | null;
-          scheduled_end_time: string | null;
-          set_one_entry_one: number | null;
-          set_one_entry_two: number | null;
-          set_two_entry_one: number | null;
-          set_two_entry_two: number | null;
-          set_three_entry_one: number | null;
-          set_three_entry_two: number | null;
-          winner_entry_id: string | null;
-          started_at: string | null;
-          completed_at: string | null;
-          completed_by: string | null;
-          cancelled_at: string | null;
-          cancelled_by: string | null;
-          created_by: string;
-          updated_by: string;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          tournament_id: string;
-          club_id: string;
-          round_number: number;
-          match_number: number;
-          status?: string;
-          source_match_one_id?: string | null;
-          source_match_two_id?: string | null;
-          entry_one_id?: string | null;
-          entry_two_id?: string | null;
-          tournament_court_allocation_id?: string | null;
-          court_id?: string | null;
-          scheduled_date?: string | null;
-          scheduled_start_time?: string | null;
-          scheduled_end_time?: string | null;
-          set_one_entry_one?: number | null;
-          set_one_entry_two?: number | null;
-          set_two_entry_one?: number | null;
-          set_two_entry_two?: number | null;
-          set_three_entry_one?: number | null;
-          set_three_entry_two?: number | null;
-          winner_entry_id?: string | null;
-          started_at?: string | null;
-          completed_at?: string | null;
-          completed_by?: string | null;
-          cancelled_at?: string | null;
-          cancelled_by?: string | null;
-          created_by: string;
-          updated_by: string;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: never;
-        Relationships: [
-          {
-            foreignKeyName: "tournament_matches_tournament_club_fk";
-            columns: ["tournament_id", "club_id"];
-            isOneToOne: false;
-            referencedRelation: "tournaments";
-            referencedColumns: ["id", "club_id"];
-          },
-          {
-            foreignKeyName: "tournament_matches_source_one_tournament_fk";
-            columns: ["source_match_one_id", "tournament_id"];
-            isOneToOne: false;
-            referencedRelation: "tournament_matches";
-            referencedColumns: ["id", "tournament_id"];
-          },
-          {
-            foreignKeyName: "tournament_matches_source_two_tournament_fk";
-            columns: ["source_match_two_id", "tournament_id"];
-            isOneToOne: false;
-            referencedRelation: "tournament_matches";
-            referencedColumns: ["id", "tournament_id"];
-          },
-          {
-            foreignKeyName: "tournament_matches_entry_one_tournament_fk";
-            columns: ["entry_one_id", "tournament_id"];
-            isOneToOne: false;
-            referencedRelation: "tournament_entries";
-            referencedColumns: ["id", "tournament_id"];
-          },
-          {
-            foreignKeyName: "tournament_matches_entry_two_tournament_fk";
-            columns: ["entry_two_id", "tournament_id"];
-            isOneToOne: false;
-            referencedRelation: "tournament_entries";
-            referencedColumns: ["id", "tournament_id"];
-          },
-          {
-            foreignKeyName: "tournament_matches_winner_tournament_fk";
-            columns: ["winner_entry_id", "tournament_id"];
-            isOneToOne: false;
-            referencedRelation: "tournament_entries";
-            referencedColumns: ["id", "tournament_id"];
           },
         ];
       };
@@ -1733,23 +1589,25 @@ export interface Database {
         Args: { p_club_id: string; p_club_member_id: string };
         Returns: string | null;
       };
-      // Torneos, Bloque 1.5 (20260909000001) — the 5 admin lifecycle RPCs.
-      // All 5 share the exact same RETURNS TABLE shape as tournaments.Row.
+      // Torneos — núcleo reconstruido (Bloque 1, nueva especificación
+      // funcional). Ciclo de vida del torneo: create/update/open/close/
+      // reopen/cancel/start/finalize. Las 8 de ciclo de vida (salvo
+      // finalize) comparten el RETURNS TABLE exacto de tournaments.Row.
       create_tournament: {
         Args: {
           p_club_id: string;
           p_name: string;
           p_category: string;
-          p_bracket_size: number;
+          p_max_pairs: number;
           p_description?: string | null;
           p_visibility?: string;
           p_registration_opens_at?: string | null;
           p_registration_closes_at?: string | null;
           p_starts_at?: string | null;
           p_ends_at?: string | null;
-          // Bloque 2.2.1A (20260916000001) — categoría inferior de un
-          // torneo combinado; NULL (default) = torneo de categoría única.
           p_secondary_category?: string | null;
+          p_prize_description?: string | null;
+          p_cover_image_url?: string | null;
         };
         Returns: Array<Database["public"]["Tables"]["tournaments"]["Row"]>;
       };
@@ -1759,16 +1617,15 @@ export interface Database {
           p_name: string;
           p_description: string | null;
           p_category: string;
-          p_bracket_size: number;
+          p_max_pairs: number;
           p_visibility: string;
           p_registration_opens_at: string | null;
           p_registration_closes_at: string | null;
           p_starts_at: string | null;
           p_ends_at: string | null;
-          // Bloque 2.2.1A (20260916000001) — sin DEFAULT, igual que el
-          // resto de los parámetros de esta función (full-replace, nunca
-          // actualización parcial).
           p_secondary_category: string | null;
+          p_prize_description: string | null;
+          p_cover_image_url: string | null;
         };
         Returns: Array<Database["public"]["Tables"]["tournaments"]["Row"]>;
       };
@@ -1780,12 +1637,19 @@ export interface Database {
         Args: { p_tournament_id: string };
         Returns: Array<Database["public"]["Tables"]["tournaments"]["Row"]>;
       };
+      reopen_tournament_registration: {
+        Args: { p_tournament_id: string };
+        Returns: Array<Database["public"]["Tables"]["tournaments"]["Row"]>;
+      };
       cancel_tournament: {
         Args: { p_tournament_id: string };
         Returns: Array<Database["public"]["Tables"]["tournaments"]["Row"]>;
       };
-      // Torneos, Bloque 1.6 (20260910000001) — the 3 entry registration
-      // RPCs. All 3 share the exact same RETURNS TABLE shape as
+      start_tournament: {
+        Args: { p_tournament_id: string };
+        Returns: Array<Database["public"]["Tables"]["tournaments"]["Row"]>;
+      };
+      // Torneos — inscripciones. Las 5 comparten el RETURNS TABLE exacto de
       // tournament_entries.Row.
       register_tournament_entry: {
         Args: {
@@ -1799,122 +1663,43 @@ export interface Database {
         Args: { p_tournament_entry_id: string };
         Returns: Array<Database["public"]["Tables"]["tournament_entries"]["Row"]>;
       };
+      reject_tournament_entry: {
+        Args: { p_tournament_entry_id: string; p_reason: string };
+        Returns: Array<Database["public"]["Tables"]["tournament_entries"]["Row"]>;
+      };
       withdraw_tournament_entry: {
         Args: { p_tournament_entry_id: string };
         Returns: Array<Database["public"]["Tables"]["tournament_entries"]["Row"]>;
       };
-      // Torneos, Bloque 1.7 (20260911000001) — generates every
-      // tournament_matches row for the bracket in one transaction.
-      generate_tournament_bracket: {
-        Args: { p_tournament_id: string };
-        Returns: Array<Database["public"]["Tables"]["tournaments"]["Row"]>;
-      };
-      // Torneos, Bloque 1.8 (20260912000001) — court allocations + match
-      // scheduling. All 4 share their own table's exact RETURNS TABLE shape
-      // (tournament_court_allocations for the first 3, tournament_matches
-      // for the last).
-      create_tournament_court_allocation: {
+      set_tournament_entry_points: {
         Args: {
           p_tournament_id: string;
-          p_court_id: string;
-          p_allocation_date: string;
-          p_start_time: string;
-          p_end_time: string;
+          p_entry_ids: string[];
+          p_points: number[];
         };
-        Returns: Array<Database["public"]["Tables"]["tournament_court_allocations"]["Row"]>;
+        Returns: Array<Database["public"]["Tables"]["tournament_entries"]["Row"]>;
       };
-      update_tournament_court_allocation: {
+      // Torneos — reemplazo/corrección de integrante de una dupla ya
+      // confirmada, solo mientras el torneo está in_progress. Retorna la
+      // fila nueva y activa del integrante entrante.
+      replace_tournament_entry_member: {
         Args: {
-          p_tournament_court_allocation_id: string;
-          p_court_id: string;
-          p_allocation_date: string;
-          p_start_time: string;
-          p_end_time: string;
+          p_tournament_entry_id: string;
+          p_old_club_member_id: string;
+          p_new_club_member_id: string;
         };
-        Returns: Array<Database["public"]["Tables"]["tournament_court_allocations"]["Row"]>;
+        Returns: Array<Database["public"]["Tables"]["tournament_entry_members"]["Row"]>;
       };
-      deactivate_tournament_court_allocation: {
-        Args: { p_tournament_court_allocation_id: string };
-        Returns: Array<Database["public"]["Tables"]["tournament_court_allocations"]["Row"]>;
-      };
-      schedule_tournament_match: {
-        Args: {
-          p_tournament_match_id: string;
-          p_tournament_court_allocation_id: string;
-          p_scheduled_date: string;
-          p_scheduled_start_time: string;
-          p_scheduled_end_time: string;
-        };
-        Returns: Array<Database["public"]["Tables"]["tournament_matches"]["Row"]>;
-      };
-      // Torneos, Bloque 1.9 (20260913000001) — match lifecycle. All 3 share
-      // tournament_matches' exact RETURNS TABLE shape.
-      start_tournament_match: {
-        Args: { p_tournament_match_id: string };
-        Returns: Array<Database["public"]["Tables"]["tournament_matches"]["Row"]>;
-      };
-      record_tournament_match_result: {
-        Args: {
-          p_tournament_match_id: string;
-          p_set_one_entry_one: number;
-          p_set_one_entry_two: number;
-          p_set_two_entry_one: number;
-          p_set_two_entry_two: number;
-          p_set_three_entry_one?: number | null;
-          p_set_three_entry_two?: number | null;
-        };
-        Returns: Array<Database["public"]["Tables"]["tournament_matches"]["Row"]>;
-      };
-      correct_tournament_match_result: {
-        Args: {
-          p_tournament_match_id: string;
-          p_set_one_entry_one: number;
-          p_set_one_entry_two: number;
-          p_set_two_entry_one: number;
-          p_set_two_entry_two: number;
-          p_set_three_entry_one?: number | null;
-          p_set_three_entry_two?: number | null;
-        };
-        Returns: Array<Database["public"]["Tables"]["tournament_matches"]["Row"]>;
-      };
-      // Torneos, Bloque 1.10 (20260914000001) — idempotent points
-      // settlement. OWNER/ADMIN only; the RPC re-derives that
-      // authorization itself. Never receives deltas, positions, or a
-      // winner — computes everything internally from the completed
-      // bracket.
-      award_tournament_points: {
+      // Torneos — finalización idempotente: congela la clasificación y
+      // aplica los puntos de cada dupla confirmada, en partes iguales, a
+      // sus dos integrantes finales del ranking existente.
+      finalize_tournament: {
         Args: { p_tournament_id: string };
         Returns: Array<{
           tournament_id: string;
-          participation_movements: number;
-          champion_movements: number;
-          runner_up_movements: number;
-          semifinalist_movements: number;
-          total_movements: number;
-          already_awarded: boolean;
-        }>;
-      };
-      // Torneos, Bloque 2.5.1 (20260919000001) — the only read access to
-      // club_player_point_movements (RLS-closed, zero policies). Any active
-      // club member (OWNER/ADMIN/PLAYER) is authorized. When
-      // actual_movement_count = 0 (pending/ready) exactly one sentinel row
-      // is returned with club_member_id/entry_id/player_name/avatar_url/
-      // placement/system_event_code/delta/created_at all NULL — metadata
-      // only, never a real movement.
-      get_tournament_points_summary: {
-        Args: { p_club_id: string; p_tournament_id: string };
-        Returns: Array<{
-          award_state: string;
-          expected_movement_count: number;
-          actual_movement_count: number;
-          club_member_id: string | null;
-          entry_id: string | null;
-          player_name: string | null;
-          avatar_url: string | null;
-          placement: string | null;
-          system_event_code: string | null;
-          delta: number | null;
-          created_at: string | null;
+          entries_awarded: number;
+          movements_created: number;
+          already_finalized: boolean;
         }>;
       };
     };
@@ -1994,19 +1779,13 @@ export type ClubNewsWithAuthor = ClubNews & {
   created_by_profile: Pick<Profile, "full_name"> | null;
 };
 
-// Torneos (Bloque 2.1) — administration only for now.
+// Torneos — el torneo es únicamente un evento de club (Bloque 1, nueva
+// especificación funcional). Sin partidos/rondas/llaves/canchas.
 export type Tournament = Tables<"tournaments">;
 export type TournamentStatus = Tournament["status"];
 export type TournamentVisibility = Tournament["visibility"];
 
-// Torneos (Bloque 2.2) — pairs registration.
+// Torneos — inscripciones (duplas) y sus integrantes.
 export type TournamentEntryRow = Tables<"tournament_entries">;
 export type TournamentEntryStatus = TournamentEntryRow["status"];
 export type TournamentEntryMemberRow = Tables<"tournament_entry_members">;
-
-// Torneos (Bloque 2.3) — bracket display.
-export type TournamentMatchRow = Tables<"tournament_matches">;
-export type TournamentMatchStatus = TournamentMatchRow["status"];
-
-// Torneos (Bloque 2.4) — court allocations + scheduling.
-export type TournamentCourtAllocationRow = Tables<"tournament_court_allocations">;

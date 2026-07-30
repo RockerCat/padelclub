@@ -85,7 +85,7 @@ export function StatsKpiGrid({
         sub2={`Promedio diario: ${summary.dailyAverage}`}
         comparison={formatComparison(summary.totalReservations, previousSummary.totalReservations)}
         Icon={CalendarDays}
-        color="var(--club-primary, #B7E000)"
+        color="var(--club-primary, #00ffff)"
       />
       <StatKpiCard
         label="Confirmadas"
@@ -114,7 +114,7 @@ export function StatsKpiGrid({
         unit="h"
         comparison={formatComparison(summary.reservedMinutes, previousSummary.reservedMinutes)}
         Icon={Timer}
-        color="var(--club-secondary, #1698BE)"
+        color="var(--club-secondary, #037172)"
       />
       <StatKpiCard
         label="Tasa de confirmación"

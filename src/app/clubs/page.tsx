@@ -9,6 +9,7 @@ import { ExploreSection } from "./ExploreSection";
 import type { DirectoryClub, MemberInfo } from "./ExploreSection";
 import { NotificationBell } from "@/components/layout/NotificationBell";
 import { getUnreadNotificationCount, getRecentNotifications } from "@/lib/notifications";
+import { CLUB_PRIMARY_COLOR } from "@/lib/constants/clubTheme";
 
 const ROLE_LABELS: Record<string, string> = {
   OWNER: "Propietario",
@@ -23,7 +24,6 @@ type MembershipRow = {
     name: string;
     slug: string;
     logo_url: string | null;
-    primary_color: string;
   };
 };
 
@@ -52,7 +52,7 @@ export default async function ClubsPage({
     const [membershipsResult, profileResult, isAdmin, unreadCount, recentNotifications] = await Promise.all([
       supabase
         .from("club_members")
-        .select("role, clubs!inner(id, name, slug, logo_url, primary_color)")
+        .select("role, clubs!inner(id, name, slug, logo_url)")
         .eq("profile_id", user.id)
         .eq("is_active", true)
         .order("joined_at", { ascending: true }),
@@ -79,7 +79,7 @@ export default async function ClubsPage({
   // Skip directory fetch when in welcome mode — not needed
   const directoryClubs: DirectoryClub[] = isWelcomeMode ? [] : await supabase
     .from("clubs")
-    .select("id, name, slug, visibility, description, logo_url, primary_color, secondary_color, whatsapp, city, state")
+    .select("id, name, slug, visibility, description, logo_url, whatsapp, city, state")
     .eq("is_active", true)
     .is("archived_at", null)
     .order("name", { ascending: true })
@@ -206,12 +206,12 @@ export default async function ClubsPage({
                           <Link
                             key={club.id}
                             href={entryPath}
-                            style={{ "--card-primary": club.primary_color } as React.CSSProperties}
+                            style={{ "--card-primary": CLUB_PRIMARY_COLOR } as React.CSSProperties}
                             className="flex items-center gap-4 px-5 py-4 rounded-2xl bg-brand-surface border border-white/10 hover:border-[var(--card-primary)] hover:bg-[color-mix(in_srgb,var(--card-primary)_6%,transparent)] transition-colors group"
                           >
                             <div
                               className="w-11 h-11 rounded-xl flex items-center justify-center text-sm font-bold shrink-0 overflow-hidden"
-                              style={{ backgroundColor: `${club.primary_color}22`, color: club.primary_color }}
+                              style={{ backgroundColor: `${CLUB_PRIMARY_COLOR}22`, color: CLUB_PRIMARY_COLOR }}
                             >
                               {club.logo_url
                                 // eslint-disable-next-line @next/next/no-img-element
@@ -238,7 +238,7 @@ export default async function ClubsPage({
                               </div>
                             </div>
 
-                            <span className="text-xs font-semibold shrink-0 group-hover:underline" style={{ color: club.primary_color }}>
+                            <span className="text-xs font-semibold shrink-0 group-hover:underline" style={{ color: CLUB_PRIMARY_COLOR }}>
                               Entrar →
                             </span>
                           </Link>

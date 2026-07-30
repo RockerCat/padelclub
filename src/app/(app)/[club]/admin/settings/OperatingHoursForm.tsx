@@ -122,7 +122,7 @@ export function OperatingHoursForm({ clubId, initialHours }: OperatingHoursFormP
                         className="relative w-9 h-5 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/50"
                         style={{
                           backgroundColor: h.is_open
-                            ? "var(--club-primary, #B7E000)"
+                            ? "var(--club-primary, #00ffff)"
                             : "rgba(255,255,255,0.15)",
                         }}
                       >

@@ -78,8 +78,8 @@ export function CoverUploadField({ clubId, currentCoverUrl }: CoverUploadFieldPr
         <span
           className="text-[11px] px-2 py-0.5 rounded-full font-medium"
           style={{
-            backgroundColor: "color-mix(in srgb, var(--club-primary, #B7E000) 12%, transparent)",
-            color: "var(--club-primary, #B7E000)",
+            backgroundColor: "color-mix(in srgb, var(--club-primary, #00ffff) 12%, transparent)",
+            color: "var(--club-primary, #00ffff)",
           }}
         >
           Recomendado

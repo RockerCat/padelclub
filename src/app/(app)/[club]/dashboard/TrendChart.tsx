@@ -45,7 +45,7 @@ export function TrendChart({ points }: TrendChartProps) {
         preserveAspectRatio="none"
         className="absolute inset-0 w-full h-full"
       >
-        <path d={linePath} fill="none" stroke="var(--club-primary, #B7E000)" strokeWidth="2" />
+        <path d={linePath} fill="none" stroke="var(--club-primary, #00ffff)" strokeWidth="2" />
       </svg>
 
       {coords.map((c, i) => (
@@ -55,7 +55,7 @@ export function TrendChart({ points }: TrendChartProps) {
           style={{
             left: `${(c.x / WIDTH) * 100}%`,
             top: `${c.y}px`,
-            backgroundColor: "var(--club-primary, #B7E000)",
+            backgroundColor: "var(--club-primary, #00ffff)",
           }}
         />
       ))}

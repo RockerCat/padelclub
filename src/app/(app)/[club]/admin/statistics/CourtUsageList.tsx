@@ -23,7 +23,7 @@ export function CourtUsageList({ courts }: { courts: ClubStatisticsCourtUsage[] 
             <div className="h-1.5 rounded-full bg-white/[0.07] overflow-hidden">
               <div
                 className="h-full rounded-full"
-                style={{ width: `${pct}%`, backgroundColor: "var(--club-primary, #B7E000)" }}
+                style={{ width: `${pct}%`, backgroundColor: "var(--club-primary, #00ffff)" }}
               />
             </div>
           </div>

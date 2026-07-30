@@ -6,12 +6,14 @@ const ENTRY_STATUS_LABEL: Record<string, string> = {
   pending: "Pendiente",
   confirmed: "Confirmada",
   withdrawn: "Retirada",
+  rejected: "Rechazada",
 };
 
-const ENTRY_STATUS_VARIANT: Record<string, "success" | "warning" | "default"> = {
+const ENTRY_STATUS_VARIANT: Record<string, "success" | "warning" | "default" | "danger"> = {
   pending: "warning",
   confirmed: "success",
   withdrawn: "default",
+  rejected: "danger",
 };
 
 function formatDate(iso: string): string {
@@ -38,11 +40,20 @@ export function EntryCard({ entry, isOwn, actions }: EntryCardProps) {
           <Badge variant={ENTRY_STATUS_VARIANT[entry.status] ?? "default"} size="sm">
             {ENTRY_STATUS_LABEL[entry.status] ?? entry.status}
           </Badge>
+          {entry.status === "confirmed" && (
+            <span className="text-[10px] font-medium text-brand-muted">{entry.points} pts</span>
+          )}
           {isOwn && (
             <span className="text-[10px] font-medium text-brand-muted">Tu pareja</span>
           )}
         </div>
       </div>
+
+      {entry.status === "rejected" && entry.rejection_reason && (
+        <p className="text-xs text-red-400/90 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+          {entry.rejection_reason}
+        </p>
+      )}
 
       <div className="flex items-center justify-between gap-2 pt-2 border-t border-white/[0.06]">
         <span className="text-xs text-brand-muted">Registrada el {formatDate(entry.created_at)}</span>

@@ -34,6 +34,7 @@ import { PlayerAvatar } from "@/components/players/PlayerAvatar";
 import type { NotificationRow } from "@/lib/notifications";
 import type { SidebarIdentityData } from "@/lib/userIdentity";
 import { clubRoleLabel } from "@/lib/roleLabels";
+import { CLUB_PRIMARY_COLOR } from "@/lib/constants/clubTheme";
 
 function getInitials(name: string): string {
   return name
@@ -60,7 +61,6 @@ interface AppNavProps {
     name: string;
     slug: string;
     logo_url: string | null;
-    primary_color: string;
   };
   role: "OWNER" | "ADMIN" | "PLAYER";
   membershipCount: number;
@@ -503,7 +503,7 @@ export function AppNav({
                 className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden ring-1 ring-white/10"
                 style={
                   !club.logo_url
-                    ? { backgroundColor: `${club.primary_color}22`, color: club.primary_color }
+                    ? { backgroundColor: `${CLUB_PRIMARY_COLOR}22`, color: CLUB_PRIMARY_COLOR }
                     : undefined
                 }
               >
@@ -587,7 +587,7 @@ export function AppNav({
                   className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden ring-1 ring-white/10"
                   style={
                     !club.logo_url
-                      ? { backgroundColor: `${club.primary_color}22`, color: club.primary_color }
+                      ? { backgroundColor: `${CLUB_PRIMARY_COLOR}22`, color: CLUB_PRIMARY_COLOR }
                       : undefined
                   }
                 >

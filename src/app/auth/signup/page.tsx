@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { SignupForm, type InviteBranding } from "./SignupForm";
+import { CLUB_PRIMARY_COLOR, CLUB_SECONDARY_COLOR } from "@/lib/constants/clubTheme";
 
 interface SignupPageProps {
   searchParams: Promise<{ invite?: string; next?: string }>;
@@ -63,12 +64,12 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
       role?: string;
     } | null;
 
-    if (info?.club_name && info.primary_color && info.secondary_color) {
+    if (info?.club_name) {
       branding = {
         clubName: info.club_name,
         logoUrl: info.club_logo_url ?? null,
-        primaryColor: info.primary_color,
-        secondaryColor: info.secondary_color,
+        primaryColor: CLUB_PRIMARY_COLOR,
+        secondaryColor: CLUB_SECONDARY_COLOR,
         roleLabel: ROLE_LABELS[info.role ?? "PLAYER"] ?? "miembro",
       };
     }

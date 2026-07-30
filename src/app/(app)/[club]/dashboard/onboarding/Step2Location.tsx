@@ -170,7 +170,7 @@ export function Step2Location({ club, onNext, formId }: Step2Props) {
             <div className="flex items-center gap-2 text-xs text-white/50 bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-2.5">
               <MapPin
                 className="w-3.5 h-3.5 shrink-0"
-                style={{ color: "var(--club-primary, #B7E000)" }}
+                style={{ color: "var(--club-primary, #00ffff)" }}
               />
               <span>
                 {parseFloat(lat).toFixed(5)}°, {parseFloat(lng).toFixed(5)}°

@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Search, Lock } from "lucide-react";
 import { getClubEntryPath } from "@/lib/utils/navigation";
+import { CLUB_PRIMARY_COLOR } from "@/lib/constants/clubTheme";
 
 export type DirectoryClub = {
   id: string;
@@ -14,8 +15,6 @@ export type DirectoryClub = {
   state: string | null;
   description: string | null;
   logo_url: string | null;
-  primary_color: string;
-  secondary_color: string;
   whatsapp: string | null;
 };
 
@@ -70,8 +69,8 @@ function ClubDirectoryCard({
         <div
           className="w-11 h-11 rounded-xl flex items-center justify-center text-sm font-bold shrink-0 overflow-hidden"
           style={{
-            backgroundColor: `${club.primary_color}22`,
-            color: club.primary_color,
+            backgroundColor: `${CLUB_PRIMARY_COLOR}22`,
+            color: CLUB_PRIMARY_COLOR,
           }}
         >
           {club.logo_url ? (
@@ -92,9 +91,9 @@ function ClubDirectoryCard({
               <span
                 className="text-[10px] font-medium px-2 py-0.5 rounded-full border shrink-0"
                 style={{
-                  color: club.primary_color,
-                  backgroundColor: `${club.primary_color}18`,
-                  borderColor: `${club.primary_color}40`,
+                  color: CLUB_PRIMARY_COLOR,
+                  backgroundColor: `${CLUB_PRIMARY_COLOR}18`,
+                  borderColor: `${CLUB_PRIMARY_COLOR}40`,
                 }}
               >
                 Miembro
@@ -119,9 +118,9 @@ function ClubDirectoryCard({
           href={getClubEntryPath(memberInfo.slug, memberInfo.role)}
           className="flex items-center justify-center py-2 rounded-xl text-sm font-semibold transition-colors"
           style={{
-            backgroundColor: `${club.primary_color}22`,
-            color: club.primary_color,
-            border: `1px solid ${club.primary_color}44`,
+            backgroundColor: `${CLUB_PRIMARY_COLOR}22`,
+            color: CLUB_PRIMARY_COLOR,
+            border: `1px solid ${CLUB_PRIMARY_COLOR}44`,
           }}
         >
           Entrar →

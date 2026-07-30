@@ -8,7 +8,6 @@ export const TOURNAMENT_STATUS_LABELS: Record<string, string> = {
   draft: "Borrador",
   registration_open: "Inscripciones abiertas",
   registration_closed: "Inscripciones cerradas",
-  bracket_generated: "Cuadro generado",
   in_progress: "En curso",
   completed: "Finalizado",
   cancelled: "Cancelado",
@@ -22,7 +21,6 @@ export const TOURNAMENT_STATUS_BADGE_VARIANT: Record<string, BadgeProps["variant
   draft: "outline",
   registration_open: "success",
   registration_closed: "warning",
-  bracket_generated: "secondary",
   in_progress: "primary",
   completed: "default",
   cancelled: "danger",
@@ -46,30 +44,4 @@ export function tournamentVisibilityLabel(visibility: string): string {
 // commercial name — that's a separate, not-yet-approved product decision.
 export function tournamentCategoryLabel(category: string, secondaryCategory: string | null): string {
   return secondaryCategory ? `${category} + ${secondaryCategory}` : category;
-}
-
-// Bloque 2.3 — tournament_matches.status values, audited directly from
-// tournament_matches_valid_status (20260907000001_tournament_matches_table.sql).
-export const TOURNAMENT_MATCH_STATUS_LABELS: Record<string, string> = {
-  pending: "Pendiente",
-  scheduled: "Programado",
-  in_progress: "En curso",
-  completed: "Finalizado",
-  cancelled: "Cancelado",
-};
-
-export function tournamentMatchStatusLabel(status: string): string {
-  return TOURNAMENT_MATCH_STATUS_LABELS[status] ?? status;
-}
-
-export const TOURNAMENT_MATCH_STATUS_BADGE_VARIANT: Record<string, BadgeProps["variant"]> = {
-  pending: "outline",
-  scheduled: "secondary",
-  in_progress: "primary",
-  completed: "success",
-  cancelled: "danger",
-};
-
-export function tournamentMatchStatusBadgeVariant(status: string): BadgeProps["variant"] {
-  return TOURNAMENT_MATCH_STATUS_BADGE_VARIANT[status] ?? "default";
 }

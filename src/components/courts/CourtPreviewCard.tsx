@@ -23,8 +23,8 @@ export function CourtPreviewCard({
       <span
         className="absolute top-4 right-4 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide"
         style={{
-          backgroundColor: "color-mix(in srgb, var(--club-primary, #B7E000) 15%, transparent)",
-          color: "var(--club-primary, #B7E000)",
+          backgroundColor: "color-mix(in srgb, var(--club-primary, #00ffff) 15%, transparent)",
+          color: "var(--club-primary, #00ffff)",
         }}
       >
         {badgeLabel}

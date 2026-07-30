@@ -10,11 +10,8 @@ import {
   tournamentVisibilityLabel,
 } from "@/lib/tournamentLabels";
 import { getTournamentEntriesWithMembers, summarizeCapacity } from "@/lib/tournamentEntries";
-import { getTournamentBracketView } from "@/lib/tournamentBracket";
-import { getTournamentPointsSummary } from "@/lib/tournamentAwards";
 import { EntriesSection } from "@/components/tournaments/EntriesSection";
-import { BracketSection } from "@/components/tournaments/BracketSection";
-import { TournamentAwardsSection } from "@/components/tournaments/TournamentAwardsSection";
+import { ClassificationSection } from "@/components/tournaments/ClassificationSection";
 
 interface PlayerTournamentDetailPageProps {
   params: Promise<{ club: string; tournamentId: string }>;
@@ -31,11 +28,11 @@ function formatDateTime(iso: string | null): string {
   });
 }
 
-// Minimal PLAYER-facing detail (Bloque 2.2) — read-only tournament summary
-// plus the same shared EntriesSection used by the OWNER/ADMIN detail page,
-// in "PLAYER" role mode (register/withdraw only, no confirm, no edit/
-// transition actions). Never the public view (out of scope) — this route
-// requires an active club membership like every other page under [club].
+// Minimal PLAYER-facing detail — read-only tournament summary plus the same
+// shared EntriesSection used by the OWNER/ADMIN detail page, in "PLAYER"
+// role mode (register/withdraw only, no confirm/reject, no edit/transition
+// actions). Never the public view (out of scope) — this route requires an
+// active club membership like every other page under [club].
 export default async function PlayerTournamentDetailPage({ params }: PlayerTournamentDetailPageProps) {
   const { club: slug, tournamentId } = await params;
 
@@ -80,8 +77,8 @@ export default async function PlayerTournamentDetailPage({ params }: PlayerTourn
 
   if (!tournament) notFound();
 
-  // Bloque 3.3 — categorías reales a resolver por jugador (máximo 2:
-  // category + secondary_category si el torneo es combinado).
+  // Categorías reales a resolver por jugador (máximo 2: category +
+  // secondary_category si el torneo es combinado).
   const tournamentCategories = [tournament.category, tournament.secondary_category].filter(
     (c): c is string => !!c
   );
@@ -92,21 +89,9 @@ export default async function PlayerTournamentDetailPage({ params }: PlayerTourn
     supabase.from("profiles").select("full_name, avatar_url").eq("id", user.id).single(),
   ]);
 
-  const capacity = summarizeCapacity(entries, tournament.bracket_size);
+  const capacity = summarizeCapacity(entries, tournament.max_pairs);
   const ownCategory = ownStateRes.data?.[0]?.category ?? null;
   const ownProfile = ownProfileRes.data;
-  const { rounds, error: bracketError } = await getTournamentBracketView(
-    supabase,
-    tournament.id,
-    club.id,
-    tournament.bracket_size,
-    tournamentCategories
-  );
-  const { summary: awardSummary, error: awardError } = await getTournamentPointsSummary(
-    supabase,
-    club.id,
-    tournament.id
-  );
 
   return (
     <div className="p-6 md:p-10">
@@ -118,12 +103,24 @@ export default async function PlayerTournamentDetailPage({ params }: PlayerTourn
         Torneos
       </Link>
 
+      {tournament.cover_image_url && (
+        <div className="w-full max-w-3xl aspect-[21/9] rounded-2xl overflow-hidden mb-6 border border-white/10">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={tournament.cover_image_url} alt="" className="w-full h-full object-cover" />
+        </div>
+      )}
+
       <div className="mb-8">
         <div className="flex items-center gap-3 flex-wrap mb-1">
           <h1 className="text-2xl font-bold text-white">{tournament.name}</h1>
           <Badge variant={tournamentStatusBadgeVariant(tournament.status)} size="sm">
             {tournamentStatusLabel(tournament.status)}
           </Badge>
+          {tournament.status === "in_progress" && (
+            <Badge variant="danger" size="sm">
+              En vivo
+            </Badge>
+          )}
           <span className="inline-flex items-center gap-1 text-xs text-brand-muted">
             {tournament.visibility === "public" ? <Globe className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
             {tournamentVisibilityLabel(tournament.visibility)}
@@ -140,9 +137,15 @@ export default async function PlayerTournamentDetailPage({ params }: PlayerTourn
           </p>
         </div>
         <div>
-          <p className="text-xs text-brand-muted mb-1">Tamaño del cuadro</p>
-          <p className="text-sm text-white font-medium">{tournament.bracket_size} parejas</p>
+          <p className="text-xs text-brand-muted mb-1">Cupo máximo</p>
+          <p className="text-sm text-white font-medium">{tournament.max_pairs} parejas</p>
         </div>
+        {tournament.prize_description && (
+          <div>
+            <p className="text-xs text-brand-muted mb-1">Premios</p>
+            <p className="text-sm text-white font-medium">{tournament.prize_description}</p>
+          </div>
+        )}
         <div>
           <p className="text-xs text-brand-muted mb-1">Inicio</p>
           <p className="text-sm text-white font-medium">{formatDateTime(tournament.starts_at)}</p>
@@ -172,40 +175,20 @@ export default async function PlayerTournamentDetailPage({ params }: PlayerTourn
         />
       )}
 
-      <div className="mt-8">
-        {bracketError ? (
-          <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 max-w-3xl">
-            {bracketError}
-          </p>
-        ) : (
-          <BracketSection
-            tournament={tournament}
-            rounds={rounds}
-            capacity={capacity}
-            isAdmin={false}
-            revalidatePaths={[`/${slug}/tournaments/${tournament.id}`]}
-            courtAllocations={[]}
-            clubCourts={[]}
-          />
-        )}
-      </div>
-
-      <div className="mt-8">
-        {awardError || !awardSummary ? (
-          <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 max-w-3xl">
-            {awardError ?? "No se pudo cargar el estado de la premiación."}
-          </p>
-        ) : (
-          <TournamentAwardsSection
+      {(tournament.status === "in_progress" || tournament.status === "completed") && (
+        <div className="mt-8 max-w-3xl">
+          <h2 className="text-lg font-semibold text-white mb-4">
+            {tournament.status === "completed" ? "Podio y clasificación final" : "Clasificación"}
+          </h2>
+          <ClassificationSection
             clubId={club.id}
             tournamentId={tournament.id}
-            isAdmin={false}
-            summary={awardSummary}
-            ownClubMemberId={membership.id}
+            entries={entries}
+            editable={false}
             revalidatePaths={[`/${slug}/tournaments/${tournament.id}`]}
           />
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

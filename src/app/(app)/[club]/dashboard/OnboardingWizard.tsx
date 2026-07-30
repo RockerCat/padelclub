@@ -218,10 +218,10 @@ export function OnboardingWizard({
                     ? { backgroundColor: "rgba(34,197,94,0.15)" }
                     : effectiveStep === step
                     ? {
-                        border: "1px solid var(--club-primary, #B7E000)",
-                        color: "var(--club-primary, #B7E000)",
+                        border: "1px solid var(--club-primary, #00ffff)",
+                        color: "var(--club-primary, #00ffff)",
                         backgroundColor:
-                          "color-mix(in srgb, var(--club-primary, #B7E000) 10%, transparent)",
+                          "color-mix(in srgb, var(--club-primary, #00ffff) 10%, transparent)",
                       }
                     : { border: "1px solid rgba(255,255,255,0.15)", color: "#94A3B8" }
                 }
@@ -248,7 +248,7 @@ export function OnboardingWizard({
             <span className="text-[11px] text-brand-muted/60">Paso {effectiveStep} de {TOTAL_STEPS}</span>
             <span
               className="text-[11px] font-semibold"
-              style={{ color: "var(--club-primary, #B7E000)" }}
+              style={{ color: "var(--club-primary, #00ffff)" }}
             >
               {Math.round((completedCount / TOTAL_STEPS) * 100)}%
             </span>
@@ -258,7 +258,7 @@ export function OnboardingWizard({
               className="h-full rounded-full transition-all duration-500"
               style={{
                 width: `${Math.round((completedCount / TOTAL_STEPS) * 100)}%`,
-                backgroundColor: "var(--club-primary, #B7E000)",
+                backgroundColor: "var(--club-primary, #00ffff)",
               }}
             />
           </div>
@@ -337,7 +337,7 @@ export function OnboardingWizard({
                 type="submit"
                 form={formId}
                 className="h-10 px-5 rounded-xl text-sm font-semibold transition-all hover:brightness-110 shrink-0"
-                style={{ backgroundColor: "var(--club-primary, #B7E000)", color: "#001A24" }}
+                style={{ backgroundColor: "var(--club-primary, #00ffff)", color: "#001A24" }}
               >
                 {isLastStep ? "Finalizar" : "Guardar y continuar"}
               </button>
@@ -347,7 +347,7 @@ export function OnboardingWizard({
                 onClick={() => goNext(effectiveStep)}
                 disabled={effectiveStep === 3 && !step3Done}
                 className="h-10 px-5 rounded-xl text-sm font-semibold transition-all hover:brightness-110 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:brightness-100"
-                style={{ backgroundColor: "var(--club-primary, #B7E000)", color: "#001A24" }}
+                style={{ backgroundColor: "var(--club-primary, #00ffff)", color: "#001A24" }}
               >
                 {effectiveStep === 3 ? "Continuar" : "Finalizar"}
               </button>
@@ -378,7 +378,7 @@ export function OnboardingWizard({
                     type="button"
                     onClick={handleDismiss}
                     className="h-10 px-5 rounded-xl text-sm font-semibold transition-all hover:brightness-110"
-                    style={{ backgroundColor: "var(--club-primary, #B7E000)", color: "#001A24" }}
+                    style={{ backgroundColor: "var(--club-primary, #00ffff)", color: "#001A24" }}
                   >
                     Continuar
                   </button>
@@ -414,7 +414,7 @@ export function OnboardingWizard({
         type="button"
         onClick={handleContinueSetup}
         className="h-9 px-4 rounded-xl text-sm font-semibold whitespace-nowrap transition-all hover:brightness-110 shrink-0"
-        style={{ backgroundColor: "var(--club-primary, #B7E000)", color: "#001A24" }}
+        style={{ backgroundColor: "var(--club-primary, #00ffff)", color: "#001A24" }}
       >
         Continuar configuración
       </button>

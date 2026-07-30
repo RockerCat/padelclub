@@ -33,7 +33,7 @@ export function TopHoursChart({ points }: TopHoursChartProps) {
               className="h-full rounded-full"
               style={{
                 width: `${(p.count / maxCount) * 100}%`,
-                backgroundColor: "var(--club-primary, #B7E000)",
+                backgroundColor: "var(--club-primary, #00ffff)",
               }}
             />
           </div>

@@ -759,7 +759,7 @@ export function WeekCalendar({
                   style={{
                     backgroundColor: hasReservations
                       ? isSelected
-                        ? "var(--club-primary, #B7E000)"
+                        ? "var(--club-primary, #00ffff)"
                         : "rgba(148,163,184,0.5)"
                       : "transparent",
                   }}

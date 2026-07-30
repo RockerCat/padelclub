@@ -118,41 +118,6 @@ export async function updateClubName(
   return {};
 }
 
-const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
-
-export async function updateClubColors(
-  clubId: string,
-  primaryColor: string,
-  secondaryColor: string
-): Promise<{ error?: string }> {
-  const supabase = await createClient();
-
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
-  if (userError || !user) return { error: "No autenticado." };
-
-  const { data: membership } = await supabase
-    .from("club_members")
-    .select("role")
-    .eq("club_id", clubId)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-
-  if (!membership || !["OWNER", "ADMIN"].includes(membership.role))
-    return { error: "No tienes permiso para editar este club." };
-
-  if (!HEX_COLOR_RE.test(primaryColor) || !HEX_COLOR_RE.test(secondaryColor))
-    return { error: "Los colores deben ser un valor hexadecimal válido." };
-
-  const { error: updateError } = await supabase
-    .from("clubs")
-    .update({ primary_color: primaryColor, secondary_color: secondaryColor })
-    .eq("id", clubId);
-
-  if (updateError) return { error: "Error al guardar. Intenta de nuevo." };
-  return {};
-}
-
 const VALID_DURATION_MINUTES = DURATION_CATALOG.map((d) => d.minutes) as number[];
 
 export async function updateAllowedDurations(

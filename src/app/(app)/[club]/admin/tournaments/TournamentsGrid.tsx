@@ -9,12 +9,19 @@ import type { Tournament, SportCategory } from "@/types/database";
 
 interface TournamentsGridProps {
   tournaments: Tournament[];
+  confirmedCountByTournamentId?: Record<string, number>;
   categories: Pick<SportCategory, "code" | "sort_order">[];
   clubSlug: string;
   clubId: string;
 }
 
-export function TournamentsGrid({ tournaments, categories, clubSlug, clubId }: TournamentsGridProps) {
+export function TournamentsGrid({
+  tournaments,
+  confirmedCountByTournamentId,
+  categories,
+  clubSlug,
+  clubId,
+}: TournamentsGridProps) {
   const router = useRouter();
   const [creating, setCreating] = useState(false);
 
@@ -37,7 +44,7 @@ export function TournamentsGrid({ tournaments, categories, clubSlug, clubId }: T
         <div>
           <h1 className="text-2xl font-bold text-white">Torneos</h1>
           <p className="text-brand-muted mt-1 text-sm">
-            Organiza inscripciones, partidos y resultados de tus torneos.
+            Administra inscripciones, duplas y clasificación de tus torneos.
           </p>
         </div>
         <button
@@ -57,7 +64,7 @@ export function TournamentsGrid({ tournaments, categories, clubSlug, clubId }: T
           </div>
           <h3 className="text-base font-semibold text-white mb-1">Aún no hay torneos</h3>
           <p className="text-sm text-brand-muted max-w-sm mb-6">
-            Crea el primer torneo del club para organizar inscripciones, partidos y resultados.
+            Crea el primer torneo del club para administrar inscripciones, duplas y clasificación.
           </p>
           <button
             type="button"
@@ -71,7 +78,12 @@ export function TournamentsGrid({ tournaments, categories, clubSlug, clubId }: T
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {tournaments.map((t) => (
-            <TournamentCard key={t.id} tournament={t} href={`/${clubSlug}/admin/tournaments/${t.id}`} />
+            <TournamentCard
+              key={t.id}
+              tournament={t}
+              href={`/${clubSlug}/admin/tournaments/${t.id}`}
+              confirmedCount={confirmedCountByTournamentId?.[t.id] ?? 0}
+            />
           ))}
         </div>
       )}

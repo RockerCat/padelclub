@@ -9,7 +9,10 @@ import { TournamentForm } from "../TournamentForm";
 import {
   cancelTournament,
   closeTournamentRegistration,
+  finalizeTournament,
   openTournamentRegistration,
+  reopenTournamentRegistration,
+  startTournament,
   updateTournament,
 } from "../actions";
 import {
@@ -19,13 +22,8 @@ import {
   tournamentVisibilityLabel,
 } from "@/lib/tournamentLabels";
 import { EntriesSection } from "@/components/tournaments/EntriesSection";
-import { BracketSection } from "@/components/tournaments/BracketSection";
-import { TournamentAwardsSection } from "@/components/tournaments/TournamentAwardsSection";
-import { TournamentNewsSection } from "@/components/tournaments/TournamentNewsSection";
-import { TournamentExportSection } from "@/components/tournaments/TournamentExportSection";
+import { ClassificationSection } from "@/components/tournaments/ClassificationSection";
 import type { TournamentEntriesCapacity, TournamentEntryWithMembers } from "@/lib/tournamentEntries";
-import type { BracketRound, TournamentCourtAllocationView } from "@/lib/tournamentBracket";
-import type { TournamentAwardSummary } from "@/lib/tournamentAwards";
 import type { Tournament, SportCategory } from "@/types/database";
 
 interface TournamentDetailActionsProps {
@@ -33,18 +31,9 @@ interface TournamentDetailActionsProps {
   categories: Pick<SportCategory, "code" | "sort_order">[];
   clubSlug: string;
   clubId: string;
-  clubName: string;
-  clubLogoUrl: string | null;
-  accentColor: string;
   entries: TournamentEntryWithMembers[];
   entriesError: string | null;
   capacity: TournamentEntriesCapacity;
-  rounds: BracketRound[];
-  bracketError: string | null;
-  courtAllocations: TournamentCourtAllocationView[];
-  clubCourts: { id: string; name: string }[];
-  awardSummary: TournamentAwardSummary | null;
-  awardError: string | null;
   role: "OWNER" | "ADMIN";
   ownClubMemberId: string;
   ownUserId: string;
@@ -61,25 +50,16 @@ function formatDateTime(iso: string | null): string {
   });
 }
 
-type PendingTransition = "open" | "close" | "cancel" | null;
+type PendingTransition = "open" | "close" | "reopen" | "cancel" | "start" | "finalize" | null;
 
 export function TournamentDetailActions({
   tournament: initialTournament,
   categories,
   clubSlug,
   clubId,
-  clubName,
-  clubLogoUrl,
-  accentColor,
   entries,
   entriesError,
   capacity,
-  rounds,
-  bracketError,
-  courtAllocations,
-  clubCourts,
-  awardSummary,
-  awardError,
   role,
   ownClubMemberId,
   ownUserId,
@@ -121,10 +101,16 @@ export function TournamentDetailActions({
 
   const boundUpdate = updateTournament.bind(null, clubId, tournament.id, clubSlug);
 
-  const canEdit = tournament.status === "draft" || tournament.status === "registration_open";
+  const canEdit =
+    tournament.status === "draft" ||
+    tournament.status === "registration_open" ||
+    tournament.status === "registration_closed";
   const canOpenRegistration = tournament.status === "draft";
   const canCloseRegistration = tournament.status === "registration_open";
-  const canCancel = ["draft", "registration_open", "registration_closed"].includes(tournament.status);
+  const canReopenRegistration = tournament.status === "registration_closed";
+  const canStart = tournament.status === "registration_closed" && capacity.confirmed >= 1;
+  const canFinalize = tournament.status === "in_progress";
+  const canCancel = ["draft", "registration_open", "registration_closed", "in_progress"].includes(tournament.status);
 
   function handleEditSuccess(updated: Tournament | undefined) {
     setEditing(false);
@@ -137,12 +123,32 @@ export function TournamentDetailActions({
     if (!confirming) return;
     setActionError(null);
     startTransition(async () => {
-      const result =
+      if (confirming === "finalize") {
+        const result = await finalizeTournament(clubId, tournament.id, clubSlug);
+        if (result.error) {
+          setActionError(result.error);
+          return;
+        }
+        setConfirming(null);
+        setToastMessage(
+          result.alreadyFinalized ? "Este torneo ya estaba finalizado." : "Torneo finalizado y puntos aplicados al ranking."
+        );
+        router.refresh();
+        return;
+      }
+
+      const action =
         confirming === "open"
-          ? await openTournamentRegistration(clubId, tournament.id, clubSlug)
+          ? openTournamentRegistration
           : confirming === "close"
-          ? await closeTournamentRegistration(clubId, tournament.id, clubSlug)
-          : await cancelTournament(clubId, tournament.id, clubSlug);
+          ? closeTournamentRegistration
+          : confirming === "reopen"
+          ? reopenTournamentRegistration
+          : confirming === "start"
+          ? startTournament
+          : cancelTournament;
+
+      const result = await action(clubId, tournament.id, clubSlug);
 
       if (result.error) {
         setActionError(result.error);
@@ -156,6 +162,10 @@ export function TournamentDetailActions({
           ? "Inscripciones abiertas correctamente"
           : confirming === "close"
           ? "Inscripciones cerradas correctamente"
+          : confirming === "reopen"
+          ? "Inscripciones reabiertas correctamente"
+          : confirming === "start"
+          ? "Torneo iniciado — ¡en curso!"
           : "Torneo cancelado correctamente"
       );
       router.refresh();
@@ -171,21 +181,38 @@ export function TournamentDetailActions({
     open: {
       title: "Abrir inscripciones",
       message:
-        "Al abrir las inscripciones, la categoría, el tamaño del cuadro y la fecha de apertura ya no podrán modificarse.",
+        "Al abrir las inscripciones, la categoría, el número máximo de parejas y la fecha de apertura ya no podrán modificarse.",
       confirmLabel: "Abrir inscripciones",
       confirmVariant: "primary",
     },
     close: {
       title: "Cerrar inscripciones",
-      message:
-        "Al cerrar las inscripciones ya no se podrán registrar nuevas parejas. Después podrás generar el cuadro del torneo.",
+      message: "Al cerrar las inscripciones ya no se podrán registrar nuevas parejas hasta que las reabras.",
       confirmLabel: "Cerrar inscripciones",
       confirmVariant: "primary",
     },
+    reopen: {
+      title: "Reabrir inscripciones",
+      message: "Los jugadores elegibles podrán volver a inscribirse. Las solicitudes ya rechazadas no se reactivan.",
+      confirmLabel: "Reabrir inscripciones",
+      confirmVariant: "primary",
+    },
+    start: {
+      title: "Iniciar torneo",
+      message: "El torneo pasará a estado \"En curso\". El torneo en sí se juega en la cancha, fuera de la plataforma.",
+      confirmLabel: "Iniciar torneo",
+      confirmVariant: "primary",
+    },
+    finalize: {
+      title: "Finalizar torneo",
+      message:
+        "La clasificación actual quedará congelada. Cada integrante final de cada pareja recibirá la cantidad completa de puntos de su pareja en el ranking (no se dividen entre los dos). Esta acción no se puede deshacer ni se duplica si se ejecuta más de una vez.",
+      confirmLabel: "Finalizar torneo",
+      confirmVariant: "danger",
+    },
     cancel: {
       title: "¿Cancelar este torneo?",
-      message:
-        "Esta acción conservará el torneo como historial, pero no podrá continuar su operación.",
+      message: "Esta acción conservará el torneo como historial, pero no podrá continuar su operación.",
       confirmLabel: "Cancelar torneo",
       confirmVariant: "danger",
     },
@@ -201,6 +228,13 @@ export function TournamentDetailActions({
         Torneos
       </Link>
 
+      {tournament.cover_image_url && (
+        <div className="w-full max-w-3xl aspect-[21/9] rounded-2xl overflow-hidden mb-6 border border-white/10">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={tournament.cover_image_url} alt="" className="w-full h-full object-cover" />
+        </div>
+      )}
+
       <div className="flex items-start justify-between gap-4 mb-8 flex-wrap">
         <div className="min-w-0">
           <div className="flex items-center gap-3 flex-wrap mb-1">
@@ -208,6 +242,11 @@ export function TournamentDetailActions({
             <Badge variant={tournamentStatusBadgeVariant(tournament.status)} size="sm">
               {tournamentStatusLabel(tournament.status)}
             </Badge>
+            {tournament.status === "in_progress" && (
+              <Badge variant="danger" size="sm">
+                En vivo
+              </Badge>
+            )}
             <span className="inline-flex items-center gap-1 text-xs text-brand-muted">
               {tournament.visibility === "public" ? (
                 <Globe className="w-3.5 h-3.5" />
@@ -228,45 +267,38 @@ export function TournamentDetailActions({
             </Button>
           )}
           {canOpenRegistration && (
-            <Button
-              size="sm"
-              onClick={() => {
-                setActionError(null);
-                setConfirming("open");
-              }}
-            >
+            <Button size="sm" onClick={() => { setActionError(null); setConfirming("open"); }}>
               Abrir inscripciones
             </Button>
           )}
           {canCloseRegistration && (
-            <Button
-              size="sm"
-              onClick={() => {
-                setActionError(null);
-                setConfirming("close");
-              }}
-            >
+            <Button size="sm" onClick={() => { setActionError(null); setConfirming("close"); }}>
               Cerrar inscripciones
             </Button>
           )}
+          {canReopenRegistration && (
+            <Button variant="secondary" size="sm" onClick={() => { setActionError(null); setConfirming("reopen"); }}>
+              Reabrir inscripciones
+            </Button>
+          )}
+          {canStart && (
+            <Button size="sm" onClick={() => { setActionError(null); setConfirming("start"); }}>
+              Iniciar torneo
+            </Button>
+          )}
+          {canFinalize && (
+            <Button size="sm" onClick={() => { setActionError(null); setConfirming("finalize"); }}>
+              Finalizar torneo
+            </Button>
+          )}
           {canCancel && (
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={() => {
-                setActionError(null);
-                setConfirming("cancel");
-              }}
-            >
+            <Button variant="danger" size="sm" onClick={() => { setActionError(null); setConfirming("cancel"); }}>
               Cancelar torneo
             </Button>
           )}
         </div>
       </div>
 
-      {/* Summary — prepared visually for future blocks (Inscripciones, Cuadro,
-          Partidos, Canchas, Resultados) without pre-building empty tabs or
-          "próximamente" placeholders (spec explicitly prefers this). */}
       <div className="bg-brand-surface border border-white/10 rounded-2xl p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 max-w-3xl">
         <div>
           <p className="text-xs text-brand-muted mb-1">Categoría</p>
@@ -275,9 +307,15 @@ export function TournamentDetailActions({
           </p>
         </div>
         <div>
-          <p className="text-xs text-brand-muted mb-1">Tamaño del cuadro</p>
-          <p className="text-sm text-white font-medium">{tournament.bracket_size} parejas</p>
+          <p className="text-xs text-brand-muted mb-1">Cupo máximo</p>
+          <p className="text-sm text-white font-medium">{tournament.max_pairs} parejas</p>
         </div>
+        {tournament.prize_description && (
+          <div>
+            <p className="text-xs text-brand-muted mb-1">Premios</p>
+            <p className="text-sm text-white font-medium">{tournament.prize_description}</p>
+          </div>
+        )}
         <div>
           <p className="text-xs text-brand-muted mb-1">Inicio</p>
           <p className="text-sm text-white font-medium">{formatDateTime(tournament.starts_at)}</p>
@@ -294,6 +332,12 @@ export function TournamentDetailActions({
           <p className="text-xs text-brand-muted mb-1">Cierre de inscripciones</p>
           <p className="text-sm text-white font-medium">{formatDateTime(tournament.registration_closes_at)}</p>
         </div>
+        {tournament.started_at && (
+          <div>
+            <p className="text-xs text-brand-muted mb-1">Iniciado</p>
+            <p className="text-sm text-white font-medium">{formatDateTime(tournament.started_at)}</p>
+          </div>
+        )}
         {tournament.completed_at && (
           <div>
             <p className="text-xs text-brand-muted mb-1">Finalizado</p>
@@ -329,57 +373,22 @@ export function TournamentDetailActions({
         )}
       </div>
 
-      <div className="mt-8">
-        {bracketError ? (
-          <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 max-w-3xl">
-            {bracketError}
-          </p>
-        ) : (
-          <BracketSection
-            tournament={tournament}
-            rounds={rounds}
-            capacity={capacity}
-            isAdmin
-            revalidatePaths={[`/${clubSlug}/admin/tournaments/${tournament.id}`]}
-            courtAllocations={courtAllocations}
-            clubCourts={clubCourts}
-          />
-        )}
-      </div>
-
-      <div className="mt-8">
-        {awardError || !awardSummary ? (
-          <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 max-w-3xl">
-            {awardError ?? "No se pudo cargar el estado de la premiación."}
-          </p>
-        ) : (
-          <TournamentAwardsSection
+      {/* Clasificación — únicamente puntos de duplas confirmadas, con salto
+          de posición en empates. Editable en bloque ("Guardar puntos")
+          mientras in_progress; solo lectura con tratamiento de podio una
+          vez completed. Nunca partidos, victorias, sets ni estadísticas
+          competitivas. */}
+      {(tournament.status === "in_progress" || tournament.status === "completed") && (
+        <div className="mt-8 max-w-3xl">
+          <h2 className="text-lg font-semibold text-white mb-4">
+            {tournament.status === "completed" ? "Podio y clasificación final" : "Clasificación"}
+          </h2>
+          <ClassificationSection
             clubId={clubId}
             tournamentId={tournament.id}
-            isAdmin
-            summary={awardSummary}
-            ownClubMemberId={ownClubMemberId}
-            revalidatePaths={[`/${clubSlug}/admin/tournaments/${tournament.id}`]}
-          />
-        )}
-      </div>
-
-      {awardSummary && (
-        <div className="mt-8">
-          <TournamentNewsSection clubId={clubId} tournament={tournament} summary={awardSummary} />
-        </div>
-      )}
-
-      {awardSummary && (
-        <div className="mt-8">
-          <TournamentExportSection
-            clubName={clubName}
-            clubLogoUrl={clubLogoUrl}
-            accentColor={accentColor}
-            tournament={tournament}
-            awardSummary={awardSummary}
             entries={entries}
-            rounds={rounds}
+            editable={tournament.status === "in_progress"}
+            revalidatePaths={[`/${clubSlug}/admin/tournaments/${tournament.id}`]}
           />
         </div>
       )}
@@ -394,7 +403,7 @@ export function TournamentDetailActions({
           />
           <div className="fixed inset-x-0 bottom-0 md:inset-0 md:flex md:items-center md:justify-center z-[401] pointer-events-none">
             <div
-              className="pointer-events-auto w-full md:w-[640px] bg-[#082735] border border-white/10 rounded-t-2xl md:rounded-2xl shadow-2xl flex flex-col"
+              className="pointer-events-auto w-full md:w-[720px] bg-[#082735] border border-white/10 rounded-t-2xl md:rounded-2xl shadow-2xl flex flex-col"
               style={{ maxHeight: "90dvh" }}
               onClick={(e) => e.stopPropagation()}
             >
@@ -411,6 +420,7 @@ export function TournamentDetailActions({
               </div>
               <div className="overflow-y-auto flex-1 px-5 py-5">
                 <TournamentForm
+                  clubId={clubId}
                   tournament={tournament}
                   categories={categories}
                   action={boundUpdate}

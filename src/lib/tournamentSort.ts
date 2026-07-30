@@ -2,7 +2,7 @@ import type { Tournament } from "@/types/database";
 
 // Shared by the OWNER/ADMIN list (Bloque 2.1) and the PLAYER list (Bloque
 // 2.2) — same deterministic order, never two versions of the same rule.
-// draft/registration_open/registration_closed/bracket_generated/in_progress
+// draft/registration_open/registration_closed/in_progress
 // ("operational or upcoming") sort first by starts_at ascending (nulls last,
 // tie-broken by most-recently-created); completed/cancelled ("historical")
 // sort after, by starts_at descending (most recent first).

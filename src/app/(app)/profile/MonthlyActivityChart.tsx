@@ -28,7 +28,7 @@ export function MonthlyActivityChart({ points }: { points: ProfileActivityMonthP
               <span className="text-[10px] text-brand-muted tabular-nums mb-1 leading-none">{p.count}</span>
               <div
                 className="w-full rounded-t-md"
-                style={{ height: `${heightPct}%`, backgroundColor: "var(--club-primary, #B7E000)", opacity: 0.85 }}
+                style={{ height: `${heightPct}%`, backgroundColor: "var(--club-primary, #00ffff)", opacity: 0.85 }}
               />
               <span className="text-[9px] text-brand-muted/70 mt-1.5 leading-none whitespace-nowrap">
                 {formatMonthLabel(p.month)}

@@ -53,8 +53,11 @@ export function ShareCardShell({
       style={{ width: SHARE_CARD_WIDTH, height: SHARE_CARD_HEIGHT, backgroundColor: "#04141c" }}
       className="relative flex flex-col overflow-hidden"
     >
-      {/* Glow decorativo con el color real del club (clubs.primary_color) —
-          nunca un color inventado. */}
+      {/* Glow decorativo con el color pasado por el llamador — nunca
+          inventado aquí; hoy siempre CLUB_PRIMARY_COLOR (identidad
+          cromática fija de Mi Pádel Club, ver
+          src/lib/constants/clubTheme.ts), nunca un valor personalizado por
+          club. */}
       <div
         className="absolute -top-32 -right-32 w-[560px] h-[560px] rounded-full opacity-25 blur-3xl pointer-events-none"
         style={{ backgroundColor: accentColor }}

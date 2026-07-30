@@ -22,7 +22,7 @@ export function WeekdayActivityChart({ weekdays }: { weekdays: ClubStatisticsWee
             <div className="flex-1 h-2 rounded-full bg-white/[0.07] overflow-hidden">
               <div
                 className="h-full rounded-full"
-                style={{ width: `${pct}%`, backgroundColor: "var(--club-primary, #B7E000)" }}
+                style={{ width: `${pct}%`, backgroundColor: "var(--club-primary, #00ffff)" }}
               />
             </div>
             <span className="text-xs font-semibold tabular-nums w-8 text-right shrink-0 text-white">

@@ -38,24 +38,27 @@ export default async function TournamentsPage({ params }: TournamentsPageProps) 
   if (!["OWNER", "ADMIN"].includes(membership.role)) redirect(`/${slug}`);
 
   // Single query for the whole list — club_id filtered explicitly (never
-  // relying on RLS alone, RLS remains defense-in-depth). No entries/matches/
-  // allocations/profiles joined here — out of scope for Bloque 2.1.
-  const { data: tournaments } = await supabase
-    .from("tournaments")
-    .select("*")
-    .eq("club_id", club.id);
+  // relying on RLS alone, RLS remains defense-in-depth).
+  const [{ data: tournaments }, { data: confirmedEntries }, { data: sportCategories }] = await Promise.all([
+    supabase.from("tournaments").select("*").eq("club_id", club.id),
+    supabase.from("tournament_entries").select("tournament_id").eq("club_id", club.id).eq("status", "confirmed"),
+    supabase.from("sport_categories").select("code, sort_order, created_at").order("sort_order", { ascending: true }),
+  ]);
 
   const tournamentList = [...(tournaments ?? [])].sort(compareTournaments);
 
-  const { data: sportCategories } = await supabase
-    .from("sport_categories")
-    .select("code, sort_order, created_at")
-    .order("sort_order", { ascending: true });
+  // Conteo de duplas confirmadas por torneo — una sola consulta agregada
+  // en JS (PostgREST no ofrece GROUP BY), nunca una consulta por torneo.
+  const confirmedCountByTournamentId = new Map<string, number>();
+  for (const row of confirmedEntries ?? []) {
+    confirmedCountByTournamentId.set(row.tournament_id, (confirmedCountByTournamentId.get(row.tournament_id) ?? 0) + 1);
+  }
 
   return (
     <div className="p-6 md:p-10">
       <TournamentsGrid
         tournaments={tournamentList}
+        confirmedCountByTournamentId={Object.fromEntries(confirmedCountByTournamentId)}
         categories={sportCategories ?? []}
         clubSlug={slug}
         clubId={club.id}

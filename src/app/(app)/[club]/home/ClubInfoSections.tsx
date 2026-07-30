@@ -115,7 +115,7 @@ export function ClubInfoSections({
             {schedule.map(({ label, timeRange }) => (
               <div key={label} className="flex items-center justify-between py-3">
                 <span className="text-sm text-white">{label}</span>
-                <span className="text-sm font-semibold tabular-nums" style={{ color: "var(--club-primary, #B7E000)" }}>
+                <span className="text-sm font-semibold tabular-nums" style={{ color: "var(--club-primary, #00ffff)" }}>
                   {timeRange}
                 </span>
               </div>

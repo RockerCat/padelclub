@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { RankingView } from "@/app/(app)/[club]/ranking/RankingView";
+import { CLUB_PRIMARY_COLOR } from "@/lib/constants/clubTheme";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -40,7 +41,7 @@ export default async function ClubPublicRankingPage({ params }: Props) {
 
   const { data: club } = await supabase
     .from("clubs")
-    .select("id, name, slug, visibility, logo_url, primary_color, default_player_category")
+    .select("id, name, slug, visibility, logo_url, default_player_category")
     .eq("slug", slug)
     .eq("is_active", true)
     .is("archived_at", null)
@@ -139,7 +140,7 @@ export default async function ClubPublicRankingPage({ params }: Props) {
         clubSlug={club.slug}
         clubName={club.name}
         clubLogoUrl={club.logo_url}
-        accentColor={club.primary_color}
+        accentColor={CLUB_PRIMARY_COLOR}
         role={membership ? (membership.role as "OWNER" | "ADMIN" | "PLAYER") : "PLAYER"}
         readOnly
         ownClubMemberId={membership?.id ?? null}

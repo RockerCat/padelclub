@@ -118,10 +118,10 @@ export default async function PlatformDashboardPage() {
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
-        <StatTile label="Total de clubes" value={totalClubs} Icon={Building2} color="#B7E000" href="/platform/clubs" />
+        <StatTile label="Total de clubes" value={totalClubs} Icon={Building2} color="#00ffff" href="/platform/clubs" />
         <StatTile label="Clubes activos" value={activeClubs} Icon={CheckCircle2} color="#22C55E" />
         <StatTile label="Clubes inactivos" value={inactiveClubs} Icon={XCircle} color="#EF4444" />
-        <StatTile label="Usuarios registrados" value={totalUsers} Icon={Users} color="#1698BE" href="/platform/users" />
+        <StatTile label="Usuarios registrados" value={totalUsers} Icon={Users} color="#037172" href="/platform/users" />
       </div>
 
       <h2 className="text-sm font-semibold text-white mb-4">Accesos rápidos</h2>
@@ -131,14 +131,14 @@ export default async function PlatformDashboardPage() {
           description="Buscar y consultar todos los clubes de la plataforma."
           href="/platform/clubs"
           Icon={Building2}
-          color="#B7E000"
+          color="#00ffff"
         />
         <QuickAccessCard
           title="Usuarios"
           description="Buscar y consultar todos los usuarios registrados."
           href="/platform/users"
           Icon={Users}
-          color="#1698BE"
+          color="#037172"
         />
       </div>
     </div>

@@ -29,7 +29,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         className={cn(
           "inline-flex items-center justify-center gap-2 font-medium rounded-xl transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/50 disabled:opacity-50 disabled:cursor-not-allowed",
           {
-            // primary — lime on dark
+            // primary — brand cyan on dark text, never white-on-cyan (contrast)
             "bg-brand-primary text-brand-bg hover:brightness-110 active:brightness-95":
               variant === "primary",
             // secondary — outline

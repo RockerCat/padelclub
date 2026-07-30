@@ -47,7 +47,7 @@ export function CreateTournamentModal({
       />
       <div className="fixed inset-x-0 bottom-0 md:inset-0 md:flex md:items-center md:justify-center z-[401] pointer-events-none">
         <div
-          className="pointer-events-auto w-full md:w-[640px] bg-[#082735] border border-white/10 rounded-t-2xl md:rounded-2xl shadow-2xl flex flex-col"
+          className="pointer-events-auto w-full md:w-[720px] bg-[#082735] border border-white/10 rounded-t-2xl md:rounded-2xl shadow-2xl flex flex-col"
           style={{ maxHeight: "90dvh" }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -65,6 +65,7 @@ export function CreateTournamentModal({
 
           <div className="overflow-y-auto flex-1 px-5 py-5">
             <TournamentForm
+              clubId={clubId}
               categories={categories}
               action={boundCreate}
               onSuccess={onSuccess}

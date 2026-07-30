@@ -33,7 +33,7 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
   // Step 1: resolve slug → club row
   const result = await supabase
     .from("clubs")
-    .select("id, name, slug, logo_url, primary_color, secondary_color, archived_at")
+    .select("id, name, slug, logo_url, archived_at")
     .eq("slug", slug)
     .eq("is_active", true)
     .single();
@@ -83,10 +83,7 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
   const membershipCount = count ?? 1;
 
   return (
-    <ClubThemeProvider
-      initialPrimary={club.primary_color}
-      initialSecondary={club.secondary_color}
-    >
+    <ClubThemeProvider>
       <UpdateLastClub clubId={club.id} />
       <AppNav
         club={club}

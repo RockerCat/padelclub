@@ -53,7 +53,7 @@ export function PlayerHomeActivity({
           <Link
             href={`/${clubSlug}/reservations`}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-opacity hover:opacity-90"
-            style={{ backgroundColor: "var(--club-primary, #B7E000)", color: "#001A24" }}
+            style={{ backgroundColor: "var(--club-primary, #00ffff)", color: "#001A24" }}
           >
             <CalendarPlus className="w-3.5 h-3.5" />
             Reservar cancha

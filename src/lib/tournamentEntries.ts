@@ -30,11 +30,12 @@ export interface TournamentEntriesCapacity {
   confirmed: number;
   pending: number;
   withdrawn: number;
+  rejected: number;
   occupied: number; // confirmed + pending
-  total: number; // tournament.bracket_size
+  total: number; // tournament.max_pairs
 }
 
-const STATUS_ORDER: Record<string, number> = { confirmed: 0, pending: 1, withdrawn: 2 };
+const STATUS_ORDER: Record<string, number> = { confirmed: 0, pending: 1, withdrawn: 2, rejected: 3 };
 
 // Bloque 3.3 — resuelve la categoría real de cualquier cantidad de
 // club_member_id en, como máximo, 2 llamadas (una por cada categoría que
@@ -153,12 +154,42 @@ export async function getTournamentEntriesWithMembers(
   return { entries, error: null };
 }
 
-export function summarizeCapacity(entries: TournamentEntryWithMembers[], bracketSize: number): TournamentEntriesCapacity {
+export function summarizeCapacity(entries: TournamentEntryWithMembers[], maxPairs: number): TournamentEntriesCapacity {
   const count = (status: TournamentEntryStatus) => entries.filter((e) => e.status === status).length;
   const confirmed = count("confirmed");
   const pending = count("pending");
   const withdrawn = count("withdrawn");
-  return { confirmed, pending, withdrawn, occupied: confirmed + pending, total: bracketSize };
+  const rejected = count("rejected");
+  return { confirmed, pending, withdrawn, rejected, occupied: confirmed + pending, total: maxPairs };
+}
+
+export interface TournamentClassificationRow {
+  entry: TournamentEntryWithMembers;
+  position: number;
+}
+
+// Clasificación por puntos, únicamente sobre duplas confirmadas — nunca
+// depende de partidos/rondas/llaves, que ya no existen en el modelo.
+// Empates comparten posición ("competition ranking": 1,1,3, nunca un
+// desempate inventado) — nunca 1,1,2. Orden estable por created_at para
+// que, dentro del mismo puntaje, la dupla inscrita primero aparezca
+// primero, sin significar una posición distinta.
+export function computeTournamentClassification(entries: TournamentEntryWithMembers[]): TournamentClassificationRow[] {
+  const confirmed = entries
+    .filter((e) => e.status === "confirmed")
+    .slice()
+    .sort((a, b) => b.points - a.points || a.created_at.localeCompare(b.created_at));
+
+  const rows: TournamentClassificationRow[] = [];
+  let lastPoints: number | null = null;
+  let lastPosition = 0;
+  confirmed.forEach((entry, index) => {
+    const position = entry.points === lastPoints ? lastPosition : index + 1;
+    rows.push({ entry, position });
+    lastPoints = entry.points;
+    lastPosition = position;
+  });
+  return rows;
 }
 
 // isOwnEntry: created_by is the reliable signal for "I created this entry

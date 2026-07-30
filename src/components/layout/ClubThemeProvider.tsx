@@ -1,59 +1,26 @@
-"use client";
+import type { ReactNode } from "react";
+import { CLUB_PRIMARY_COLOR, CLUB_SECONDARY_COLOR } from "@/lib/constants/clubTheme";
 
-import { createContext, useContext, useState, type ReactNode } from "react";
-
-interface ThemeContextValue {
-  primaryColor: string;
-  secondaryColor: string;
-  setColors: (primary: string, secondary: string) => void;
-}
-
-const ClubThemeContext = createContext<ThemeContextValue | null>(null);
-
-export function ClubThemeProvider({
-  children,
-  initialPrimary,
-  initialSecondary,
-}: {
-  children: ReactNode;
-  initialPrimary: string;
-  initialSecondary: string;
-}) {
-  const [primary, setPrimary] = useState(initialPrimary);
-  const [secondary, setSecondary] = useState(initialSecondary);
-
+// Identidad cromática fija para todos los clubes (ver
+// src/lib/constants/clubTheme.ts) — ya no hay personalización por club, así
+// que este wrapper no necesita props, estado ni contexto: solo inyecta las
+// mismas dos variables CSS de siempre (--color-brand-primary/secondary,
+// que sobreescriben los tokens Tailwind brand-*, y --club-primary/secondary
+// para los estilos inline que ya las consumían) con un valor constante.
+export function ClubThemeProvider({ children }: { children: ReactNode }) {
   return (
-    <ClubThemeContext.Provider
-      value={{
-        primaryColor: primary,
-        secondaryColor: secondary,
-        setColors: (p, s) => {
-          setPrimary(p);
-          setSecondary(s);
-        },
-      }}
+    <div
+      className="min-h-screen flex flex-col md:flex-row"
+      style={
+        {
+          "--color-brand-primary": CLUB_PRIMARY_COLOR,
+          "--color-brand-secondary": CLUB_SECONDARY_COLOR,
+          "--club-primary": CLUB_PRIMARY_COLOR,
+          "--club-secondary": CLUB_SECONDARY_COLOR,
+        } as React.CSSProperties
+      }
     >
-      <div
-        className="min-h-screen flex flex-col md:flex-row"
-        style={
-          {
-            // Override Tailwind brand tokens so all brand-* utilities pick up club colors
-            "--color-brand-primary": primary,
-            "--color-brand-secondary": secondary,
-            // Short-hand aliases for explicit inline styles in club-scoped components
-            "--club-primary": primary,
-            "--club-secondary": secondary,
-          } as React.CSSProperties
-        }
-      >
-        {children}
-      </div>
-    </ClubThemeContext.Provider>
+      {children}
+    </div>
   );
-}
-
-export function useClubTheme() {
-  const ctx = useContext(ClubThemeContext);
-  if (!ctx) throw new Error("useClubTheme must be used within ClubThemeProvider");
-  return ctx;
 }

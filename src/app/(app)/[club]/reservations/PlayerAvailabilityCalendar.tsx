@@ -435,7 +435,7 @@ function RequestModal({
                 </div>
                 <div className="flex justify-between text-sm pt-1.5 mt-0.5 border-t border-white/10">
                   <span className="text-brand-muted font-medium">Valor de la reserva</span>
-                  <span className="font-bold" style={{ color: "var(--club-primary, #B7E000)" }}>
+                  <span className="font-bold" style={{ color: "var(--club-primary, #00ffff)" }}>
                     {formatCurrency(priceQuote.finalPrice, priceQuote.currency)}
                   </span>
                 </div>
@@ -455,7 +455,7 @@ function RequestModal({
             type="submit"
             disabled={pending || priceLoading || !priceQuote?.matched}
             className="w-full py-3 rounded-xl font-semibold text-sm transition-opacity disabled:opacity-50"
-            style={{ backgroundColor: "var(--club-primary, #B7E000)", color: "#001A24" }}
+            style={{ backgroundColor: "var(--club-primary, #00ffff)", color: "#001A24" }}
           >
             {pending ? "Guardando…" : isEditMode ? "Guardar cambios" : "Enviar solicitud"}
           </button>

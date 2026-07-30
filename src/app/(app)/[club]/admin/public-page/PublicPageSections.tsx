@@ -2,18 +2,17 @@
 
 import { useState } from "react";
 import { Badge } from "@/components/ui";
-import { Palette, Globe, MapPin, Images, ChevronRight, Pencil, Eye } from "lucide-react";
+import { Globe, MapPin, Images, ChevronRight, Pencil, Eye } from "lucide-react";
 import { ClubHero } from "@/components/clubs/ClubHero";
 import { ClubPublicView, type Court, type ClubNewsCard } from "@/components/clubs/ClubPublicView";
 import type { ScheduleGroup } from "@/lib/operatingHours";
 import type { Club } from "@/types/database";
-import { BrandingModal } from "./BrandingModal";
 import { PublicProfileModal } from "./PublicProfileModal";
 import { PublicPreviewCard } from "./PublicPreviewCard";
 import { GalleryModal } from "./GalleryModal";
 import { LocationModal } from "../settings/LocationModal";
 
-type ModuleKey = "branding" | "profile" | "gallery" | "location";
+type ModuleKey = "profile" | "gallery" | "location";
 type Mode = "edit" | "preview";
 
 interface PublicPageSectionsProps {
@@ -146,21 +145,7 @@ export function PublicPageSections({ club, courts, schedule, playerCount, news, 
 
         <ClubHero club={club} variant="card" editable />
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <ModuleCard icon={Palette} title="Branding" onClick={() => setOpenModal("branding")}>
-            <div className="flex items-center gap-2">
-              <span
-                className="w-4 h-4 rounded-full border border-white/10 shrink-0"
-                style={{ backgroundColor: club.primary_color }}
-              />
-              <span
-                className="w-4 h-4 rounded-full border border-white/10 shrink-0"
-                style={{ backgroundColor: club.secondary_color }}
-              />
-              <p className="text-xs text-brand-muted">Color principal y secundario</p>
-            </div>
-          </ModuleCard>
-
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <ModuleCard icon={Globe} title="Perfil público" onClick={() => setOpenModal("profile")}>
             <Badge variant={isPublic ? "success" : "outline"} size="sm" className="self-start mb-1">
               {isPublic ? "Club público" : "Club privado"}
@@ -184,9 +169,6 @@ export function PublicPageSections({ club, courts, schedule, playerCount, news, 
 
         <PublicPreviewCard clubSlug={club.slug} />
 
-        {openModal === "branding" && (
-          <BrandingModal club={club} onClose={() => setOpenModal(null)} />
-        )}
         {openModal === "profile" && (
           <PublicProfileModal club={club} onClose={() => setOpenModal(null)} />
         )}

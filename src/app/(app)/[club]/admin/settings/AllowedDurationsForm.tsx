@@ -98,7 +98,7 @@ export function AllowedDurationsForm({ clubId, initialDurations }: AllowedDurati
               type="submit"
               disabled={pending || !hasSelection}
               className="h-10 px-5 rounded-xl text-sm font-semibold transition-opacity disabled:opacity-50"
-              style={{ backgroundColor: "var(--club-primary, #B7E000)", color: "#001A24" }}
+              style={{ backgroundColor: "var(--club-primary, #00ffff)", color: "#001A24" }}
             >
               {pending ? "Guardando…" : "Guardar duraciones"}
             </button>

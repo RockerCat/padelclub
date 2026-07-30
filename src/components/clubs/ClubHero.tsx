@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { MapPin, Lock, MessageCircle, ExternalLink } from "lucide-react";
 import { CoverUploadButton, LogoUploadButton } from "./ClubHeroUploadButtons";
 import { ClubNameEditor } from "./ClubNameEditor";
+import { CLUB_PRIMARY_COLOR } from "@/lib/constants/clubTheme";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -12,7 +13,6 @@ export type ClubHeroClub = {
   description: string | null;
   logo_url: string | null;
   cover_image_url: string | null;
-  primary_color: string;
   city: string | null;
   state: string | null;
   visibility: string;
@@ -105,7 +105,7 @@ function SocialPills({ club }: { club: Pick<ClubHeroClub, "whatsapp" | "instagra
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function ClubHero({ club, actions, variant = "page", editable = false, showSocial = false }: ClubHeroProps) {
-  const p       = club.primary_color;
+  const p       = CLUB_PRIMARY_COLOR;
   const loc     = [club.city, club.state].filter(Boolean).join(", ");
   const hasSocial = showSocial && !!(club.whatsapp || club.instagram || club.facebook || club.youtube);
   const isPrivate = club.visibility === "private";

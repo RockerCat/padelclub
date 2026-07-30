@@ -93,7 +93,7 @@ export function DateRangeSelector({ value, customFrom, customTo, dateRangeLabel 
               disabled={!canApply}
               onClick={handleApply}
               className="h-9 px-3 rounded-lg text-sm font-semibold transition-all hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:brightness-100 whitespace-nowrap"
-              style={{ backgroundColor: "var(--club-primary, #B7E000)", color: "var(--club-bg, #001A24)" }}
+              style={{ backgroundColor: "var(--club-primary, #00ffff)", color: "var(--club-bg, #001A24)" }}
             >
               Aplicar
             </button>
