@@ -39,6 +39,8 @@
 -- open_tournament_registration
 -- ────────────────────────────────────────────────────────────────────────
 
+DROP FUNCTION IF EXISTS public.open_tournament_registration(uuid);
+
 CREATE OR REPLACE FUNCTION public.open_tournament_registration(
   p_tournament_id uuid
 )
@@ -147,6 +149,8 @@ GRANT EXECUTE ON FUNCTION public.open_tournament_registration(uuid) TO authentic
 -- close_tournament_registration
 -- ────────────────────────────────────────────────────────────────────────
 
+DROP FUNCTION IF EXISTS public.close_tournament_registration(uuid);
+
 CREATE OR REPLACE FUNCTION public.close_tournament_registration(
   p_tournament_id uuid
 )
@@ -244,6 +248,8 @@ GRANT EXECUTE ON FUNCTION public.close_tournament_registration(uuid) TO authenti
 -- cancel_tournament
 -- ────────────────────────────────────────────────────────────────────────
 
+DROP FUNCTION IF EXISTS public.cancel_tournament(uuid);
+
 CREATE OR REPLACE FUNCTION public.cancel_tournament(
   p_tournament_id uuid
 )
@@ -340,6 +346,8 @@ GRANT EXECUTE ON FUNCTION public.cancel_tournament(uuid) TO authenticated;
 -- ────────────────────────────────────────────────────────────────────────
 -- generate_tournament_bracket
 -- ────────────────────────────────────────────────────────────────────────
+
+DROP FUNCTION IF EXISTS public.generate_tournament_bracket(uuid);
 
 CREATE OR REPLACE FUNCTION public.generate_tournament_bracket(
   p_tournament_id uuid

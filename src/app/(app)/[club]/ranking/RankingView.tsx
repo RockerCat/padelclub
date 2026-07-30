@@ -1,12 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Trophy, Crown, Star } from "lucide-react";
+import { Trophy, Crown, Star, Coins, ArrowLeftRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { Card, FilterDropdown, Badge } from "@/components/ui";
-import { PlayerAvatar } from "@/components/players/PlayerAvatar";
+import { Card, FilterDropdown, Badge, Toast } from "@/components/ui";
 import { PlayerSportAvatar } from "@/components/players/PlayerSportAvatar";
 import { cn } from "@/lib/utils/cn";
+import { AdjustPlayerPointsModal } from "@/app/(app)/[club]/admin/players/AdjustPlayerPointsModal";
+import { ChangePlayerCategoryModal } from "@/app/(app)/[club]/admin/players/ChangePlayerCategoryModal";
+import { RankingExportButton } from "@/components/sports-share/RankingExportButton";
+import type { SportCategory } from "@/types/database";
 
 interface RankingRow {
   ranking_position: number;
@@ -19,11 +22,27 @@ interface RankingRow {
 
 interface RankingViewProps {
   clubId: string;
-  ownClubMemberId: string;
-  categories: { code: string; sortOrder: number }[];
+  clubSlug: string;
+  clubName: string;
+  clubLogoUrl: string | null;
+  accentColor: string;
+  role: "OWNER" | "ADMIN" | "PLAYER";
+  // Bloque 3.2 — null para un visitante sin membresía activa en este club
+  // (ranking público de un club público). Toda comparación contra este
+  // valor (isSelf/"Tú", posición propia) simplemente nunca coincide en ese
+  // caso — nunca un crash, nunca un club_member_id inventado.
+  ownClubMemberId: string | null;
+  categories: SportCategory[];
   initialCategory: string | null;
   initialRanking: RankingRow[];
   initialError: string | null;
+  // Bloque 3.2 — ranking público del club. Fuerza el modo de solo lectura
+  // sin importar el rol real del visitante: un OWNER/ADMIN que llega aquí
+  // desde la página pública del club nunca debe ver las acciones
+  // administrativas (esas viven exclusivamente en /[club]/ranking dentro
+  // del panel autenticado). Por defecto false — el comportamiento del
+  // Bloque 3.1 queda intacto para quien no pase esta prop.
+  readOnly?: boolean;
 }
 
 // Visual-only medal styling for the podium — purely presentational, no data
@@ -72,11 +91,19 @@ const ROW_ORDER: Record<1 | 2 | 3, string> = {
 function PodiumCard({
   place,
   row,
+  category,
   isSelf,
+  isAdmin,
+  onAdjustPoints,
+  onChangeCategory,
 }: {
   place: 1 | 2 | 3;
   row: RankingRow;
+  category: string;
   isSelf: boolean;
+  isAdmin: boolean;
+  onAdjustPoints: (row: RankingRow) => void;
+  onChangeCategory: (row: RankingRow) => void;
 }) {
   const medal = MEDAL_STYLES[place];
   return (
@@ -98,10 +125,14 @@ function PodiumCard({
         >
           {place}
         </span>
-        <PlayerAvatar
+        {/* Sin rankingPosition aquí: el podio ya comunica la posición con su
+            propio número/pedestal/Crown — una segunda corona sería una
+            decoración redundante (ver spec). Solo se agrega la categoría. */}
+        <PlayerSportAvatar
           player={{ id: row.profile_id, full_name: row.full_name, avatar_url: row.avatar_url }}
           size="md"
-          className={medal.avatarClassName}
+          avatarClassName={medal.avatarClassName}
+          sportCategory={category}
         />
         <div className="mt-1.5 sm:mt-3 flex items-center gap-1 sm:gap-1.5 min-w-0 max-w-full">
           <span className="text-[11px] sm:text-sm font-semibold text-white truncate max-w-full sm:max-w-[140px]">
@@ -116,6 +147,26 @@ function PodiumCard({
         <span className="mt-0.5 sm:mt-1 text-[10px] sm:text-sm font-semibold text-brand-primary tabular-nums">
           {row.current_points} puntos
         </span>
+        {isAdmin && (
+          <div className="mt-1.5 flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => onAdjustPoints(row)}
+              aria-label={`Ajustar puntos de ${row.full_name ?? "jugador"}`}
+              className="w-6 h-6 rounded-md flex items-center justify-center text-brand-muted hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <Coins className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onChangeCategory(row)}
+              aria-label={`Cambiar categoría de ${row.full_name ?? "jugador"}`}
+              className="w-6 h-6 rounded-md flex items-center justify-center text-brand-muted hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <ArrowLeftRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
       </div>
       <div
         className={cn("block w-full rounded-b-lg border border-t-0", medal.pedestal, medal.pedestalHeight)}
@@ -147,26 +198,45 @@ function OwnPositionCard({ position, total, points }: { position: number; total:
 // miembro activo del club, cualquier rol, ver 20260824000001).
 export function RankingView({
   clubId,
+  clubSlug,
+  clubName,
+  clubLogoUrl,
+  accentColor,
+  role,
   ownClubMemberId,
   categories,
   initialCategory,
   initialRanking,
   initialError,
+  readOnly = false,
 }: RankingViewProps) {
   const [category, setCategory] = useState<string | null>(initialCategory);
   const [rows, setRows] = useState<RankingRow[]>(initialRanking);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(initialError);
 
-  async function handleCategoryChange(nextCategory: string) {
-    setCategory(nextCategory);
+  // Bloque 3.1 — acciones administrativas (OWNER/ADMIN). Reutiliza en su
+  // totalidad AdjustPlayerPointsModal/ChangePlayerCategoryModal y sus
+  // Server Actions ya existentes (admin/players/actions.ts, protegidas por
+  // requireAdminRole) — este componente nunca escribe en tablas deportivas
+  // directamente, solo decide qué fila abre qué modal.
+  const isAdmin = !readOnly && (role === "OWNER" || role === "ADMIN");
+  const [pointsModalRow, setPointsModalRow] = useState<RankingRow | null>(null);
+  const [categoryModalRow, setCategoryModalRow] = useState<RankingRow | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Única fuente de verdad para el listado: siempre re-consulta la misma
+  // RPC ya autorizada (get_club_category_ranking_view), tanto al cambiar de
+  // categoría como después de una mutación exitosa — nunca se reordena ni
+  // recalcula el ranking en el frontend.
+  async function fetchRanking(targetCategory: string) {
     setLoading(true);
     setError(null);
 
     const supabase = createClient();
     const { data, error: rpcError } = await supabase.rpc("get_club_category_ranking_view", {
       p_club_id: clubId,
-      p_category: nextCategory,
+      p_category: targetCategory,
     });
 
     setLoading(false);
@@ -177,6 +247,22 @@ export function RankingView({
       return;
     }
     setRows(data ?? []);
+  }
+
+  function handleCategoryChange(nextCategory: string) {
+    setCategory(nextCategory);
+    fetchRanking(nextCategory);
+  }
+
+  // Tras ajustar puntos o cambiar de categoría, se re-consulta la categoría
+  // actualmente seleccionada en vez de aplicar el resultado de la mutación
+  // localmente — un cambio de categoría hace que el jugador desaparezca de
+  // este listado exactamente cuando la RPC deje de devolverlo aquí.
+  function handleAdminMutationSuccess(message: string) {
+    setPointsModalRow(null);
+    setCategoryModalRow(null);
+    setToastMessage(message);
+    if (category) fetchRanking(category);
   }
 
   // Todo lo de abajo es puramente derivado de `rows` para presentación —
@@ -196,9 +282,24 @@ export function RankingView({
           <h1 className="text-2xl font-bold text-white">Ranking</h1>
           <p className="text-brand-muted mt-1 text-sm">Clasificación vigente por categoría.</p>
         </div>
-        {showReady && ownRow && (
-          <OwnPositionCard position={ownRow.ranking_position} total={sortedRows.length} points={ownRow.current_points} />
-        )}
+        <div className="flex items-center gap-3 flex-wrap">
+          {showReady && ownRow && (
+            <OwnPositionCard position={ownRow.ranking_position} total={sortedRows.length} points={ownRow.current_points} />
+          )}
+          {/* Bloque 3.4 — exportación visual, únicamente OWNER/ADMIN en la
+              ruta autenticada (isAdmin ya es false en readOnly, incluyendo
+              la ruta pública) — opera siempre sobre la categoría ya
+              seleccionada, nunca pide elegirla de nuevo. */}
+          {isAdmin && category && showReady && (
+            <RankingExportButton
+              clubName={clubName}
+              clubLogoUrl={clubLogoUrl}
+              accentColor={accentColor}
+              category={category}
+              rows={sortedRows}
+            />
+          )}
+        </div>
       </div>
 
       {/* Sin ninguna categoría resoluble: el catálogo global está vacío
@@ -220,6 +321,11 @@ export function RankingView({
               options={categories.map((c) => ({ value: c.code, label: c.code }))}
               onChange={handleCategoryChange}
             />
+            {showReady && (
+              <p className="text-xs text-brand-muted mt-2">
+                {sortedRows.length} {sortedRows.length === 1 ? "jugador" : "jugadores"} en la categoría {category}
+              </p>
+            )}
           </div>
 
           {showReady && (
@@ -238,7 +344,11 @@ export function RankingView({
                           key={row.club_member_id}
                           place={(i + 1) as 1 | 2 | 3}
                           row={row}
+                          category={category}
                           isSelf={row.club_member_id === ownClubMemberId}
+                          isAdmin={isAdmin}
+                          onAdjustPoints={setPointsModalRow}
+                          onChangeCategory={setCategoryModalRow}
                         />
                       ))}
                     </div>
@@ -304,6 +414,26 @@ export function RankingView({
                       <span className="shrink-0 text-sm font-semibold text-white tabular-nums">
                         {row.current_points}
                       </span>
+                      {isAdmin && (
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setPointsModalRow(row)}
+                            aria-label={`Ajustar puntos de ${row.full_name ?? "jugador"}`}
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-brand-muted hover:text-white hover:bg-white/10 transition-colors"
+                          >
+                            <Coins className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCategoryModalRow(row)}
+                            aria-label={`Cambiar categoría de ${row.full_name ?? "jugador"}`}
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-brand-muted hover:text-white hover:bg-white/10 transition-colors"
+                          >
+                            <ArrowLeftRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
                     </li>
                   );
                 })}
@@ -312,6 +442,34 @@ export function RankingView({
           </Card>
         </>
       )}
+
+      {isAdmin && category && pointsModalRow && (
+        <AdjustPlayerPointsModal
+          clubId={clubId}
+          clubSlug={clubSlug}
+          clubMemberId={pointsModalRow.club_member_id}
+          playerName={pointsModalRow.full_name ?? "Jugador"}
+          category={category}
+          currentPoints={pointsModalRow.current_points}
+          onClose={() => setPointsModalRow(null)}
+          onSuccess={() => handleAdminMutationSuccess("Puntos actualizados correctamente")}
+        />
+      )}
+
+      {isAdmin && category && categoryModalRow && (
+        <ChangePlayerCategoryModal
+          clubId={clubId}
+          clubSlug={clubSlug}
+          clubMemberId={categoryModalRow.club_member_id}
+          playerName={categoryModalRow.full_name ?? "Jugador"}
+          currentCategory={category}
+          categories={categories}
+          onClose={() => setCategoryModalRow(null)}
+          onSuccess={() => handleAdminMutationSuccess("Categoría actualizada correctamente")}
+        />
+      )}
+
+      <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />
     </div>
   );
 }

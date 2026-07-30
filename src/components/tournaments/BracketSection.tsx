@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { Trophy } from "lucide-react";
 import { Button, ConfirmDialog, Toast } from "@/components/ui";
 import { BracketView } from "./BracketView";
+import { CourtAllocationsSection } from "./CourtAllocationsSection";
 import { generateTournamentBracketAction } from "@/lib/tournamentBracketActions";
-import type { BracketRound } from "@/lib/tournamentBracket";
+import type { BracketRound, TournamentCourtAllocationView } from "@/lib/tournamentBracket";
 import type { TournamentEntriesCapacity } from "@/lib/tournamentEntries";
 import type { Tournament } from "@/types/database";
 
@@ -16,9 +17,23 @@ interface BracketSectionProps {
   capacity: TournamentEntriesCapacity;
   isAdmin: boolean;
   revalidatePaths: string[];
+  // Both empty for PLAYER — the allocations management subsection is
+  // OWNER/ADMIN-only (RLS has no PLAYER read policy on
+  // tournament_court_allocations at all), so the PLAYER detail page never
+  // even attempts to fetch them.
+  courtAllocations: TournamentCourtAllocationView[];
+  clubCourts: { id: string; name: string }[];
 }
 
-export function BracketSection({ tournament, rounds, capacity, isAdmin, revalidatePaths }: BracketSectionProps) {
+export function BracketSection({
+  tournament,
+  rounds,
+  capacity,
+  isAdmin,
+  revalidatePaths,
+  courtAllocations,
+  clubCourts,
+}: BracketSectionProps) {
   const router = useRouter();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,6 +42,7 @@ export function BracketSection({ tournament, rounds, capacity, isAdmin, revalida
 
   const hasBracket = rounds.length > 0;
   const readyToGenerate = tournament.status === "registration_closed" && capacity.confirmed === capacity.total;
+  const activeAllocations = courtAllocations.filter((a) => a.isActive);
 
   function handleGenerate() {
     setError(null);
@@ -43,11 +59,37 @@ export function BracketSection({ tournament, rounds, capacity, isAdmin, revalida
   }
 
   return (
-    <div className="flex flex-col gap-5 max-w-3xl">
+    <div className="flex flex-col gap-6 max-w-3xl">
       <h2 className="text-lg font-semibold text-white">Cuadro del torneo</h2>
 
+      {isAdmin && (
+        <CourtAllocationsSection
+          clubId={tournament.club_id}
+          tournamentId={tournament.id}
+          tournamentStatus={tournament.status}
+          initialAllocations={courtAllocations}
+          courts={clubCourts}
+          revalidatePaths={revalidatePaths}
+        />
+      )}
+
       {hasBracket ? (
-        <BracketView rounds={rounds} />
+        <>
+          {tournament.status === "completed" && (
+            <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3">
+              <p className="text-sm font-semibold text-emerald-400">Torneo finalizado</p>
+              <p className="text-xs text-brand-muted mt-0.5">Los resultados del cuadro están completos.</p>
+            </div>
+          )}
+          <BracketView
+            rounds={rounds}
+            isAdmin={isAdmin}
+            tournamentStatus={tournament.status}
+            clubId={tournament.club_id}
+            activeAllocations={activeAllocations}
+            revalidatePaths={revalidatePaths}
+          />
+        </>
       ) : (
         <div className="flex flex-col gap-4">
           <div className="flex flex-col items-center justify-center py-12 text-center bg-brand-surface border border-white/10 rounded-2xl">

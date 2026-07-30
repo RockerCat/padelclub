@@ -498,7 +498,21 @@ export function ClubPublicView({ club, courts, schedule, playerCount, news, view
                   </div>
                 )}
                 <InfoRow Icon={CalendarDays} label="Reservas" value="Online vía MiPadelClub" />
-                <InfoRow Icon={Trophy} label="Ranking" value="En construcción" badge="Pronto" badgeAmber />
+                {/* Bloque 3.2 — enlaza al ranking de solo lectura
+                    (/clubs/[slug]/ranking). Se muestra siempre, igual que
+                    "Ver todas las noticias" más arriba; el acceso real (solo
+                    miembros activos del club, ver esa página) lo resuelve el
+                    destino, nunca una condición duplicada aquí. */}
+                <Link
+                  href={`/clubs/${club.slug}/ranking`}
+                  className="flex items-start gap-3 py-3 hover:opacity-80 transition-opacity"
+                >
+                  <Trophy className="w-4 h-4 text-brand-muted/60 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] uppercase tracking-wider text-brand-muted/50 font-medium">Ranking</p>
+                    <p className="text-sm text-white mt-0.5 leading-snug">Ver clasificación por categoría</p>
+                  </div>
+                </Link>
               </div>
             </div>
 

@@ -281,7 +281,7 @@ export function EntriesSection({
           mode={
             isAdmin
               ? { type: "admin" }
-              : { type: "player", ownClubMemberId, ownFullName, ownAvatarUrl }
+              : { type: "player", ownClubMemberId, ownFullName, ownAvatarUrl, ownCategory }
           }
           onClose={() => setRegistering(false)}
           onSuccess={handleRegisterSuccess}

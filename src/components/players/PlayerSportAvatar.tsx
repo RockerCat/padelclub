@@ -22,7 +22,15 @@ interface PlayerSportAvatarProps {
   // Posición vigente en el ranking de esa misma categoría. Solo 1, 2 o 3
   // dibujan la corona; cualquier otro valor (o ausencia) no dibuja nada.
   rankingPosition?: number | null;
+  // Clases del contenedor relativo (posicionamiento/margen externo) — nunca
+  // llega al círculo del avatar en sí.
   className?: string;
+  // Bloque 3.3 — pasa directo al PlayerAvatar interno (tailwind-merge
+  // dentro de PlayerAvatar ya resuelve el conflicto con SIZE_CLASSES[size]
+  // de forma segura). Permite que un caller con tamaños responsivos
+  // propios (p. ej. el podio del Ranking) siga usando su propio ancho/alto
+  // por breakpoint sin perder la esquina de categoría ni la corona.
+  avatarClassName?: string;
 }
 
 // Paleta propia del código de categoría deportiva (7a..1a) — sport_categories
@@ -40,11 +48,16 @@ const SPORT_CATEGORY_COLOR: Record<string, string> = {
   "1a": "bg-red-500",
 };
 
-// La esquina solo tiene espacio legible a partir de "lg" (64px) — en sm/md
-// (32/40px) un 20-25% son unos pocos píxeles, insuficiente para dos
-// caracteres. Por diseño, en esos tamaños el avatar se ve exactamente igual
-// que hoy (sin esquina, sin corona) — nunca se fuerza un overflow.
-const CORNER_SIZE: Partial<Record<AvatarSize, string>> = {
+// Bloque 3.3 — la categoría debe ser legible también en avatares pequeños
+// (filas de Ranking, tarjetas de Torneos, listas compactas de Jugadores),
+// así que la esquina ahora cubre todos los tamaños, no solo lg+. sm/md usan
+// una esquina proporcionalmente más chica (nunca desborda el círculo).
+const CORNER_SIZE: Record<AvatarSize, string> = {
+  // Bloque 3.5 — sm/md ligeramente más grandes que la versión original de
+  // Bloque 3.3 (6px/6.5px): dos caracteres a esa escala son difíciles de
+  // leer en pantalla real; sigue sin desbordar el círculo de 32px/40px.
+  sm: "w-3.5 h-3.5 text-[7px]",
+  md: "w-4 h-4 text-[7.5px]",
   lg: "w-3.5 h-3.5 text-[7px]",
   xl: "w-4 h-4 text-[8px]",
   "2xl": "w-5 h-5 text-[9px]",
@@ -65,21 +78,23 @@ export function PlayerSportAvatar({
   sportCategory,
   rankingPosition,
   className,
+  avatarClassName,
 }: PlayerSportAvatarProps) {
-  const cornerSize = CORNER_SIZE[size];
-  const showCorner = !!sportCategory && !!cornerSize;
+  const showCorner = !!sportCategory;
   const showCrown = rankingPosition === 1 || rankingPosition === 2 || rankingPosition === 3;
+  const medalLabel =
+    rankingPosition === 1 ? "Medalla de oro — 1er lugar" : rankingPosition === 2 ? "Medalla de plata — 2do lugar" : "Medalla de bronce — 3er lugar";
 
   return (
     <div className={cn("relative inline-flex shrink-0", className)}>
-      <PlayerAvatar player={player} size={size} />
+      <PlayerAvatar player={player} size={size} className={avatarClassName} />
 
       {showCorner && (
         <span
           className={cn(
             "absolute -bottom-0.5 -right-0.5 rounded-md border border-brand-surface flex items-center justify-center font-bold text-white leading-none",
             SPORT_CATEGORY_COLOR[sportCategory!] ?? "bg-white/20",
-            cornerSize
+            CORNER_SIZE[size]
           )}
         >
           {sportCategory}
@@ -87,7 +102,16 @@ export function PlayerSportAvatar({
       )}
 
       {showCrown && (
-        <span className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-brand-surface border border-white/10 flex items-center justify-center">
+        // role="img" + aria-label — la corona nunca depende solo del color
+        // para distinguir oro/plata/bronce (RankMedalCrown usa el mismo
+        // ícono para las 3, diferenciado solo por color); el número real de
+        // `rankingPosition` sigue siendo la fuente visible en las filas del
+        // Ranking (esto nunca lo reemplaza, ver RankingView).
+        <span
+          role="img"
+          aria-label={medalLabel}
+          className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-brand-surface border border-white/10 flex items-center justify-center"
+        >
           <RankMedalCrown place={rankingPosition as 1 | 2 | 3} className="w-3 h-3" />
         </span>
       )}

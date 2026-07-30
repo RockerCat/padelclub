@@ -6,6 +6,16 @@ export interface TournamentEntryMemberDisplay {
   profile_id: string | null;
   full_name: string | null;
   avatar_url: string | null;
+  // Bloque 3.3 — categoría deportiva REAL y vigente de este club_member_id
+  // (club_member_sport_state, vía la misma get_club_category_ranking_view
+  // ya autorizada que usa Ranking) — nunca entry.category/secondary_category,
+  // que solo congelan la modalidad del torneo al momento de la inscripción.
+  // Esto importa sobre todo en un torneo combinado: ambos integrantes de
+  // una pareja pueden estar en categorías reales distintas (superior +
+  // inferior) aunque el entry solo tenga una. null cuando el miembro
+  // todavía no tiene estado deportivo aprovisionado — los llamadores caen
+  // de vuelta a entry.category en ese caso (ver PairMemberSlot).
+  category: string | null;
 }
 
 export interface TournamentEntryWithMembers extends TournamentEntryRow {
@@ -26,6 +36,31 @@ export interface TournamentEntriesCapacity {
 
 const STATUS_ORDER: Record<string, number> = { confirmed: 0, pending: 1, withdrawn: 2 };
 
+// Bloque 3.3 — resuelve la categoría real de cualquier cantidad de
+// club_member_id en, como máximo, 2 llamadas (una por cada categoría que
+// el torneo acepta: category y, si es combinado, secondary_category) —
+// nunca una llamada por jugador/pareja. Mismo patrón ya usado en
+// RegisterEntryModal.tsx para el combobox de inscripción. Nunca toca
+// club_member_sport_state directamente (RLS-cerrada, sin GRANT a
+// cliente) — get_club_category_ranking_view sigue siendo la única vía.
+async function resolveMemberCategories(
+  supabase: SupabaseClient<Database>,
+  clubId: string,
+  categories: string[]
+): Promise<Map<string, string>> {
+  const uniqueCategories = [...new Set(categories)];
+  const map = new Map<string, string>();
+  if (uniqueCategories.length === 0) return map;
+
+  const results = await Promise.all(
+    uniqueCategories.map((cat) => supabase.rpc("get_club_category_ranking_view", { p_club_id: clubId, p_category: cat }))
+  );
+  for (const { data } of results) {
+    for (const row of data ?? []) map.set(row.club_member_id, row.category);
+  }
+  return map;
+}
+
 function compareEntries(a: TournamentEntryWithMembers, b: TournamentEntryWithMembers): number {
   const orderDiff = (STATUS_ORDER[a.status] ?? 3) - (STATUS_ORDER[b.status] ?? 3);
   if (orderDiff !== 0) return orderDiff;
@@ -34,18 +69,26 @@ function compareEntries(a: TournamentEntryWithMembers, b: TournamentEntryWithMem
 
 // Shared by the OWNER/ADMIN detail page and the PLAYER detail page — same
 // rule, same query shape, never two slightly different versions (CLAUDE.md
-// → Shared View & Data Patterns). Exactly 3 queries total, none per-entry/
-// per-player: (1) tournament_entries, (2) tournament_entry_members, (3)
-// club_members+profiles for the distinct member ids found in (2). RLS
-// applies to (1) and (2) exactly as documented in 20260915000001 — this
-// function never widens or narrows what each role can see, it only shapes
-// whatever rows the caller's own session is already allowed to read.
+// → Shared View & Data Patterns). Bloque 3.3 added real per-member category
+// resolution (resolveMemberCategories, up to 2 extra RPC calls — one per
+// `categories` entry, run in parallel with the two queries below, never one
+// per entry/player): (1) tournament_entries, (2) tournament_entry_members,
+// (3) club_members+profiles for the distinct member ids found in (2), (4-5)
+// get_club_category_ranking_view for each of at most 2 categories — 3 to 5
+// total, never per-entry/per-player. RLS applies to (1) and (2) exactly as
+// documented in 20260915000001 — this function never widens or narrows
+// what each role can see, it only shapes whatever rows the caller's own
+// session is already allowed to read.
 export async function getTournamentEntriesWithMembers(
   supabase: SupabaseClient<Database>,
   tournamentId: string,
-  clubId: string
+  clubId: string,
+  // Bloque 3.3 — categorías reales a resolver por miembro: [tournament.category]
+  // o [tournament.category, tournament.secondary_category] para un torneo
+  // combinado. Nunca más de 2 elementos.
+  categories: string[]
 ): Promise<{ entries: TournamentEntryWithMembers[]; error: string | null }> {
-  const [entriesRes, membersRes] = await Promise.all([
+  const [entriesRes, membersRes, categoryByMemberId] = await Promise.all([
     supabase
       .from("tournament_entries")
       .select("*")
@@ -56,6 +99,7 @@ export async function getTournamentEntriesWithMembers(
       .select("id, tournament_entry_id, club_member_id")
       .eq("tournament_id", tournamentId)
       .eq("club_id", clubId),
+    resolveMemberCategories(supabase, clubId, categories),
   ]);
 
   if (entriesRes.error || membersRes.error) {
@@ -84,6 +128,7 @@ export async function getTournamentEntriesWithMembers(
         profile_id: cm.profile_id,
         full_name: profile?.full_name ?? null,
         avatar_url: profile?.avatar_url ?? null,
+        category: categoryByMemberId.get(cm.id) ?? null,
       });
     }
   }
@@ -94,7 +139,7 @@ export async function getTournamentEntriesWithMembers(
     const display = displayByMemberId.get(row.club_member_id);
     // Falls back to a placeholder (never a raw UUID) when RLS hid the
     // underlying club_members/profiles row for this specific member.
-    list.push(display ?? { club_member_id: row.club_member_id, profile_id: null, full_name: null, avatar_url: null });
+    list.push(display ?? { club_member_id: row.club_member_id, profile_id: null, full_name: null, avatar_url: null, category: null });
     membersByEntryId.set(row.tournament_entry_id, list);
   }
 

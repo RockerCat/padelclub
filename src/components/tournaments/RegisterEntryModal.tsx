@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button, Spinner } from "@/components/ui";
-import { PlayerAvatar } from "@/components/players/PlayerAvatar";
+import { PlayerSportAvatar } from "@/components/players/PlayerSportAvatar";
 import { PlayerCombobox, type PlayerComboboxCandidate } from "./PlayerCombobox";
 import { registerTournamentEntryAction } from "@/lib/tournamentEntryActions";
 import { tournamentCategoryLabel } from "@/lib/tournamentLabels";
@@ -25,7 +25,17 @@ interface RegisterEntryModalProps {
   // Player mode auto-includes the caller as one of the two members and
   // hides that slot from selection entirely (spec: "no poder removerse del
   // formulario"). Admin mode shows two free selectors.
-  mode: { type: "admin" } | { type: "player"; ownClubMemberId: string; ownFullName: string | null; ownAvatarUrl: string | null };
+  mode:
+    | { type: "admin" }
+    | {
+        type: "player";
+        ownClubMemberId: string;
+        ownFullName: string | null;
+        ownAvatarUrl: string | null;
+        // Bloque 3.3 — ya resuelta por el padre (EntriesSection.ownCategory),
+        // nunca una consulta nueva aquí.
+        ownCategory: string | null;
+      };
   onClose: () => void;
   onSuccess: (entry: TournamentEntryRow | undefined) => void;
 }
@@ -202,7 +212,11 @@ export function RegisterEntryModal({
                   <div className="flex flex-col gap-1.5">
                     <label className="text-sm font-medium text-white/80">Jugador 1</label>
                     <div className="flex items-center gap-2.5 h-12 px-3 rounded-xl border border-white/10 bg-white/5">
-                      <PlayerAvatar player={{ id: mode.ownClubMemberId, full_name: mode.ownFullName, avatar_url: mode.ownAvatarUrl }} size="sm" />
+                      <PlayerSportAvatar
+                        player={{ id: mode.ownClubMemberId, full_name: mode.ownFullName, avatar_url: mode.ownAvatarUrl }}
+                        size="sm"
+                        sportCategory={mode.ownCategory}
+                      />
                       <span className="text-sm text-white">{mode.ownFullName ?? "Tú"} (Tú)</span>
                     </div>
                   </div>

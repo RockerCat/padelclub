@@ -9,6 +9,13 @@ import type { ClubNews } from "@/types/database";
 interface NewsFormProps {
   clubId: string;
   news?: ClubNews;
+  // Bloque 2.7 — prellenado asistido (p. ej. desde la noticia de cierre de
+  // un torneo). Solo tienen efecto en creación (news === undefined); una
+  // edición real siempre sigue mostrando news.title/news.content. El
+  // usuario puede modificar cualquier texto antes de guardar — esto solo
+  // cambia el valor inicial del formulario, nunca envía nada por sí mismo.
+  defaultTitle?: string;
+  defaultContent?: string;
   action: (prevState: NewsFormState, formData: FormData) => Promise<NewsFormState>;
   onSuccess: () => void;
   onCancel: () => void;
@@ -16,7 +23,7 @@ interface NewsFormProps {
 
 const initialState: NewsFormState = {};
 
-export function NewsForm({ clubId, news, action, onSuccess, onCancel }: NewsFormProps) {
+export function NewsForm({ clubId, news, defaultTitle, defaultContent, action, onSuccess, onCancel }: NewsFormProps) {
   const [state, formAction, pending] = useActionState(action, initialState);
   const isEdit = !!news;
 
@@ -32,7 +39,7 @@ export function NewsForm({ clubId, news, action, onSuccess, onCancel }: NewsForm
         name="title"
         label="Título"
         type="text"
-        defaultValue={news?.title ?? ""}
+        defaultValue={news?.title ?? defaultTitle ?? ""}
         required
         placeholder="Nuevo torneo este fin de semana"
       />
@@ -41,7 +48,7 @@ export function NewsForm({ clubId, news, action, onSuccess, onCancel }: NewsForm
         <label className="text-sm font-medium text-white/80">Contenido</label>
         <textarea
           name="content"
-          defaultValue={news?.content ?? ""}
+          defaultValue={news?.content ?? defaultContent ?? ""}
           required
           placeholder="Cuéntale a tus jugadores los detalles..."
           rows={6}

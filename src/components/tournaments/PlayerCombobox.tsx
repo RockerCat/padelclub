@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
-import { PlayerAvatar } from "@/components/players/PlayerAvatar";
+import { PlayerSportAvatar } from "@/components/players/PlayerSportAvatar";
 import { cn } from "@/lib/utils/cn";
 
 export interface PlayerComboboxCandidate {
@@ -64,7 +64,11 @@ export function PlayerCombobox({
 
       {selected ? (
         <div className="flex items-center gap-2.5 h-12 px-3 rounded-xl border border-white/10 bg-white/5">
-          <PlayerAvatar player={{ id: selected.club_member_id, full_name: selected.full_name, avatar_url: selected.avatar_url }} size="sm" />
+          <PlayerSportAvatar
+            player={{ id: selected.club_member_id, full_name: selected.full_name, avatar_url: selected.avatar_url }}
+            size="sm"
+            sportCategory={selected.category}
+          />
           <span className="text-sm text-white flex-1 min-w-0 truncate">{selected.full_name ?? "Jugador"}</span>
           <span className="text-xs text-brand-muted shrink-0">{selected.category}</span>
           {!disabled && (
@@ -111,7 +115,11 @@ export function PlayerCombobox({
                       "w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-white/5 transition-colors"
                     )}
                   >
-                    <PlayerAvatar player={{ id: c.club_member_id, full_name: c.full_name, avatar_url: c.avatar_url }} size="sm" />
+                    <PlayerSportAvatar
+                      player={{ id: c.club_member_id, full_name: c.full_name, avatar_url: c.avatar_url }}
+                      size="sm"
+                      sportCategory={c.category}
+                    />
                     <span className="text-sm text-white truncate min-w-0 flex-1">{c.full_name ?? "Jugador"}</span>
                     <span className="text-xs text-brand-muted shrink-0">{c.category}</span>
                   </button>

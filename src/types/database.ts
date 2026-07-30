@@ -1100,9 +1100,57 @@ export interface Database {
           },
         ];
       };
+      // Torneos (Bloque 2.4) — OWNER/ADMIN only for reads (RLS:
+      // tournament_court_allocations_select_admin); writes only via
+      // create/update/deactivate_tournament_court_allocation, never direct.
+      tournament_court_allocations: {
+        Row: {
+          id: string;
+          tournament_id: string;
+          club_id: string;
+          court_id: string;
+          allocation_date: string;
+          start_time: string;
+          end_time: string;
+          is_active: boolean;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          tournament_id: string;
+          club_id: string;
+          court_id: string;
+          allocation_date: string;
+          start_time: string;
+          end_time: string;
+          is_active?: boolean;
+          created_by: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: never;
+        Relationships: [
+          {
+            foreignKeyName: "tournament_court_allocations_tournament_club_fk";
+            columns: ["tournament_id", "club_id"];
+            isOneToOne: false;
+            referencedRelation: "tournaments";
+            referencedColumns: ["id", "club_id"];
+          },
+          {
+            foreignKeyName: "tournament_court_allocations_court_club_fk";
+            columns: ["court_id", "club_id"];
+            isOneToOne: false;
+            referencedRelation: "courts";
+            referencedColumns: ["id", "club_id"];
+          },
+        ];
+      };
       // Torneos (Bloque 2.3) — read-only from client code so far (bracket
-      // display). Writes only via generate_tournament_bracket for now; a
-      // future block (scheduling/results) will add mutating RPCs.
+      // display). Bloque 2.4 adds writes to its scheduling columns via
+      // schedule_tournament_match only, never direct.
       tournament_matches: {
         Row: {
           id: string;
@@ -1601,9 +1649,14 @@ export interface Database {
         }>;
       };
       // public.get_club_category_ranking — Fase 1 módulo deportivo, bloque 6
-      // (20260824000001). Authenticated + active member of p_club_id only
-      // (any role); read-only base ranking query for one club+category.
-      // Original RETURNS TABLE shape preserved exactly (no avatar_url) —
+      // (20260824000001); autorización ampliada en Bloque 3.2–3.3
+      // (20260920000001_public_club_ranking_read.sql). Read-only base
+      // ranking query for one club+category. Authorization: any active
+      // member of p_club_id (any role) always allowed, regardless of
+      // visibility/archival — OR, when the club is visibility='public'
+      // and not archived, ANY caller (anon included, no auth required) —
+      // otherwise 42501 (not authenticated / not authorized). Original
+      // RETURNS TABLE shape preserved exactly (no avatar_url) —
       // change_club_player_category (20260822000001/20260823000001) already
       // consumes this exact shape internally; see get_club_category_ranking_view
       // below for the UI-facing variant that adds avatar_url.
@@ -1620,10 +1673,11 @@ export interface Database {
         }>;
       };
       // public.get_club_category_ranking_view — Fase 1 módulo deportivo,
-      // bloque 6 (20260824000001). UI-facing wrapper: composes
-      // get_club_category_ranking (inherits its authorization) and adds
-      // avatar_url. This is the RPC the ranking page/UI calls — never the
-      // one above directly.
+      // bloque 6 (20260824000001); GRANT a anon agregado en Bloque 3.2–3.3
+      // (20260920000001). UI-facing wrapper: composes
+      // get_club_category_ranking (inherits its widened authorization —
+      // see above) and adds avatar_url. This is the RPC the ranking
+      // page/UI calls — never the one above directly.
       get_club_category_ranking_view: {
         Args: { p_club_id: string; p_category: string };
         Returns: Array<{
@@ -1755,6 +1809,114 @@ export interface Database {
         Args: { p_tournament_id: string };
         Returns: Array<Database["public"]["Tables"]["tournaments"]["Row"]>;
       };
+      // Torneos, Bloque 1.8 (20260912000001) — court allocations + match
+      // scheduling. All 4 share their own table's exact RETURNS TABLE shape
+      // (tournament_court_allocations for the first 3, tournament_matches
+      // for the last).
+      create_tournament_court_allocation: {
+        Args: {
+          p_tournament_id: string;
+          p_court_id: string;
+          p_allocation_date: string;
+          p_start_time: string;
+          p_end_time: string;
+        };
+        Returns: Array<Database["public"]["Tables"]["tournament_court_allocations"]["Row"]>;
+      };
+      update_tournament_court_allocation: {
+        Args: {
+          p_tournament_court_allocation_id: string;
+          p_court_id: string;
+          p_allocation_date: string;
+          p_start_time: string;
+          p_end_time: string;
+        };
+        Returns: Array<Database["public"]["Tables"]["tournament_court_allocations"]["Row"]>;
+      };
+      deactivate_tournament_court_allocation: {
+        Args: { p_tournament_court_allocation_id: string };
+        Returns: Array<Database["public"]["Tables"]["tournament_court_allocations"]["Row"]>;
+      };
+      schedule_tournament_match: {
+        Args: {
+          p_tournament_match_id: string;
+          p_tournament_court_allocation_id: string;
+          p_scheduled_date: string;
+          p_scheduled_start_time: string;
+          p_scheduled_end_time: string;
+        };
+        Returns: Array<Database["public"]["Tables"]["tournament_matches"]["Row"]>;
+      };
+      // Torneos, Bloque 1.9 (20260913000001) — match lifecycle. All 3 share
+      // tournament_matches' exact RETURNS TABLE shape.
+      start_tournament_match: {
+        Args: { p_tournament_match_id: string };
+        Returns: Array<Database["public"]["Tables"]["tournament_matches"]["Row"]>;
+      };
+      record_tournament_match_result: {
+        Args: {
+          p_tournament_match_id: string;
+          p_set_one_entry_one: number;
+          p_set_one_entry_two: number;
+          p_set_two_entry_one: number;
+          p_set_two_entry_two: number;
+          p_set_three_entry_one?: number | null;
+          p_set_three_entry_two?: number | null;
+        };
+        Returns: Array<Database["public"]["Tables"]["tournament_matches"]["Row"]>;
+      };
+      correct_tournament_match_result: {
+        Args: {
+          p_tournament_match_id: string;
+          p_set_one_entry_one: number;
+          p_set_one_entry_two: number;
+          p_set_two_entry_one: number;
+          p_set_two_entry_two: number;
+          p_set_three_entry_one?: number | null;
+          p_set_three_entry_two?: number | null;
+        };
+        Returns: Array<Database["public"]["Tables"]["tournament_matches"]["Row"]>;
+      };
+      // Torneos, Bloque 1.10 (20260914000001) — idempotent points
+      // settlement. OWNER/ADMIN only; the RPC re-derives that
+      // authorization itself. Never receives deltas, positions, or a
+      // winner — computes everything internally from the completed
+      // bracket.
+      award_tournament_points: {
+        Args: { p_tournament_id: string };
+        Returns: Array<{
+          tournament_id: string;
+          participation_movements: number;
+          champion_movements: number;
+          runner_up_movements: number;
+          semifinalist_movements: number;
+          total_movements: number;
+          already_awarded: boolean;
+        }>;
+      };
+      // Torneos, Bloque 2.5.1 (20260919000001) — the only read access to
+      // club_player_point_movements (RLS-closed, zero policies). Any active
+      // club member (OWNER/ADMIN/PLAYER) is authorized. When
+      // actual_movement_count = 0 (pending/ready) exactly one sentinel row
+      // is returned with club_member_id/entry_id/player_name/avatar_url/
+      // placement/system_event_code/delta/created_at all NULL — metadata
+      // only, never a real movement.
+      get_tournament_points_summary: {
+        Args: { p_club_id: string; p_tournament_id: string };
+        Returns: Array<{
+          award_state: string;
+          expected_movement_count: number;
+          actual_movement_count: number;
+          club_member_id: string | null;
+          entry_id: string | null;
+          player_name: string | null;
+          avatar_url: string | null;
+          placement: string | null;
+          system_event_code: string | null;
+          delta: number | null;
+          created_at: string | null;
+        }>;
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
@@ -1845,3 +2007,6 @@ export type TournamentEntryMemberRow = Tables<"tournament_entry_members">;
 // Torneos (Bloque 2.3) — bracket display.
 export type TournamentMatchRow = Tables<"tournament_matches">;
 export type TournamentMatchStatus = TournamentMatchRow["status"];
+
+// Torneos (Bloque 2.4) — court allocations + scheduling.
+export type TournamentCourtAllocationRow = Tables<"tournament_court_allocations">;

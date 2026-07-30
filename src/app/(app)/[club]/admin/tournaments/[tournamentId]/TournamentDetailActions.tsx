@@ -20,8 +20,12 @@ import {
 } from "@/lib/tournamentLabels";
 import { EntriesSection } from "@/components/tournaments/EntriesSection";
 import { BracketSection } from "@/components/tournaments/BracketSection";
+import { TournamentAwardsSection } from "@/components/tournaments/TournamentAwardsSection";
+import { TournamentNewsSection } from "@/components/tournaments/TournamentNewsSection";
+import { TournamentExportSection } from "@/components/tournaments/TournamentExportSection";
 import type { TournamentEntriesCapacity, TournamentEntryWithMembers } from "@/lib/tournamentEntries";
-import type { BracketRound } from "@/lib/tournamentBracket";
+import type { BracketRound, TournamentCourtAllocationView } from "@/lib/tournamentBracket";
+import type { TournamentAwardSummary } from "@/lib/tournamentAwards";
 import type { Tournament, SportCategory } from "@/types/database";
 
 interface TournamentDetailActionsProps {
@@ -29,11 +33,18 @@ interface TournamentDetailActionsProps {
   categories: Pick<SportCategory, "code" | "sort_order">[];
   clubSlug: string;
   clubId: string;
+  clubName: string;
+  clubLogoUrl: string | null;
+  accentColor: string;
   entries: TournamentEntryWithMembers[];
   entriesError: string | null;
   capacity: TournamentEntriesCapacity;
   rounds: BracketRound[];
   bracketError: string | null;
+  courtAllocations: TournamentCourtAllocationView[];
+  clubCourts: { id: string; name: string }[];
+  awardSummary: TournamentAwardSummary | null;
+  awardError: string | null;
   role: "OWNER" | "ADMIN";
   ownClubMemberId: string;
   ownUserId: string;
@@ -57,11 +68,18 @@ export function TournamentDetailActions({
   categories,
   clubSlug,
   clubId,
+  clubName,
+  clubLogoUrl,
+  accentColor,
   entries,
   entriesError,
   capacity,
   rounds,
   bracketError,
+  courtAllocations,
+  clubCourts,
+  awardSummary,
+  awardError,
   role,
   ownClubMemberId,
   ownUserId,
@@ -323,9 +341,48 @@ export function TournamentDetailActions({
             capacity={capacity}
             isAdmin
             revalidatePaths={[`/${clubSlug}/admin/tournaments/${tournament.id}`]}
+            courtAllocations={courtAllocations}
+            clubCourts={clubCourts}
           />
         )}
       </div>
+
+      <div className="mt-8">
+        {awardError || !awardSummary ? (
+          <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 max-w-3xl">
+            {awardError ?? "No se pudo cargar el estado de la premiación."}
+          </p>
+        ) : (
+          <TournamentAwardsSection
+            clubId={clubId}
+            tournamentId={tournament.id}
+            isAdmin
+            summary={awardSummary}
+            ownClubMemberId={ownClubMemberId}
+            revalidatePaths={[`/${clubSlug}/admin/tournaments/${tournament.id}`]}
+          />
+        )}
+      </div>
+
+      {awardSummary && (
+        <div className="mt-8">
+          <TournamentNewsSection clubId={clubId} tournament={tournament} summary={awardSummary} />
+        </div>
+      )}
+
+      {awardSummary && (
+        <div className="mt-8">
+          <TournamentExportSection
+            clubName={clubName}
+            clubLogoUrl={clubLogoUrl}
+            accentColor={accentColor}
+            tournament={tournament}
+            awardSummary={awardSummary}
+            entries={entries}
+            rounds={rounds}
+          />
+        </div>
+      )}
 
       {editing && (
         <>

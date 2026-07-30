@@ -23,7 +23,7 @@ export default async function RankingPage({ params }: RankingPageProps) {
 
   const { data: club } = await supabase
     .from("clubs")
-    .select("id, slug, default_player_category")
+    .select("id, slug, name, logo_url, primary_color, default_player_category")
     .eq("slug", slug)
     .eq("is_active", true)
     .single();
@@ -92,8 +92,13 @@ export default async function RankingPage({ params }: RankingPageProps) {
   return (
     <RankingView
       clubId={club.id}
+      clubSlug={slug}
+      clubName={club.name}
+      clubLogoUrl={club.logo_url}
+      accentColor={club.primary_color}
+      role={membership.role as "OWNER" | "ADMIN" | "PLAYER"}
       ownClubMemberId={membership.id}
-      categories={categoryList.map((c) => ({ code: c.code, sortOrder: c.sort_order }))}
+      categories={categoryList}
       initialCategory={initialCategory}
       initialRanking={initialRanking}
       initialError={initialError}

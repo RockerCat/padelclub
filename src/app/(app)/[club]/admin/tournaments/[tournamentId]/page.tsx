@@ -2,7 +2,8 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { TournamentDetailActions } from "./TournamentDetailActions";
 import { getTournamentEntriesWithMembers, summarizeCapacity } from "@/lib/tournamentEntries";
-import { getTournamentBracketView } from "@/lib/tournamentBracket";
+import { getTournamentBracketView, getTournamentCourtAllocations } from "@/lib/tournamentBracket";
+import { getTournamentPointsSummary } from "@/lib/tournamentAwards";
 
 interface TournamentDetailPageProps {
   params: Promise<{ club: string; tournamentId: string }>;
@@ -20,7 +21,7 @@ export default async function TournamentDetailPage({ params }: TournamentDetailP
 
   const { data: club } = await supabase
     .from("clubs")
-    .select("id")
+    .select("id, name, logo_url, primary_color")
     .eq("slug", slug)
     .eq("is_active", true)
     .single();
@@ -54,13 +55,41 @@ export default async function TournamentDetailPage({ params }: TournamentDetailP
     .select("code, sort_order, created_at")
     .order("sort_order", { ascending: true });
 
-  const { entries, error: entriesError } = await getTournamentEntriesWithMembers(supabase, tournament.id, club.id);
+  // Bloque 3.3 — categorías reales a resolver por jugador (máximo 2:
+  // category + secondary_category si el torneo es combinado).
+  const tournamentCategories = [tournament.category, tournament.secondary_category].filter(
+    (c): c is string => !!c
+  );
+
+  const { entries, error: entriesError } = await getTournamentEntriesWithMembers(
+    supabase,
+    tournament.id,
+    club.id,
+    tournamentCategories
+  );
   const capacity = summarizeCapacity(entries, tournament.bracket_size);
   const { rounds, error: bracketError } = await getTournamentBracketView(
     supabase,
     tournament.id,
     club.id,
-    tournament.bracket_size
+    tournament.bracket_size,
+    tournamentCategories
+  );
+  const { allocations, error: allocationsError } = await getTournamentCourtAllocations(
+    supabase,
+    tournament.id,
+    club.id
+  );
+  const { data: clubCourts } = await supabase
+    .from("courts")
+    .select("id, name")
+    .eq("club_id", club.id)
+    .eq("is_active", true)
+    .order("name", { ascending: true });
+  const { summary: awardSummary, error: awardError } = await getTournamentPointsSummary(
+    supabase,
+    club.id,
+    tournament.id
   );
 
   return (
@@ -70,11 +99,18 @@ export default async function TournamentDetailPage({ params }: TournamentDetailP
         categories={sportCategories ?? []}
         clubSlug={slug}
         clubId={club.id}
+        clubName={club.name}
+        clubLogoUrl={club.logo_url}
+        accentColor={club.primary_color}
         entries={entries}
         entriesError={entriesError}
         capacity={capacity}
         rounds={rounds}
-        bracketError={bracketError}
+        bracketError={bracketError ?? allocationsError}
+        courtAllocations={allocations}
+        clubCourts={clubCourts ?? []}
+        awardSummary={awardSummary}
+        awardError={awardError}
         role={membership.role as "OWNER" | "ADMIN"}
         ownClubMemberId={membership.id}
         ownUserId={user.id}

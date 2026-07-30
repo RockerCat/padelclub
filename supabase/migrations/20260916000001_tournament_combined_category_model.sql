@@ -82,6 +82,14 @@ ALTER TABLE public.tournament_entries
 -- 3. create_tournament — nuevo parámetro opcional + validación de combinación
 -- ────────────────────────────────────────────────────────────────────────
 
+-- PostgreSQL no permite reemplazar limpiamente esta RPC dejando viva la
+-- firma anterior: el nuevo parámetro final crea una sobrecarga distinta.
+-- Se elimina la versión previa para evitar firmas ambiguas en PostgREST.
+DROP FUNCTION IF EXISTS public.create_tournament(
+  uuid, text, text, integer, text, text,
+  timestamptz, timestamptz, timestamptz, timestamptz
+);
+
 CREATE OR REPLACE FUNCTION public.create_tournament(
   p_club_id                 uuid,
   p_name                    text,
@@ -242,6 +250,13 @@ GRANT EXECUTE ON FUNCTION public.create_tournament(
 --    congelamiento por estado que category/bracket_size/
 --    registration_opens_at
 -- ────────────────────────────────────────────────────────────────────────
+
+-- La nueva firma agrega p_secondary_category. Se elimina la versión previa
+-- para que no queden dos sobrecargas activas con contratos diferentes.
+DROP FUNCTION IF EXISTS public.update_tournament(
+  uuid, text, text, text, integer, text,
+  timestamptz, timestamptz, timestamptz, timestamptz
+);
 
 CREATE OR REPLACE FUNCTION public.update_tournament(
   p_tournament_id           uuid,
@@ -439,6 +454,11 @@ GRANT EXECUTE ON FUNCTION public.update_tournament(
 --    otra línea cambia: autorización, capacidad, locks, duplicados y el
 --    estado inicial pending/confirmed quedan idénticos.
 -- ────────────────────────────────────────────────────────────────────────
+
+-- Esta RPC conserva la misma firma de entrada, pero cambia su RETURNS TABLE
+-- agregando secondary_category. PostgreSQL exige DROP + CREATE para cambiar
+-- el row type definido por parámetros OUT (evita el error 42P13).
+DROP FUNCTION IF EXISTS public.register_tournament_entry(uuid, uuid, uuid);
 
 CREATE OR REPLACE FUNCTION public.register_tournament_entry(
   p_tournament_id       uuid,

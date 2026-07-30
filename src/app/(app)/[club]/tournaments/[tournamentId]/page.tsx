@@ -11,8 +11,10 @@ import {
 } from "@/lib/tournamentLabels";
 import { getTournamentEntriesWithMembers, summarizeCapacity } from "@/lib/tournamentEntries";
 import { getTournamentBracketView } from "@/lib/tournamentBracket";
+import { getTournamentPointsSummary } from "@/lib/tournamentAwards";
 import { EntriesSection } from "@/components/tournaments/EntriesSection";
 import { BracketSection } from "@/components/tournaments/BracketSection";
+import { TournamentAwardsSection } from "@/components/tournaments/TournamentAwardsSection";
 
 interface PlayerTournamentDetailPageProps {
   params: Promise<{ club: string; tournamentId: string }>;
@@ -78,8 +80,14 @@ export default async function PlayerTournamentDetailPage({ params }: PlayerTourn
 
   if (!tournament) notFound();
 
+  // Bloque 3.3 — categorías reales a resolver por jugador (máximo 2:
+  // category + secondary_category si el torneo es combinado).
+  const tournamentCategories = [tournament.category, tournament.secondary_category].filter(
+    (c): c is string => !!c
+  );
+
   const [{ entries, error: entriesError }, ownStateRes, ownProfileRes] = await Promise.all([
-    getTournamentEntriesWithMembers(supabase, tournament.id, club.id),
+    getTournamentEntriesWithMembers(supabase, tournament.id, club.id, tournamentCategories),
     supabase.rpc("get_club_member_sport_state", { p_club_id: club.id, p_club_member_id: membership.id }),
     supabase.from("profiles").select("full_name, avatar_url").eq("id", user.id).single(),
   ]);
@@ -91,7 +99,13 @@ export default async function PlayerTournamentDetailPage({ params }: PlayerTourn
     supabase,
     tournament.id,
     club.id,
-    tournament.bracket_size
+    tournament.bracket_size,
+    tournamentCategories
+  );
+  const { summary: awardSummary, error: awardError } = await getTournamentPointsSummary(
+    supabase,
+    club.id,
+    tournament.id
   );
 
   return (
@@ -169,6 +183,25 @@ export default async function PlayerTournamentDetailPage({ params }: PlayerTourn
             rounds={rounds}
             capacity={capacity}
             isAdmin={false}
+            revalidatePaths={[`/${slug}/tournaments/${tournament.id}`]}
+            courtAllocations={[]}
+            clubCourts={[]}
+          />
+        )}
+      </div>
+
+      <div className="mt-8">
+        {awardError || !awardSummary ? (
+          <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 max-w-3xl">
+            {awardError ?? "No se pudo cargar el estado de la premiación."}
+          </p>
+        ) : (
+          <TournamentAwardsSection
+            clubId={club.id}
+            tournamentId={tournament.id}
+            isAdmin={false}
+            summary={awardSummary}
+            ownClubMemberId={membership.id}
             revalidatePaths={[`/${slug}/tournaments/${tournament.id}`]}
           />
         )}
