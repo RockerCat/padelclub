@@ -1,6 +1,6 @@
 // Torneos (Bloque 2.1) — the only place in the client app that converts a
 // wall-clock instant typed by a user into a timestamptz for an RPC
-// (tournaments.starts_at/ends_at/registration_opens_at/registration_closes_at).
+// (tournaments.starts_at/registration_opens_at/registration_closes_at).
 // Every other date-only field in the app (reservations) uses plain `date`/
 // `time` columns and never needs this. Colombia has a single fixed UTC-05:00
 // offset with no DST, but — same reasoning already applied in

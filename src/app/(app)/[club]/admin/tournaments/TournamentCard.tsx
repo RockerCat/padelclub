@@ -14,13 +14,7 @@ function formatDate(iso: string) {
 }
 
 function dateRangeLabel(t: Tournament): string {
-  if (!t.starts_at && !t.ends_at) return "Sin fecha definida";
-  if (t.starts_at && t.ends_at) {
-    const start = formatDate(t.starts_at);
-    const end = formatDate(t.ends_at);
-    return start === end ? start : `${start} – ${end}`;
-  }
-  return formatDate((t.starts_at ?? t.ends_at)!);
+  return t.starts_at ? formatDate(t.starts_at) : "Sin fecha definida";
 }
 
 // Whole card is a Link to the detail page — list-level actions (edit,

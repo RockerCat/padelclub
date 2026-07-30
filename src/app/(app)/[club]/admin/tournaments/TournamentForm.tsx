@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useState } from "react";
 import { Button, Input } from "@/components/ui";
 import { isoToBogotaWallClock } from "@/lib/utils/bogotaDatetime";
+import { defaultEstimatedDurationMinutes, hoursInputToMinutes, minutesToHoursInputValue } from "@/lib/utils/tournamentDuration";
 import { TournamentImageUpload } from "./TournamentImageUpload";
 import type { Tournament, SportCategory } from "@/types/database";
 import type { TournamentActionState } from "./actions";
@@ -47,6 +48,55 @@ export function TournamentForm({ clubId, tournament, categories, action, onSucce
   const [initialRegistrationOpensAt] = useState(() =>
     isEdit ? isoToBogotaWallClock(tournament!.registration_opens_at) : isoToBogotaWallClock(new Date().toISOString())
   );
+
+  // Cierre de inscripciones — se autocompleta con el mismo valor de
+  // "Inicio del torneo" mientras el usuario no lo haya editado
+  // manualmente (closesAtTouched). En edición, closesAtTouched arranca en
+  // true: el valor guardado se conserva siempre y nunca se recalcula.
+  const [startsAtInput, setStartsAtInput] = useState(() => isoToBogotaWallClock(tournament?.starts_at ?? null));
+  const [registrationClosesAtInput, setRegistrationClosesAtInput] = useState(() =>
+    isoToBogotaWallClock(tournament?.registration_closes_at ?? null)
+  );
+  const [closesAtTouched, setClosesAtTouched] = useState(isEdit);
+
+  function handleStartsAtChange(value: string) {
+    setStartsAtInput(value);
+    if (!isEdit && !closesAtTouched) {
+      setRegistrationClosesAtInput(value);
+    }
+  }
+
+  function handleClosesAtChange(value: string) {
+    setRegistrationClosesAtInput(value);
+    setClosesAtTouched(true);
+  }
+
+  // Duración estimada — el organizador solo ve horas; minutos siguen
+  // siendo la unidad real almacenada y enviada al backend (input oculto).
+  // Mismo patrón de autocompletado que el resto del formulario: se
+  // recalcula desde "Cupo máximo de parejas" (30 min por pareja) mientras
+  // el usuario no la haya editado manualmente. En edición arranca desde
+  // el valor guardado y con durationTouched=true, nunca se recalcula.
+  const initialMaxPairs = tournament?.max_pairs ?? 8;
+  const [maxPairsInput, setMaxPairsInput] = useState(() => String(initialMaxPairs));
+  const [durationHoursInput, setDurationHoursInput] = useState(() =>
+    minutesToHoursInputValue(tournament?.estimated_duration_minutes ?? defaultEstimatedDurationMinutes(initialMaxPairs))
+  );
+  const [durationTouched, setDurationTouched] = useState(isEdit);
+  const durationMinutesForSubmit = hoursInputToMinutes(durationHoursInput);
+
+  function handleMaxPairsChange(value: string) {
+    setMaxPairsInput(value);
+    const parsedMaxPairs = parseInt(value, 10);
+    if (!durationTouched && Number.isInteger(parsedMaxPairs) && parsedMaxPairs > 0) {
+      setDurationHoursInput(minutesToHoursInputValue(defaultEstimatedDurationMinutes(parsedMaxPairs)));
+    }
+  }
+
+  function handleDurationHoursChange(value: string) {
+    setDurationHoursInput(value);
+    setDurationTouched(true);
+  }
 
   const primarySortOrder = categories.find((c) => c.code === categoryCode)?.sort_order;
   const secondaryOptions = categories.filter(
@@ -152,24 +202,14 @@ export function TournamentForm({ clubId, tournament, categories, action, onSucce
             type="number"
             min={1}
             step={1}
-            defaultValue={tournament?.max_pairs ?? 8}
+            value={maxPairsInput}
+            onChange={(e) => handleMaxPairsChange(e.target.value)}
             disabled={structuralFieldsLocked}
             required
           />
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-white/80">Premios (opcional)</label>
-            <textarea
-              name="prize_description"
-              defaultValue={tournament?.prize_description ?? ""}
-              placeholder={"Ej.\n🥇 1er lugar: Trofeo + $500.000\n🥈 2do lugar: Gatorade + bonos\n🎁 Rifas de patrocinadores"}
-              rows={4}
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-base md:text-sm text-white placeholder:text-brand-muted/60 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20 resize-none"
-            />
-          </div>
         </div>
 
-        {/* Columna derecha: imagen y visibilidad */}
+        {/* Columna derecha: imagen, visibilidad y premios */}
         <div className="flex flex-col gap-4 min-w-0">
           <TournamentImageUpload clubId={clubId} currentImageUrl={tournament?.cover_image_url} />
 
@@ -187,6 +227,17 @@ export function TournamentForm({ clubId, tournament, categories, action, onSucce
                 Público
               </option>
             </select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-white/80">Premios (opcional)</label>
+            <textarea
+              name="prize_description"
+              defaultValue={tournament?.prize_description ?? ""}
+              placeholder={"Ej.\n🥇 1er lugar: Trofeo + $500.000\n🥈 2do lugar: Gatorade + bonos\n🎁 Rifas de patrocinadores"}
+              rows={4}
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-base md:text-sm text-white placeholder:text-brand-muted/60 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20 resize-none"
+            />
           </div>
         </div>
       </div>
@@ -207,7 +258,8 @@ export function TournamentForm({ clubId, tournament, categories, action, onSucce
           <input
             type="datetime-local"
             name="registration_closes_at"
-            defaultValue={isoToBogotaWallClock(tournament?.registration_closes_at ?? null)}
+            value={registrationClosesAtInput}
+            onChange={(e) => handleClosesAtChange(e.target.value)}
             className="w-full h-10 rounded-xl border border-white/10 bg-white/5 px-3 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20"
           />
         </div>
@@ -216,18 +268,26 @@ export function TournamentForm({ clubId, tournament, categories, action, onSucce
           <input
             type="datetime-local"
             name="starts_at"
-            defaultValue={isoToBogotaWallClock(tournament?.starts_at ?? null)}
+            value={startsAtInput}
+            onChange={(e) => handleStartsAtChange(e.target.value)}
             className="w-full h-10 rounded-xl border border-white/10 bg-white/5 px-3 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20"
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-white/80">Fin del torneo</label>
-          <input
-            type="datetime-local"
-            name="ends_at"
-            defaultValue={isoToBogotaWallClock(tournament?.ends_at ?? null)}
-            className="w-full h-10 rounded-xl border border-white/10 bg-white/5 px-3 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20"
-          />
+          <label className="text-sm font-medium text-white/80">Duración estimada</label>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min={0}
+              step="any"
+              value={durationHoursInput}
+              onChange={(e) => handleDurationHoursChange(e.target.value)}
+              required
+              className="w-full h-10 rounded-xl border border-white/10 bg-white/5 px-3 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20"
+            />
+            <span className="text-sm text-brand-muted shrink-0">horas</span>
+          </div>
+          <input type="hidden" name="estimated_duration_minutes" value={durationMinutesForSubmit} />
         </div>
       </div>
 

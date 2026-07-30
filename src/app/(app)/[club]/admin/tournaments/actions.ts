@@ -91,8 +91,8 @@ function tournamentErrorMessage(error: { code?: string; message?: string }): str
     if (msg.includes("registration_opens_at must be before registration_closes_at")) {
       return "La apertura de inscripciones debe ser anterior a su cierre.";
     }
-    if (msg.includes("starts_at must not be after ends_at")) {
-      return "La fecha de inicio no puede ser posterior a la de finalización.";
+    if (msg.includes("Invalid estimated duration")) {
+      return "La duración estimada debe ser mayor a cero.";
     }
     if (msg.includes("registration_closes_at must not be after starts_at")) {
       return "El cierre de inscripciones no puede ser posterior al inicio del torneo.";
@@ -130,7 +130,8 @@ function parseTournamentFields(formData: FormData) {
   const registrationOpensAt = bogotaWallClockToISO((formData.get("registration_opens_at") as string | null) ?? "");
   const registrationClosesAt = bogotaWallClockToISO((formData.get("registration_closes_at") as string | null) ?? "");
   const startsAt = bogotaWallClockToISO((formData.get("starts_at") as string | null) ?? "");
-  const endsAt = bogotaWallClockToISO((formData.get("ends_at") as string | null) ?? "");
+  const estimatedDurationMinutesRaw = formData.get("estimated_duration_minutes") as string | null;
+  const estimatedDurationMinutes = estimatedDurationMinutesRaw ? parseInt(estimatedDurationMinutesRaw, 10) : NaN;
   const prizeDescription = (formData.get("prize_description") as string | null)?.trim() || null;
   const coverImageUrl = (formData.get("cover_image_url") as string | null)?.trim() || null;
 
@@ -143,11 +144,11 @@ function parseTournamentFields(formData: FormData) {
     return { error: "El número máximo de parejas debe ser mayor a cero." } as const;
   }
   if (!VISIBILITIES.includes(visibility)) return { error: "Selecciona una visibilidad válida." } as const;
+  if (!Number.isInteger(estimatedDurationMinutes) || estimatedDurationMinutes < 1) {
+    return { error: "La duración estimada debe ser mayor a cero." } as const;
+  }
   if (registrationOpensAt && registrationClosesAt && registrationOpensAt >= registrationClosesAt) {
     return { error: "La apertura de inscripciones debe ser anterior a su cierre." } as const;
-  }
-  if (startsAt && endsAt && startsAt > endsAt) {
-    return { error: "La fecha de inicio no puede ser posterior a la de finalización." } as const;
   }
   if (registrationClosesAt && startsAt && registrationClosesAt > startsAt) {
     return { error: "El cierre de inscripciones no puede ser posterior al inicio del torneo." } as const;
@@ -164,7 +165,7 @@ function parseTournamentFields(formData: FormData) {
       registrationOpensAt,
       registrationClosesAt,
       startsAt,
-      endsAt,
+      estimatedDurationMinutes,
       prizeDescription,
       coverImageUrl,
     },
@@ -196,7 +197,7 @@ export async function createTournament(
     p_registration_opens_at: f.registrationOpensAt,
     p_registration_closes_at: f.registrationClosesAt,
     p_starts_at: f.startsAt,
-    p_ends_at: f.endsAt,
+    p_estimated_duration_minutes: f.estimatedDurationMinutes,
     p_secondary_category: f.secondaryCategory,
     p_prize_description: f.prizeDescription,
     p_cover_image_url: f.coverImageUrl,
@@ -234,7 +235,7 @@ export async function updateTournament(
     p_registration_opens_at: f.registrationOpensAt,
     p_registration_closes_at: f.registrationClosesAt,
     p_starts_at: f.startsAt,
-    p_ends_at: f.endsAt,
+    p_estimated_duration_minutes: f.estimatedDurationMinutes,
     p_secondary_category: f.secondaryCategory,
     p_prize_description: f.prizeDescription,
     p_cover_image_url: f.coverImageUrl,

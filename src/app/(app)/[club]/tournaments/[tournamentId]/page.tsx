@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowLeft, Globe, Lock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui";
+import { formatDurationMinutes } from "@/lib/utils/tournamentDuration";
 import {
   tournamentCategoryLabel,
   tournamentStatusBadgeVariant,
@@ -151,8 +152,10 @@ export default async function PlayerTournamentDetailPage({ params }: PlayerTourn
           <p className="text-sm text-white font-medium">{formatDateTime(tournament.starts_at)}</p>
         </div>
         <div>
-          <p className="text-xs text-brand-muted mb-1">Fin</p>
-          <p className="text-sm text-white font-medium">{formatDateTime(tournament.ends_at)}</p>
+          <p className="text-xs text-brand-muted mb-1">Duración estimada</p>
+          <p className="text-sm text-white font-medium">
+            {tournament.estimated_duration_minutes ? formatDurationMinutes(tournament.estimated_duration_minutes) : "—"}
+          </p>
         </div>
       </div>
 

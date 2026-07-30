@@ -920,7 +920,7 @@ export interface Database {
           registration_opens_at: string | null;
           registration_closes_at: string | null;
           starts_at: string | null;
-          ends_at: string | null;
+          estimated_duration_minutes: number | null;
           started_at: string | null;
           started_by: string | null;
           completed_at: string | null;
@@ -946,7 +946,7 @@ export interface Database {
           registration_opens_at?: string | null;
           registration_closes_at?: string | null;
           starts_at?: string | null;
-          ends_at?: string | null;
+          estimated_duration_minutes?: number | null;
           started_at?: string | null;
           started_by?: string | null;
           completed_at?: string | null;
@@ -970,7 +970,7 @@ export interface Database {
           registration_opens_at?: string | null;
           registration_closes_at?: string | null;
           starts_at?: string | null;
-          ends_at?: string | null;
+          estimated_duration_minutes?: number | null;
           started_at?: string | null;
           started_by?: string | null;
           completed_at?: string | null;
@@ -1604,7 +1604,7 @@ export interface Database {
           p_registration_opens_at?: string | null;
           p_registration_closes_at?: string | null;
           p_starts_at?: string | null;
-          p_ends_at?: string | null;
+          p_estimated_duration_minutes?: number | null;
           p_secondary_category?: string | null;
           p_prize_description?: string | null;
           p_cover_image_url?: string | null;
@@ -1622,7 +1622,7 @@ export interface Database {
           p_registration_opens_at: string | null;
           p_registration_closes_at: string | null;
           p_starts_at: string | null;
-          p_ends_at: string | null;
+          p_estimated_duration_minutes: number | null;
           p_secondary_category: string | null;
           p_prize_description: string | null;
           p_cover_image_url: string | null;

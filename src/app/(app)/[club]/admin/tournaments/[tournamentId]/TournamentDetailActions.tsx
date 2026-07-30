@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Globe, Lock, Pencil, X } from "lucide-react";
 import { Badge, Button, ConfirmDialog, Toast } from "@/components/ui";
+import { formatDurationMinutes } from "@/lib/utils/tournamentDuration";
 import { TournamentForm } from "../TournamentForm";
 import {
   cancelTournament,
@@ -321,8 +322,10 @@ export function TournamentDetailActions({
           <p className="text-sm text-white font-medium">{formatDateTime(tournament.starts_at)}</p>
         </div>
         <div>
-          <p className="text-xs text-brand-muted mb-1">Fin</p>
-          <p className="text-sm text-white font-medium">{formatDateTime(tournament.ends_at)}</p>
+          <p className="text-xs text-brand-muted mb-1">Duración estimada</p>
+          <p className="text-sm text-white font-medium">
+            {tournament.estimated_duration_minutes ? formatDurationMinutes(tournament.estimated_duration_minutes) : "—"}
+          </p>
         </div>
         <div>
           <p className="text-xs text-brand-muted mb-1">Apertura de inscripciones</p>
