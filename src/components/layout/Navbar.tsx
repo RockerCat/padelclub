@@ -17,7 +17,7 @@ function Brand() {
   return (
     <Link href="/" className="flex items-center gap-2.5 lg:gap-3 shrink-0">
       <Image
-        src="/branding/logo-icon.png"
+        src="/branding/logo-icon2.png"
         alt="MiPadelClub"
         width={48}
         height={48}
