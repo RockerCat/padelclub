@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { newsDetailPath } from "@/lib/newsPaths";
 
 export interface PublicNewsCardItem {
   id: string;
+  slug: string;
   title: string;
   content: string;
   image_url: string;
@@ -35,7 +37,7 @@ export function PublicNewsCard({ clubSlug, news }: PublicNewsCardProps) {
         <h3 className="text-sm font-semibold text-white line-clamp-2">{news.title}</h3>
         <p className="text-xs text-white/60 line-clamp-2 flex-1">{news.content}</p>
         <Link
-          href={`/clubs/${clubSlug}/news/${news.id}`}
+          href={newsDetailPath(clubSlug, news.slug)}
           className="mt-2 inline-flex items-center justify-center h-8 rounded-lg text-xs font-semibold border border-white/15 text-white hover:bg-white/5 transition-colors"
         >
           Ver noticia

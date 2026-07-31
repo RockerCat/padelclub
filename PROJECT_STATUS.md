@@ -3,8 +3,8 @@
 ## Estado General
 
 * Estado: Validation Gate 1.0
-* Última actualización: 29 de julio de 2026 (Módulo de Torneos llevado de punta a punta: programación de partidos/canchas, registro y corrección de resultados con cierre automático del torneo, premiación deportiva con resumen de puntos, y noticia asistida tras finalizar. Ranking llevado a Fase 2: UI administrativa completa (ajuste de puntos/cambio de categoría desde el propio Ranking), Ranking público según visibilidad del club, medallas/badges deportivos unificados en toda superficie relevante, y exportación visual (PNG) de Top 10/podio/resultados. Incluye tres correcciones reales encontradas y aplicadas: categoría congelada mostrada incorrectamente en torneos combinados, columna `id` ambigua en `generate_tournament_bracket` (migración escrita, pendiente de aplicar), y bloqueo indefinido de la generación de imágenes por el incrustado automático de fuentes de `html-to-image` — ver Módulo de Torneos y Módulo Deportivo — Ranking (Fase 2))
-* Actualización anterior: 29 de julio de 2026 (Módulo de Torneos completo de punta a punta: modelo estructural — torneos simples y combinados, inscripción de parejas OWNER/ADMIN/PLAYER con validación deportiva de composición, generación y visualización del cuadro eliminatorio — administración, RLS, RPCs y UI para OWNER, ADMIN y PLAYER; incluye una regresión real de esquema encontrada y corregida en las RPCs de ciclo de vida del torneo — ver Módulo de Torneos)
+* Última actualización: 31 de julio de 2026 (Reconstrucción del núcleo de Torneos: se retiró por completo la arquitectura de cuadro eliminatorio — bracket, partidos, programación de canchas, premiación por posición de bracket — y se reemplazó por un modelo más simple, evento de club con inscripciones, clasificación por puntos editada directamente por OWNER/ADMIN y `finalize_tournament` como cierre idempotente que aplica esos puntos al ranking. Sobre ese nuevo modelo: clasificación en vivo rediseñada (medallas reales, fila uniforme, edición de puntos inline), vista de torneo finalizado con podio real en todo ancho de pantalla — incluido mobile — con soporte genuino de empates en cualquier posición, confetti de celebración repetido mientras la pestaña está visible, portada del torneo editable en cualquier estado, cierre editorial que genera una noticia trazada al torneo (`club_news.tournament_id`, máximo una por torneo garantizado por índice único), y URLs legibles por slug tanto para torneos como para noticias, con avatares reales de campeones en el detalle de una noticia de torneo. Ver Módulo de Torneos y CLAUDE.md → Tournament Module Principles)
+* Actualización anterior: 29 de julio de 2026 (Módulo de Torneos llevado de punta a punta sobre la arquitectura de bracket ya retirada — ver entrada más reciente; en su momento incluyó programación de partidos/canchas, registro y corrección de resultados con cierre automático del torneo, premiación deportiva con resumen de puntos, y noticia asistida tras finalizar. Ranking llevado a Fase 2: UI administrativa completa, Ranking público según visibilidad del club, medallas/badges deportivos unificados, y exportación visual (PNG) de Ranking — ver Módulo Deportivo — Ranking (Fase 2))
 
 ## Visión
 
@@ -697,7 +697,7 @@ Pendiente:
 
 Estado:
 
-✅ MVP funcional — UI administrativa completa del Ranking, Ranking público según visibilidad del club, medallas/badges deportivos unificados en toda superficie relevante, y exportación visual (PNG) de Ranking/Torneos. Una migración de esta fase (`20260920000001`) está **pendiente de aplicación manual**.
+✅ MVP funcional — UI administrativa completa del Ranking, Ranking público según visibilidad del club, medallas/badges deportivos unificados en toda superficie relevante, y exportación visual (PNG) del Ranking. Una migración de esta fase (`20260920000001`) está **pendiente de aplicación manual**.
 
 ## Ranking administrativo (Bloque 3.1)
 
@@ -713,28 +713,29 @@ Estado:
 ## Medallas y badges deportivos globales (Bloque 3.3)
 
 * `PlayerSportAvatar`/`RankMedalCrown` extendidos, nunca reemplazados: la esquina de categoría ahora funciona en todos los tamaños de avatar (antes solo `lg`+, invisible en `sm`/`md` — usado por Ranking, listas de Jugadores y Torneos), y la corona de posición 1-3 ahora incluye `aria-label` real (nunca depende solo del color)
-* **Bug real corregido**: en un torneo combinado, `PairMemberSlot` mostraba la categoría congelada del torneo (la superior) para AMBOS integrantes de la pareja, en vez de la categoría real de cada jugador. Corregido resolviendo la categoría real por `club_member_id` en lote (máximo 2 llamadas a `get_club_category_ranking_view` por carga de página, nunca por jugador/pareja) dentro de `getTournamentEntriesWithMembers`/`getTournamentBracketView` — se propaga automáticamente a `EntryCard`, `MatchCard`, `ScheduleMatchModal` y `RecordTournamentMatchResultModal` sin tocar sus call sites
+* **Bug real corregido**: en un torneo combinado, `PairMemberSlot` mostraba la categoría congelada del torneo (la superior) para AMBOS integrantes de la pareja, en vez de la categoría real de cada jugador. Corregido resolviendo la categoría real por `club_member_id` en lote (máximo 2 llamadas a `get_club_category_ranking_view` por carga de página, nunca por jugador/pareja) dentro de `getTournamentEntriesWithMembers` — se propagaba automáticamente a `EntryCard` y al resto de superficies del bracket vigentes en ese momento (`MatchCard`, `ScheduleMatchModal`, `RecordTournamentMatchResultModal` — retirados junto con toda la arquitectura de bracket en la reconstrucción del núcleo de Torneos, ver Módulo de Torneos)
 * El podio del Ranking (`RankingView`) ahora también muestra el badge de categoría (antes solo la lista lo mostraba); `PlayerCombobox`/`RegisterEntryModal` migrados de `PlayerAvatar` a `PlayerSportAvatar`
-* Documentado como backlog, no implementado por falta de datos en lote sin ampliar contratos existentes: badges de categoría en Reservas/solicitudes/calendario, y en `TournamentAwardPairCard`
+* Documentado como backlog, no implementado por falta de datos en lote sin ampliar contratos existentes: badges de categoría en Reservas/solicitudes/calendario
 
 ## Exportaciones deportivas (Bloque 3.4)
 
-* Nueva capacidad, OWNER/ADMIN únicamente: generar imágenes PNG (1080×1350) para compartir — Top 10 del Ranking de la categoría seleccionada, podio del torneo (solo campeón/subcampeón — un cuadro de eliminación directa nunca produce un tercer lugar real, siempre deja dos semifinalistas empatados, ver CLAUDE.md), y resultados finales del torneo (siempre las últimas 2 rondas del bracket — semifinales + final — sin importar el tamaño del cuadro)
-* Componentes nuevos: `ShareCardShell` (marco visual compartido), `RankingShareCard`, `TournamentPodiumShareCard`, `TournamentResultsShareCard`, `ShareCardModal` (previsualización + compartir/descargar, reutilizado por las 3 tarjetas), `RankingExportButton`/`TournamentExportSection` (wiring de datos, sin consultas nuevas — reutilizan exactamente lo ya cargado por la página)
+* Nueva capacidad, OWNER/ADMIN únicamente: generar una imagen PNG (1080×1350) para compartir el Top 10 del Ranking de la categoría seleccionada
+* Componentes nuevos: `ShareCardShell` (marco visual compartido), `RankingShareCard`, `ShareCardModal` (previsualización + compartir/descargar), `RankingExportButton` (wiring de datos, sin consultas nuevas — reutiliza exactamente lo ya cargado por la página)
 * `src/lib/sportsShareExport.ts`: única utilidad de exportación del proyecto; resuelve avatares/logo a data URL con timeout de 6s por imagen (nunca bloquea por una imagen lenta o caída, cae a iniciales), captura con `html-to-image` (única dependencia nueva agregada, `html-to-image@1.11.13`), Web Share API con archivo (nunca solo URL) con fallback a descarga directa
 * Ninguna publicación automática en redes; ninguna subida a Storage; sin service role en ningún punto
+* **Nota**: el módulo de Torneos alguna vez tuvo, en la arquitectura de brackets ya retirada (ver Módulo de Torneos), un plan de exportación equivalente para podio/resultados. Esa arquitectura fue eliminada junto con el resto del cuadro eliminatorio y la exportación de torneos nunca se reconstruyó sobre el modelo actual — hoy solo existe exportación de Ranking.
 
 ## Corrección: bloqueo indefinido de la generación de imágenes (Bloque 3.5)
 
-* "Compartir podio" (y, por infraestructura compartida, cualquier exportación) podía quedar cargando indefinidamente, sin error, con el botón "Descargar" siempre deshabilitado — confirmado leyendo el código fuente instalado de `html-to-image`: incrusta automáticamente las fuentes web escaneando TODAS las hojas de estilo del documento (nunca solo el nodo capturado) mediante `fetch()` sin ningún timeout propio; si una hoja no podía leerse de forma síncrona, la generación quedaba colgada para siempre
+* "Compartir Top 10" (y, por infraestructura compartida, cualquier exportación futura) podía quedar cargando indefinidamente, sin error, con el botón "Descargar" siempre deshabilitado — confirmado leyendo el código fuente instalado de `html-to-image`: incrusta automáticamente las fuentes web escaneando TODAS las hojas de estilo del documento (nunca solo el nodo capturado) mediante `fetch()` sin ningún timeout propio; si una hoja no podía leerse de forma síncrona, la generación quedaba colgada para siempre
 * Corregido con `skipFonts: true` en la llamada a `toBlob()` (elimina la causa raíz por completo) más un timeout global de generación (15s) con un token de intento vigente en `ShareCardModal` — un resultado tardío de un intento ya abandonado (tras timeout o tras un reintento) nunca sobrescribe el estado de uno más nuevo
 * Se agregó además timeout de 6s por imagen en `resolveImageDataUrl` (vía `AbortController`) como defensa adicional, sin cambio de comportamiento visible cuando la imagen carga con normalidad
 
 Pendiente:
 
 * Aplicar `20260920000001_public_club_ranking_read.sql` en producción (escrita y auditada, no aplicada)
-* Badges de categoría en Reservas y en `TournamentAwardPairCard` (evaluados, no implementados — ver arriba)
-* Verificación visual real de las 3 tarjetas exportables en dispositivo/navegador (validado por código y build, no por captura observada)
+* Badges de categoría en Reservas (evaluado, no implementado — ver arriba)
+* Verificación visual real de la tarjeta exportable en dispositivo/navegador (validado por código y build, no por captura observada)
 
 ---
 
@@ -742,122 +743,139 @@ Pendiente:
 
 Estado:
 
-✅ Completo de punta a punta (Bloques 1.1–1.11 backend + 2.1–2.7 UI): administración, inscripciones, bracket, programación de partidos/canchas, resultados con cierre automático, premiación deportiva y noticia asistida tras finalizar. Ver CLAUDE.md → Tournament Module Principles para las reglas de arquitectura permanentes. Este apartado documenta el detalle de lo construido.
+✅ Completo de punta a punta sobre el modelo actual (evento de club + inscripciones + clasificación por puntos, sin bracket). Ver CLAUDE.md → Tournament Module Principles para las reglas de arquitectura permanentes. Este apartado documenta el detalle de lo construido.
 
-Pendiente: notificaciones de eventos de Torneos (partido programado, resultado registrado, torneo finalizado) — sin backend ni UI todavía.
+Pendiente: notificaciones de eventos de Torneos (inscripción confirmada/rechazada, torneo iniciado/finalizado) — sin backend ni UI todavía.
+
+## Reconstrucción del núcleo (evento real, no incremental)
+
+El módulo se lanzó primero con una arquitectura completa de cuadro eliminatorio (bracket 4/8/16, partidos, programación de canchas, marcador por sets, propagación automática de ganador, premiación por posición de bracket) — documentada en su momento como "completa de punta a punta". Una vez en uso, se confirmó que esa complejidad no correspondía al objetivo real del producto, y se tomó la decisión explícita de **eliminarla y reconstruir el módulo con un alcance mucho más simple**: Mi Pádel Club deja de administrar la competencia deportiva interna del torneo (partidos, rondas, llaves, canchas, marcadores) y pasa a administrar únicamente el torneo como evento de club — inscripciones, duplas, clasificación por puntos y su aplicación al ranking.
+
+La reconstrucción (`20260922000001`/`20260922000002`) eliminó por completo `tournament_matches` y `tournament_court_allocations` (tablas, RPCs y UI — `BracketSection`/`BracketView`/`MatchCard`, `CourtAllocationsSection`/`ScheduleMatchModal`, `RecordTournamentMatchResultModal`, `TournamentAwardsSection`/`TournamentAwardPairCard`, `TournamentAwardSummary`, `award_tournament_points`/`get_tournament_points_summary` ya no existen), autorizada explícitamente porque solo existían dos torneos de prueba en el entorno; revirtió primero, jugador por jugador, el efecto de cualquier punto ya otorgado por esos torneos sobre el ranking real (con validación previa de que ningún jugador quedara en negativo), y solo entonces eliminó los datos y reconstruyó el esquema. Ningún dato de club/reservas/ranking fuera de Torneos fue tocado.
 
 ## Migraciones
 
 ```text
 supabase/migrations/20260902000001_courts_id_club_id_unique.sql
 supabase/migrations/20260903000001_tournaments_table.sql
-supabase/migrations/20260904000001_tournament_court_allocations_table.sql
+supabase/migrations/20260904000001_tournament_court_allocations_table.sql        (tabla retirada en 20260922000001)
 supabase/migrations/20260905000001_tournament_entries_table.sql
 supabase/migrations/20260906000001_tournament_entry_members_table.sql
-supabase/migrations/20260907000001_tournament_matches_table.sql
+supabase/migrations/20260907000001_tournament_matches_table.sql                  (tabla retirada en 20260922000001)
 supabase/migrations/20260908000001_club_player_point_movements_tournament_support.sql
-supabase/migrations/20260909000001_tournament_admin_functions.sql
-supabase/migrations/20260910000001_tournament_entry_registration_functions.sql
-supabase/migrations/20260911000001_generate_tournament_bracket_function.sql
-supabase/migrations/20260912000001_tournament_scheduling_functions.sql
-supabase/migrations/20260913000001_tournament_match_lifecycle_functions.sql
-supabase/migrations/20260914000001_award_tournament_points_function.sql
+supabase/migrations/20260909000001_tournament_admin_functions.sql                (funciones reemplazadas en 20260922000002)
+supabase/migrations/20260910000001_tournament_entry_registration_functions.sql   (reemplazadas en 20260922000002)
+supabase/migrations/20260911000001_generate_tournament_bracket_function.sql      (función retirada en 20260922000001)
+supabase/migrations/20260912000001_tournament_scheduling_functions.sql           (funciones retiradas en 20260922000001)
+supabase/migrations/20260913000001_tournament_match_lifecycle_functions.sql      (funciones retiradas en 20260922000001)
+supabase/migrations/20260914000001_award_tournament_points_function.sql          (función retirada en 20260922000001)
 supabase/migrations/20260915000001_tournament_rpc_grants_and_rls.sql
 supabase/migrations/20260916000001_tournament_combined_category_model.sql
 supabase/migrations/20260917000001_tournament_entry_category_composition.sql
 supabase/migrations/20260918000001_fix_tournament_lifecycle_returns_regression.sql
+supabase/migrations/20260919000001_get_tournament_points_summary_function.sql    (función retirada en 20260922000001 — no aplicar)
+supabase/migrations/20260920000001_public_club_ranking_read.sql                  (ranking, no torneos — sigue pendiente, ver Módulo Deportivo)
+supabase/migrations/20260921000001_fix_generate_tournament_bracket_ambiguous_id.sql (función retirada en 20260922000001 — no aplicar)
+supabase/migrations/20260922000001_tournament_core_rebuild_schema.sql            ← reconstrucción del núcleo (esquema)
+supabase/migrations/20260922000002_tournament_core_rebuild_functions.sql         ← reconstrucción del núcleo (funciones)
+supabase/migrations/20260923000001_tournament_allow_edit_before_start.sql
+supabase/migrations/20260924000001_tournament_estimated_duration.sql
+supabase/migrations/20260924000002_tournament_estimated_duration_functions.sql
+supabase/migrations/20260925000001_tournament_slug.sql
+supabase/migrations/20260925000002_tournament_slug_functions.sql
+supabase/migrations/20260926000001_tournament_entry_members_own_entry_visibility.sql
+supabase/migrations/20260927000001_tournament_max_pairs_active_entries_check.sql
+supabase/migrations/20260928000001_tournament_update_error_messages.sql
+supabase/migrations/20260929000001_club_news_tournament_link.sql
+supabase/migrations/20260930000001_tournament_cover_image_any_status.sql
+supabase/migrations/20261001000001_club_news_slug.sql
+supabase/migrations/20261001000002_create_club_news_function.sql
 ```
 
-## Modelo de datos
+**Importante para aplicación manual pendiente**: `20260919000001` y `20260921000001` escriben/modifican funciones que la propia reconstrucción del núcleo (`20260922000001`) ya elimina (`DROP FUNCTION IF EXISTS`) — aplicarlas ya no tiene efecto útil y pueden omitirse sin riesgo; el `IF EXISTS` del DROP posterior las neutraliza igual si se aplican en orden. La única migración de esta lista genuinamente pendiente de aplicación manual y con efecto real hoy es `20260920000001` (ranking, no torneos).
 
-* `tournaments`: `name`, `description`, `category` (superior o única), `secondary_category` (inferior, `NULL` = categoría única), `bracket_size` (4/8/16), `status` (`draft` → `registration_open` → `registration_closed` → `bracket_generated` → `in_progress` → `completed`, o `cancelled` desde cualquiera de los tres primeros), `visibility` (`public`/`private`), ventana de inscripción y fechas del evento
-* `tournament_entries`: una pareja inscrita; `status` `pending`/`confirmed`/`withdrawn`; `category`/`secondary_category` congelan la modalidad del torneo al momento de crear la inscripción, nunca recalculadas después
-* `tournament_entry_members`: exactamente dos filas por entry, sin estado propio (la única fuente de verdad es `tournament_entries.status`)
-* `tournament_matches`: partidos del cuadro; `round_number`/`match_number` identifican la posición (sin tabla `tournament_rounds`); `source_match_one_id`/`source_match_two_id` autorreferenciados (nunca `next_match_id`) para las rondas posteriores; `entry_one_id`/`entry_two_id` materializados solo en primera ronda hasta que un futuro flujo de resultados propague ganadores; marcador embebido en columnas fijas (`set_one_entry_one`... `set_three_entry_two`, sin JSON); `winner_entry_id`; campos de programación (`tournament_court_allocation_id`, `court_id`, `scheduled_*`) ya existentes en el esquema pero sin UI todavía
-* `tournament_court_allocations`: franjas de cancha reservadas para el torneo — tabla y RPCs ya existen, sin UI
-* `club_player_point_movements.tournament_id` — columna añadida para que la liquidación de puntos de torneo comparta el mismo ledger inmutable que los ajustes manuales
+## Modelo de datos (post-reconstrucción)
+
+* `tournaments`: `name`, `description`, `category` (superior o única), `secondary_category` (inferior, `NULL` = categoría única), `max_pairs` (cupo máximo de duplas — cualquier entero positivo, ya no una potencia de 2), `status` (`draft` → `registration_open` → `registration_closed` → `in_progress` → `completed`, o `cancelled` desde cualquiera de los tres primeros; `registration_closed` → `registration_open` también permitido — reapertura), `started_at`/`started_by` (poblados al iniciar, junto a los ya existentes `completed_at`/`completed_by`, `cancelled_at`/`cancelled_by`), `visibility` (`public`/`private`), `slug` (único por club, URL legible), `estimated_duration_minutes` (reemplaza `ends_at`), `prize_description`, `cover_image_url`
+* `tournament_entries`: una pareja inscrita; `status` `pending`/`confirmed`/`withdrawn`/`rejected`; `points` (entero ≥ 0, editable solo con el torneo `in_progress`, es la única fuente de la clasificación — nunca una tabla paralela); `rejected_at`/`rejected_by`/`rejection_reason` (texto obligatorio — manual con comentario del organizador, o automático con el valor fijo `capacity_reached` cuando una confirmación completa el cupo); `category`/`secondary_category` congelan la modalidad del torneo al momento de crear la inscripción, nunca recalculadas después
+* `tournament_entry_members`: dos filas activas (`is_active`) por entry en todo momento; reemplazo de integrante es reemplazo con historial (nunca borrado físico) — la fila saliente se marca `is_active=false`/`replaced_at`/`replaced_by` y se inserta una fila nueva activa para el jugador entrante
+* `club_player_point_movements`: `system_event_code` reducido a un único código de torneo (`tournament_points`, reemplaza los 4 códigos por posición de bracket que existían antes); `tournament_id`+`club_member_id` con índice único parcial — como máximo un movimiento de torneo por jugador y torneo, garantizado por la base de datos, no solo por la función que lo escribe
+* `tournament_matches`/`tournament_court_allocations` **ya no existen** — sin bracket, sin partidos, sin programación de canchas por torneo
 
 ## RPCs (todas `SECURITY DEFINER`, `authenticated` únicamente, nunca `anon`)
 
 **Administración del torneo:**
 
-* `create_tournament(p_club_id, p_name, p_category, p_bracket_size, p_description, p_visibility, p_registration_opens_at, p_registration_closes_at, p_starts_at, p_ends_at, p_secondary_category)` — OWNER/ADMIN
-* `update_tournament(..., p_secondary_category)` — mismos campos editables que antes; `draft`: todo editable; `registration_open`: `category`/`secondary_category`/`bracket_size`/`registration_opens_at` congelados
-* `open_tournament_registration`, `close_tournament_registration`, `cancel_tournament` — transiciones de estado, sin bypass de rol
+* `create_tournament(p_club_id, p_name, p_category, p_max_pairs, p_description, p_visibility, p_registration_opens_at, p_registration_closes_at, p_starts_at, p_estimated_duration_minutes, p_secondary_category, p_prize_description)` — OWNER/ADMIN; genera y persiste el `slug` con reintento real ante colisión (`INSERT`-retry, nunca `SELECT`-then-`INSERT`), reutilizando `_slugify_tournament_name`
+* `update_tournament(...)` — editable hasta `started_at` (no solo hasta abrir inscripciones); `max_pairs` editable con inscripciones abiertas, validado contra la cantidad real de duplas activas (mensaje de error interpola el conteo real)
+* `open_tournament_registration`, `close_tournament_registration`, `reopen_tournament_registration`, `cancel_tournament`, `start_tournament` (`registration_closed` → `in_progress`, puebla `started_at`/`started_by`) — transiciones de estado, sin bypass de rol
+* `update_tournament_cover_image(p_tournament_id, p_cover_image_url)` — OWNER/ADMIN, deliberadamente **sin** el gate de estado que sí aplica `update_tournament`: la portada es editable en cualquier estado, incluido `completed`
 
-**Inscripción de parejas:**
+**Inscripción y duplas:**
 
-* `register_tournament_entry(p_tournament_id, p_club_member_one_id, p_club_member_two_id)` — PLAYER: debe incluirse, crea `pending`; OWNER/ADMIN: cualquier pareja válida, crea `confirmed`. Valida individualmente el `club_member_sport_state` de cada jugador (nunca un `COUNT` global) y la composición de categorías: torneo simple exige que ambos coincidan exactamente con `category`; torneo combinado exige que ambos pertenezcan a `{category, secondary_category}` con a lo sumo un jugador en la categoría superior. Locks por advisory lock (`tournament_entry:<torneo>:<jugador>`, orden determinístico por UUID), protección de duplicados y de capacidad preservadas en cada iteración
-* `confirm_tournament_entry`, `withdraw_tournament_entry` — OWNER/ADMIN confirman cualquier `pending`; PLAYER retira su propia entry; retiro permitido en `registration_open` y `registration_closed`
+* `register_tournament_entry(p_tournament_id, p_club_member_one_id, p_club_member_two_id)` — PLAYER: debe incluirse, solo con `registration_open`, crea `pending`; OWNER/ADMIN: cualquier pareja válida, en `registration_open`/`registration_closed`/`in_progress`, crea `confirmed` directamente. Valida individualmente el `club_member_sport_state` de cada jugador (nunca un `COUNT` global) y la composición de categorías (torneo simple: ambos exactos a `category`; combinado: ambos en `{category, secondary_category}` con a lo sumo uno en la superior)
+* `confirm_tournament_entry` — OWNER/ADMIN; si la confirmación completa `max_pairs`, cierra inscripciones y rechaza en bloque el resto de `pending` con `rejection_reason='capacity_reached'` (`_close_tournament_registration_for_capacity`, helper interno, misma transacción)
+* `reject_tournament_entry(p_tournament_entry_id, p_reason)` — OWNER/ADMIN, rechazo manual de una `pending` con motivo obligatorio
+* `withdraw_tournament_entry` — el propio PLAYER retira su entry, u OWNER/ADMIN retira cualquiera
+* `replace_tournament_entry_member(p_tournament_entry_id, p_outgoing_member_id, p_incoming_member_id)` — reemplazo/corrección de integrante con historial completo, nunca borrado físico
 
-**Bracket:**
+**Clasificación y cierre:**
 
-* `generate_tournament_bracket(p_tournament_id)` — OWNER/ADMIN, exige `registration_closed` y exactamente `bracket_size` entries `confirmed`, sorteo aleatorio (`array_agg ... ORDER BY random()`, sin política de seeding), genera todas las rondas en una transacción, transiciona a `bracket_generated`; nunca regenerable
+* `set_tournament_entry_points(p_tournament_id, p_entry_ids[], p_points[])` — OWNER/ADMIN, batch (nunca una llamada por dupla), solo con el torneo `in_progress`, solo sobre entries `confirmed`, puntos no negativos, sin duplicados en el lote
+* `finalize_tournament(p_tournament_id)` — `in_progress` → `completed`; aplica en partes iguales los puntos ya guardados en `tournament_entries.points` de cada entry confirmada a sus dos integrantes finales (`is_active=true`) del ranking real, en la misma transacción que el cambio de estado. Idempotente de verdad: verificación previa por conteo de movimientos + índice único de base de datos como garantía última — un reintento devuelve `already_finalized=true` sin volver a escribir nada. Nunca deriva ni recalcula posiciones: usa exactamente el valor ya usado por la clasificación en vivo
 
-**Ya implementadas en backend, sin UI todavía:** asignación/edición/desactivación de franjas de cancha (`create_tournament_court_allocation`, `update_tournament_court_allocation`, `deactivate_tournament_court_allocation`), programación de partido (`schedule_tournament_match`), ciclo de vida del partido (`start_tournament_match`, `record_tournament_match_result`, `correct_tournament_match_result` — con propagación de ganador y cierre automático del torneo al resolverse la final), liquidación de puntos (`award_tournament_points`, valores: participación 5, campeón +30, subcampeón +15, semifinalista +5).
+Autorización en cada función: membresía ACTIVA consultada directamente en `club_members`, `IF NOT FOUND` explícito, comparación positiva (`role IN (...)`), nunca `NOT IN` sobre un valor que pueda ser `NULL` — mismo patrón exigido en todo el módulo desde `20260825000001`. `_require_club_not_archived` se exige en toda operación que crea o amplía un compromiso nuevo (crear/editar/abrir/reabrir torneo, inscribir, confirmar, reemplazar integrante, editar puntos, iniciar) — nunca en una que solo resuelve algo existente (cerrar, rechazar, retirar, cancelar, finalizar).
+
+## Clasificación en vivo (nunca persistida)
+
+`computeTournamentClassification(entries)` (`src/lib/tournamentEntries.ts`) es la única fuente de posición/ranking/podio/campeón de todo el módulo: ordena entries `confirmed` por `points` desc (empate por `created_at` asc) y asigna `position` con semántica de salto en empate (dos duplas con los mismos puntos comparten posición; la siguiente salta el número correspondiente) — nunca reimplementada ni recalculada por índice en ningún otro punto (clasificación en curso, podio de torneo finalizado, o campeones mostrados en una noticia). Empates reales a cualquier posición, incluida la primera, se muestran honestamente — el módulo nunca inventa o colapsa un ganador único ni un "tercer lugar" que la clasificación real no produjo.
 
 ## RLS y privilegios
 
-RLS habilitada en las 5 tablas núcleo (`tournaments`, `tournament_court_allocations`, `tournament_entries`, `tournament_entry_members`, `tournament_matches`). Lectura: OWNER/ADMIN ven todo de su club; cualquier miembro activo ve `tournaments`/`tournament_matches` no-`draft` y entries `confirmed` (más las propias `pending`/`withdrawn` vía `created_by`); visitantes externos/`anon` pueden leer `tournaments`/`tournament_matches` solo cuando el torneo es público, no-`draft`, y el club es público/activo/no archivado (doble verificación, ya que no existe cascada automática `clubs.visibility` → `tournaments.visibility`). Limitación documentada y aceptada: el compañero de una entry `pending` autocreada por un jugador no es legible por RLS hasta confirmarse — la UI muestra "Por confirmar", nunca un error ni un UUID. `GRANT EXECUTE` explícito por firma exacta en las 17 RPCs a `authenticated`, nunca `anon`, nunca wildcard.
+RLS habilitada en las 3 tablas núcleo restantes (`tournaments`, `tournament_entries`, `tournament_entry_members`). Lectura: OWNER/ADMIN ven todo de su club; cualquier miembro activo ve `tournaments` no-`draft` y entries `confirmed` (más las propias `pending`/`withdrawn`/`rejected` vía `created_by`); visitantes externos/`anon` pueden leer `tournaments` solo cuando el torneo es público, no-`draft`, y el club es público/activo/no archivado. Un jugador ve la fila de su propio compañero en una pareja todavía `pending` (bug real corregido en `20260926000001` — la causa era RLS, no la persistencia: `register_tournament_entry` siempre escribió las dos filas correctamente; se resolvió con una función `SECURITY DEFINER` intermedia, `is_current_user_tournament_entry_member`, para evitar autorreferencia/recursión en la política). `GRANT EXECUTE` explícito por firma exacta a `authenticated`, nunca `anon`, nunca wildcard — excepción única del módulo deportivo completo: `get_club_category_ranking`/`get_club_category_ranking_view`, ver Sport / Ranking Module Principles.
 
-## Incidente: regresión de esquema en 4 RPCs (encontrado y corregido antes de cualquier uso real)
+## Lecciones permanentes (capturadas en CLAUDE.md → Tournament Module Principles)
 
-* Al agregar `tournaments.secondary_category` (Bloque 2.2.1A) se actualizó el `RETURNS TABLE` de `create_tournament`/`update_tournament`/`register_tournament_entry` (únicas tres en el alcance de ese bloque), pero no el de `open_tournament_registration`, `close_tournament_registration`, `cancel_tournament` ni `generate_tournament_bracket`
-* Las 4 funciones restantes hacían `RETURN QUERY SELECT (v_tournament).*` contra una fila que pasó de 20 a 21 columnas reales — una discordancia de aridad que Postgres solo detecta en tiempo de ejecución, nunca estáticamente
-* Detectado en la auditoría obligatoria del Bloque 2.3 (antes de implementar el botón "Generar cuadro", que depende exactamente de una de las 4 funciones rotas), confirmado con evidencia concreta, y corregido con aprobación explícita del usuario antes de tocar SQL
-* Corrección puramente mecánica en `20260918000001`: se agregó `secondary_category text` al final de cada `RETURNS TABLE` y se reemplazó `(v_tournament).*` por una lista explícita de columnas — cero cambio de autorización, validaciones, locks o transiciones de estado; verificado con `diff` línea por línea contra cada versión anterior
-* Lección permanente capturada en CLAUDE.md → Tournament Module Principles: cualquier función que use `RETURN QUERY SELECT (row).*` debe mantenerse en sincronía manual con el esquema real cada vez que se agregue una columna a la tabla que expone
+Dos clases de bug real, ya corregidas, siguen siendo relevantes para cualquier función nueva del módulo: (1) cualquier `RETURN QUERY SELECT (row).*` debe mantenerse en sincronía manual con el esquema real de la tabla — una discordancia de aridad tras agregar una columna solo se detecta en tiempo de ejecución; (2) un `RETURNING` sin calificar dentro de una función cuyo `RETURNS TABLE` comparte nombre de columna con la tabla escrita (p. ej. `id`) es ambiguo (`42702`) y también solo se detecta en tiempo de ejecución — cualquier `INSERT`/`RETURNING` de este tipo debe alias la tabla explícitamente.
 
-## Incidente: columna `id` ambigua en `generate_tournament_bracket` (encontrado en uso real; corrección escrita, pendiente de aplicar)
-
-* Ejecutar `generate_tournament_bracket` como OWNER fallaba con `ERROR 42702: column reference "id" is ambiguous` — su `RETURNS TABLE` declara una columna de salida `id`, y las dos sentencias `INSERT INTO tournament_matches (...) RETURNING id INTO v_match_id` (ronda 1 y rondas posteriores) quedaban ambiguas entre esa salida y `tournament_matches.id`. Auditado el resto del cuerpo completo: todas las demás consultas ya calificaban cada columna correctamente; estos eran los únicos dos puntos sin alias
-* Corregido en `supabase/migrations/20260921000001_fix_generate_tournament_bracket_ambiguous_id.sql` (**pendiente de aplicación manual**): alias explícito (`INSERT INTO public.tournament_matches AS tm`) + `RETURNING tm.id` en ambas sentencias, vía `CREATE OR REPLACE FUNCTION` (misma firma, mismo `RETURNS TABLE`, sin `DROP`) — mismas validaciones/permisos/grants, verificado línea por línea contra la versión vigente
-* Lección permanente capturada en CLAUDE.md → Tournament Module Principles, junto a la regla de `RETURN QUERY SELECT (row).*`: un `RETURNING` sin calificar dentro de una función cuyo `RETURNS TABLE` comparte nombre de columna con la tabla escrita es ambiguo y Postgres solo lo detecta en tiempo de ejecución
-
-## UI — Administración (Bloque 2.1)
+## UI — Administración
 
 * Navegación: ítem "Torneos" (ícono `Swords`) para OWNER/ADMIN en sidebar/tab-bar-secundario, y para PLAYER en su propia navegación
-* Rutas: `/[club]/admin/tournaments` (listado, orden determinístico: operativos/próximos primero por `starts_at` asc, históricos después por `starts_at` desc), `/[club]/admin/tournaments/[tournamentId]` (detalle)
-* Creación/edición: `TournamentForm` compartido, categoría principal + secundaria opcional (filtrada por `sort_order` real, nunca hardcodeada), campos de fecha `datetime-local` convertidos a UTC vía `src/lib/utils/bogotaDatetime.ts` (offset real de America/Bogota resuelto con `Intl`, nunca hardcodeado)
-* Transiciones: abrir/cerrar inscripciones y cancelar, cada una con `ConfirmDialog` y gateada por el estado real, nunca adivinado
+* Ruta canónica única para los tres roles: `/[club]/tournaments/[tournamentSlug]` (`TournamentDetailView`, compartida — lo único que cambia por rol son las acciones administrativas, nunca el layout); `/[club]/admin/tournaments/[tournamentId]` (antigua) y cualquier enlace histórico basado en UUID redirigen a la URL canónica con slug
+* Creación/edición: `TournamentForm` compartido, categoría principal + secundaria opcional, campos de fecha `datetime-local` convertidos a UTC vía `src/lib/utils/bogotaDatetime.ts`
+* Transiciones (abrir/cerrar/reabrir inscripciones, iniciar, cancelar) con `ConfirmDialog`, gateadas por el estado real, nunca adivinado
 
-## UI — Inscripciones y parejas (Bloque 2.2, 2.2.1A, 2.2.1B)
+## UI — Inscripciones, duplas y reemplazo de integrante
 
-* `EntriesSection` (compartida entre detalle OWNER/ADMIN y detalle PLAYER): capacidad (`pending + confirmed` contra `bracket_size`, barra de progreso), grupos Pendientes/Confirmadas/Retiradas para OWNER/ADMIN, sección "Tu inscripción" + lista de confirmadas para PLAYER
-* `RegisterEntryModal` + `PlayerCombobox`: candidatos resueltos vía `get_club_category_ranking_view` (una llamada por categoría del torneo, hasta 2, nunca por jugador); en torneo combinado el segundo selector se recalcula dinámicamente según la categoría elegida en el primero (si es la superior, el segundo solo ofrece la inferior), limpiando automáticamente una selección que deje de ser válida
-* Ruta PLAYER mínima nueva: `/[club]/tournaments` (listado) y `/[club]/tournaments/[tournamentId]` (detalle + inscripción) — PLAYER fijo como "Jugador 1", solo elige compañero, nunca puede quitarse
-* `tournamentEntryActions.ts` (compartida): `registerTournamentEntryAction`, `confirmTournamentEntryAction`, `withdrawTournamentEntryAction`
+* `EntriesSection` (compartida OWNER/ADMIN y PLAYER): capacidad (`pending + confirmed` contra `max_pairs`, barra de progreso), grupos Pendientes/Confirmadas/Retiradas para OWNER/ADMIN, sección "Tu inscripción" + lista de confirmadas para PLAYER; `WithdrawnEntriesAccordion` separado, oculto cuando el torneo está `completed`
+* `RegisterEntryModal`/`PlayerCombobox`: candidatos resueltos vía `get_club_category_ranking_view`; en torneo combinado el segundo selector se recalcula según la categoría elegida en el primero
+* `ReplaceMemberModal`/`PlayerTransferList`: reemplazo de integrante desde el detalle, vía `replace_tournament_entry_member`
+* `PairMemberSlot`: presentación compartida de un integrante de pareja, reutilizada en toda superficie que muestra una dupla
 
-## UI — Bracket (Bloque 2.3)
+## UI — Clasificación en vivo (torneo `in_progress`)
 
-* `BracketSection`/`BracketView`/`MatchCard` (compartidos entre detalle OWNER/ADMIN y PLAYER): resumen de preparación ("X de Y parejas confirmadas"), botón "Generar cuadro" (solo OWNER/ADMIN, solo `registration_closed` con conteo exacto), columnas por ronda con scroll horizontal contenido (`overflow-x-auto`, mismo patrón que `WeekCalendar`)
-* Nombres de ronda derivados matemáticamente de `bracket_size`+`round_number` (`getTournamentRoundLabel`, `src/lib/tournamentBracket.ts`) — Semifinales/Final (4), Cuartos/Semis/Final (8), Octavos/Cuartos/Semis/Final (16), sin tabla `tournament_rounds`
-* Partidos de ronda 1 muestran las parejas reales; rondas posteriores muestran "Ganador del partido N" (número real del partido fuente) hasta que un futuro flujo de resultados propague al ganador
-* `getTournamentBracketView` (`src/lib/tournamentBracket.ts`): 1 consulta a `tournament_matches` + reutilización de `getTournamentEntriesWithMembers` (ya existente de Bloque 2.2) para resolver entries/miembros — 4 consultas fijas en total, nunca una por partido/entry/jugador
-* `PairMemberSlot` extraído como componente compartido entre `EntryCard` (Bloque 2.2) y `MatchCard` (Bloque 2.3) — una pareja siempre se muestra igual en todo el módulo
+* `ClassificationSection`: lista deportiva compacta — medalla 🥇🥈🥉 real (emoji, no ícono coloreado) para el top 3 vía `PositionMedal`, un único badge de categoría por pareja (nunca por jugador), badge "TÚ" para la propia dupla, barra de puntos proporcional, edición de puntos inline para OWNER/ADMIN (mismo `<input>` que ya validaba `set_tournament_entry_points`); acción "Cambiar jugadores" movida a un menú de tres puntos (`ContextMenu`, reutilizado y mejorado: cierre con Escape, foco al primer ítem, `role="menu"`)
+* Cada fila comparte una única clase estática (mismo fondo/borde para todas las posiciones) — la medalla es la única señal visual de podio; corrige una inconsistencia real donde la altura de fila difería entre PLAYER (texto plano) y OWNER/ADMIN (`<input>`, `h-9`) y donde el fondo/borde variaba por posición
+* Auto-actualización al recuperar el foco de la pestaña mientras el torneo está `in_progress` (`visibilitychange`/`focus`, debounced, `useTransition` + `startTransition(() => router.refresh())`), con `ClassificationSkeleton` durante la recarga
 
-## UI — Programación de Partidos y Canchas (Bloque 2.4)
+## UI — Torneo finalizado (podio y confetti)
 
-* `CourtAllocationsSection`/`CourtAllocationModal` (OWNER/ADMIN únicamente — la RLS de `tournament_court_allocations` no tiene rama PLAYER): crear/editar/desactivar franjas de cancha reservadas para el torneo, reutilizando `create_tournament_court_allocation`/`update_tournament_court_allocation`/`deactivate_tournament_court_allocation` ya existentes en backend desde el Bloque 1
-* `ScheduleMatchModal`: programa un partido de primera ronda (única ronda programable hasta que exista propagación de ganador) contra una franja de cancha activa, vía `schedule_tournament_match`; `isMatchSchedulable` (`tournamentBracket.ts`) solo decide si mostrar la acción — la RPC sigue siendo la autoridad real, nunca un estado imposible alcanzable desde la UI
-* `getTournamentCourtAllocations` (`tournamentBracket.ts`): 2 consultas (allocations + canchas por los `court_id` distintos), nunca una por franja
+* `TournamentPodium`: agrupa filas por posición oficial (nunca por dupla) — un solo bloque físico por posición 1/2/3, `grid grid-cols-3` activo desde el ancho más pequeño (nunca colapsa a tarjetas verticales en mobile), orden 2º-izquierda/1º-centro/3º-derecha; pedestal de altura fija por posición, totalmente desacoplado del contenido (que tiene scroll interno acotado) — la cantidad de duplas empatadas nunca distorsiona la jerarquía 1º>2º>3º; una posición sin ocupar renderiza un placeholder vacío, nunca reasigna ni inventa una posición faltante
+* `TournamentConfetti`: se lanza al entrar a un torneo `completed`, se repite cada 10s mientras la pestaña está visible, se detiene por completo al ocultarla y reinicia el ciclo al recuperar visibilidad; respeta `prefers-reduced-motion`
+* Portada del torneo editable en cualquier estado (`EditTournamentCoverModal` + `update_tournament_cover_image`), incluido `completed` — útil para ilustrar el torneo antes de generar su noticia de cierre
 
-## UI — Resultados y Cierre de Torneo (Bloque 2.5)
+## UI — Cierre editorial (noticia del torneo)
 
-* `RecordTournamentMatchResultModal`: registra el marcador (sets 1–3) de un partido `in_progress`, o corrige un resultado ya registrado — reutiliza `validateTournamentMatchScore` (`tournamentBracket.ts`) solo para UX (mismo orden/mensajes que `record_tournament_match_result`/`correct_tournament_match_result`), nunca decide el ganador por sí mismo: el backend lo confirma, propaga el ganador a la ronda siguiente y cierra el torneo automáticamente (`status = 'completed'`) al resolverse la final
-* `tournamentLifecycleActions.ts`: `startTournamentMatchAction`, `recordTournamentMatchResultAction`, `correctTournamentMatchResultAction` — sin lógica de negocio propia, solo autorización + traducción de errores
+* `TournamentNewsAction`, visible solo para OWNER/ADMIN con el torneo `completed`: "Generar noticia" abre el modal real de creación de Noticias (`CreateNewsModal`/`NewsForm`, nunca un segundo formulario) con título/contenido prellenados por `buildTournamentNewsDraft` (`tournamentNewsDraft.ts`) — derivado exclusivamente de la clasificación real (`computeTournamentClassification`), nunca inventa datos — y la portada del torneo como imagen inicial (editable/reemplazable como cualquier otra)
+* La asociación noticia↔torneo es real y trazada: `club_news.tournament_id`, con índice único parcial que garantiza como máximo una noticia por torneo a nivel de base de datos (no solo una validación de aplicación) — una vez publicada, la acción cambia a "Ver noticia". Esta limitación (antes documentada como gap abierto) queda **resuelta**
+* Esta acción es una superficie lateral OWNER/ADMIN-only — PLAYER y visitantes nunca la ven, pero la noticia publicada es completamente visible para todos bajo las reglas normales de Noticias, sin distinción por su origen
 
-## UI — Premiación Deportiva (Bloque 2.6)
+## Noticias — URLs legibles y avatares de campeones
 
-* Nueva RPC de solo lectura `get_tournament_points_summary(p_club_id, p_tournament_id)` (`supabase/migrations/20260919000001_get_tournament_points_summary_function.sql`, **pendiente de aplicación manual**) — única vía autorizada para leer el resultado real de `award_tournament_points()`; el ledger (`club_player_point_movements`/`club_member_sport_state`) sigue sin RLS pública. Clasifica `award_state` (`pending`/`ready`/`awarded`/`partial`) comparando el conteo real de movimientos contra el esperado (`bracket_size*2 + 8`), nunca recalculando puntos; cualquier membresía activa del club (OWNER/ADMIN/PLAYER) puede leerlo
-* `TournamentAwardsSection`/`TournamentAwardPairCard`: botón "Otorgar puntos" (OWNER/ADMIN, solo cuando `status='completed'` y `award_state` no es `awarded`), tarjetas de campeón/subcampeón/semifinalistas con puntos reales por jugador
-* `tournamentAwardActions.ts`/`tournamentAwards.ts`: `awardTournamentPointsAction` + el resolutor de vista que consume `get_tournament_points_summary`
-
-## UI — Noticia Asistida del Torneo (Bloque 2.7)
-
-* `TournamentNewsSection`, visible solo cuando el torneo está `completed` y `award_state = 'awarded'`: botón "Generar noticia" que abre el modal real de creación de Noticias (`CreateNewsModal`/`NewsForm`, nunca un segundo formulario) con título/contenido prellenados por `buildTournamentNewsDraft` (`tournamentNewsDraft.ts`) — derivado exclusivamente del torneo real y de `TournamentAwardSummary`, nunca inventa marcador/MVP/asistencia/estadísticas. El usuario puede editar todo el texto y debe publicar manualmente, exactamente como cualquier otra noticia
-* `CreateNewsModal`/`NewsForm` ganaron dos props opcionales (`defaultTitle`/`defaultContent`), con efecto únicamente en creación — la edición de una noticia existente no cambió
-* Limitación conocida, documentada y aceptada: no existe ningún mecanismo para evitar generar varias noticias para el mismo torneo (`club_news` no tiene columna de vínculo a `tournament_id`); no se creó uno nuevo para no ampliar el esquema fuera de alcance
+* `club_news.slug` (único por club, `UNIQUE(club_id, slug)`), generado con el mismo helper de slugificación que ya usa `tournaments` (`_slugify_tournament_name`, nunca duplicado); backfill de noticias existentes con resolución de colisión por fecha de publicación y sufijo incremental
+* `create_club_news` (RPC nueva, reemplaza el `INSERT` directo desde el cliente que hacía `createNews`): valida rol, campos, y (cuando aplica) que el torneo exista, pertenezca al mismo club y esté `completed`; genera el slug con reintento real ante colisión (mismo patrón `INSERT`-retry ya establecido por `create_tournament`)
+* `newsDetailPath(clubSlug, newsSlug)` (`src/lib/newsPaths.ts`): único constructor de URL de noticia reutilizado en todos los puntos de enlace (tarjetas admin/públicas, `TournamentNewsAction`, la propia página de detalle). Un enlace histórico basado en UUID se resuelve por `id` y redirige de inmediato a la URL canónica con slug
+* `NewsTournamentChampions`: en el detalle de una noticia con `tournament_id`, muestra a los campeones reales (posición 1 de `computeTournamentClassification`, con soporte de empate) — un avatar (`PlayerSportAvatar`) + nombre por jugador, nunca inventado ni aproximado por título/contenido
 
 ---
 

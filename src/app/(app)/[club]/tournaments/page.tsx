@@ -52,7 +52,7 @@ export default async function PlayerTournamentsPage({ params }: PlayerTournament
     <div className="p-6 md:p-10">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-white">Torneos</h1>
-        <p className="text-brand-muted mt-1 text-sm">Consulta los torneos del club e inscríbete con tu compañero.</p>
+        <p className="text-brand-muted mt-1 text-sm">Consulta los torneos del club e inscríbete con tu partner.</p>
       </div>
 
       {tournamentList.length === 0 ? (
@@ -66,7 +66,7 @@ export default async function PlayerTournamentsPage({ params }: PlayerTournament
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {tournamentList.map((t) => (
-            <TournamentCard key={t.id} tournament={t} href={`/${slug}/tournaments/${t.id}`} />
+            <TournamentCard key={t.id} tournament={t} href={`/${slug}/tournaments/${t.slug}`} />
           ))}
         </div>
       )}

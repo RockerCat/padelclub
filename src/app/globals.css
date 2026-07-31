@@ -69,6 +69,106 @@ body {
   }
 }
 
+/* Clasificación del torneo "En curso" — brillo tenue que recorre la parte
+   coloreada de cada mini barra de puntos, para transmitir "en vivo" sin
+   tocar su ancho (que sigue representando los puntos reales) ni su
+   posición. El propio elemento con `.bar-shimmer` es el segmento coloreado
+   (ya dimensionado a su % real por el caller); `::after` se limita a su
+   `inset: 0` y se desliza de -100% a 100% en un traslado horizontal puro,
+   así que nunca cambia el layout ni el tamaño de nada. */
+@keyframes bar-shimmer-sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+
+.bar-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.bar-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  transform: translateX(-100%);
+  animation: bar-shimmer-sweep 2.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar-shimmer::after {
+    animation: none;
+    content: none;
+  }
+}
+
+/* Indicador "En vivo" del detalle del torneo — halo que se expande y se
+   desvanece alrededor del punto rojo, nunca el punto ni el badge en sí
+   (que se mantienen de tamaño fijo). `.live-dot` es el punto sólido en
+   posición relativa; `::before` es el halo, absolutamente posicionado
+   sobre el mismo punto (`inset: -4px`), así que expandirse nunca empuja
+   ni redimensiona nada del layout de alrededor. */
+@keyframes live-dot-halo {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  70%,
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+.live-dot {
+  position: relative;
+}
+
+.live-dot::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 9999px;
+  background: rgb(248 113 113 / 0.6);
+  animation: live-dot-halo 2.4s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot::before {
+    animation: none;
+    content: none;
+  }
+}
+
+/* Confetti de celebración del torneo finalizado (TournamentConfetti) —
+   caída simple con rotación, una sola pasada (animation-fill-mode:
+   forwards mantiene la pieza invisible/fuera de vista al terminar, en
+   vez de reiniciar). El propio componente se desmonta solo ~3s después
+   de montar, así que esto nunca queda "vivo" indefinidamente. */
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(-10vh) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(110vh) rotate(720deg);
+    opacity: 0;
+  }
+}
+
+.confetti-piece {
+  animation-name: confetti-fall;
+  animation-timing-function: ease-in;
+  animation-fill-mode: forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confetti-piece {
+    animation: none;
+    display: none;
+  }
+}
+
 @supports (animation-timeline: view()) {
   .scroll-fade {
     animation: fade-in-up linear both;

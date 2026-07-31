@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui";
 import { PairMemberSlot } from "./PairMemberSlot";
+import { cn } from "@/lib/utils/cn";
 import type { TournamentEntryWithMembers } from "@/lib/tournamentEntries";
 
 const ENTRY_STATUS_LABEL: Record<string, string> = {
@@ -28,9 +29,18 @@ interface EntryCardProps {
 
 export function EntryCard({ entry, isOwn, actions }: EntryCardProps) {
   const [memberOne, memberTwo] = entry.members;
+  // Pendiente = requiere una acción inmediata del organizador (Confirmar/
+  // Rechazar) — tinte ámbar muy sutil sobre el mismo fondo oscuro de
+  // siempre (nunca lo reemplaza), borde fino apenas tintado, sin sombra
+  // ni animación. "Requiere atención", no "error" — el resto de estados
+  // (confirmed/withdrawn/rejected) conserva bg-brand-surface tal cual.
+  const isPending = entry.status === "pending";
 
   return (
-    <div className="bg-brand-surface border border-white/10 rounded-2xl p-4 flex flex-col gap-3">
+    <div
+      className={cn("border rounded-2xl p-4 flex flex-col gap-3", isPending ? "border-amber-500/20" : "bg-brand-surface border-white/10")}
+      style={isPending ? { backgroundColor: "color-mix(in srgb, var(--color-brand-surface), #f59e0b 6%)" } : undefined}
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-col gap-2 min-w-0 flex-1">
           <PairMemberSlot member={memberOne} category={entry.category} />
@@ -44,7 +54,7 @@ export function EntryCard({ entry, isOwn, actions }: EntryCardProps) {
             <span className="text-[10px] font-medium text-brand-muted">{entry.points} pts</span>
           )}
           {isOwn && (
-            <span className="text-[10px] font-medium text-brand-muted">Tu pareja</span>
+            <span className="text-[10px] font-medium text-brand-muted">Tu dupla</span>
           )}
         </div>
       </div>

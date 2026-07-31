@@ -32,7 +32,7 @@ export type TournamentPointsActionState = {
 function tournamentEntryErrorMessage(error: { code?: string; message?: string }): string {
   if (error.code === "42501") {
     if (error.message?.includes("only register a pair they are part of")) {
-      return "Solo puedes registrar una pareja de la que formes parte.";
+      return "Solo puedes registrar una dupla de la que formes parte.";
     }
     if (error.message?.includes("only withdraw an entry they are part of")) {
       return "Solo puedes retirar una inscripción de la que formes parte.";
@@ -55,7 +55,7 @@ function tournamentEntryErrorMessage(error: { code?: string; message?: string })
       return "Las inscripciones de este torneo no están abiertas.";
     }
     if (msg.includes("not accepting new pairs")) {
-      return "Este torneo ya no acepta nuevas parejas.";
+      return "Este torneo ya no acepta nuevas duplas.";
     }
     if (msg.includes("not accepting confirmations")) {
       return "Este torneo ya no acepta confirmaciones de inscripción.";
@@ -78,7 +78,7 @@ function tournamentEntryErrorMessage(error: { code?: string; message?: string })
       return "Uno de los jugadores ya tiene una inscripción activa en este torneo.";
     }
     if (msg.includes("reached its maximum number of pairs")) {
-      return "El torneo ya alcanzó su cupo máximo de parejas.";
+      return "El torneo ya alcanzó su cupo máximo de duplas.";
     }
     if (msg.includes("Only a pending entry can be confirmed")) {
       return "Solo una inscripción pendiente puede confirmarse.";
@@ -108,13 +108,13 @@ function tournamentEntryErrorMessage(error: { code?: string; message?: string })
       return "El jugador entrante debe ser distinto del saliente.";
     }
     if (msg.includes("Only a confirmed entry can have its members replaced")) {
-      return "Solo una pareja confirmada puede reemplazar integrantes.";
+      return "Solo una dupla confirmada puede reemplazar integrantes.";
     }
     if (msg.includes("Members can only be replaced while the tournament is in progress")) {
       return "Los integrantes solo pueden reemplazarse mientras el torneo está en curso.";
     }
     if (msg.includes("outgoing player is not an active member of this entry")) {
-      return "El jugador seleccionado ya no es integrante activo de esta pareja.";
+      return "El jugador seleccionado ya no es integrante activo de esta dupla.";
     }
     if (msg.includes("Incoming player is not an active PLAYER member")) {
       return "El jugador entrante no es un miembro activo del club.";
@@ -126,19 +126,19 @@ function tournamentEntryErrorMessage(error: { code?: string; message?: string })
       return "El jugador entrante no pertenece a una categoría válida para este torneo.";
     }
     if (msg.includes("Outgoing player was modified concurrently")) {
-      return "Esta pareja fue modificada por otra persona. Recarga la información e inténtalo nuevamente.";
+      return "Esta dupla fue modificada por otra persona. Recarga la información e inténtalo nuevamente.";
     }
     if (msg.includes("Tournament is not in progress")) {
       return "Esta acción solo está disponible mientras el torneo está en curso.";
     }
     if (msg.includes("No entries provided")) {
-      return "No hay parejas para actualizar.";
+      return "No hay duplas para actualizar.";
     }
     if (msg.includes("Points must be non-negative integers")) {
       return "Los puntos deben ser números enteros no negativos.";
     }
     if (msg.includes("All entries must be confirmed entries of this tournament")) {
-      return "Solo se pueden editar los puntos de parejas confirmadas de este torneo.";
+      return "Solo se pueden editar los puntos de duplas confirmadas de este torneo.";
     }
     if (msg.includes("Not authorized to edit points")) {
       return "No tienes permisos para editar los puntos de este torneo.";

@@ -15,37 +15,63 @@ interface TournamentFormProps {
   action: (prevState: TournamentActionState, formData: FormData) => Promise<TournamentActionState>;
   onSuccess: (tournament: Tournament | undefined) => void;
   onCancel: () => void;
+  // Duplas activas (pending + confirmed) — el mismo capacity.occupied ya
+  // usado por el contador y la barra de progreso, nunca un segundo
+  // cálculo. Es el mínimo real que backend acepta para max_pairs; solo
+  // aplica en edición, la creación no tiene inscripciones todavía.
+  minMaxPairs?: number;
 }
 
 const initialState: TournamentActionState = {};
 
+// Solo para la vista de solo lectura de "Apertura de inscripciones" cuando
+// el campo está congelado — el valor real que viaja al backend sigue
+// siendo el datetime-local crudo del input oculto, esto es puramente
+// cosmético.
+function formatWallClockDisplay(value: string): string {
+  const [datePart, timePart] = value.split("T");
+  if (!datePart || !timePart) return value || "—";
+  const [year, month, day] = datePart.split("-");
+  return `${day}/${month}/${year} ${timePart}`;
+}
+
 // Shared by CreateTournamentModal and EditTournamentModal — the only
 // difference between create/edit is the bound `action` and whether
 // `tournament` is passed. Field-level lock rules come straight from
-// update_tournament's own validation: category, max_pairs and
-// registration_opens_at are frozen once registration is open OR closed
-// (only draft and, before starting, plain informational fields stay
-// editable past that point) — never guessed, and the real backend error
-// still surfaces if a race slips through (e.g. someone opened
+// update_tournament's own validation: category, secondary_category and
+// registration_opens_at are frozen once registration is open OR closed.
+// max_pairs stays editable through registration_open/registration_closed
+// too — only backend-enforced floor is the current count of active
+// (pending+confirmed) entries, via `minMaxPairs`, never a hard freeze —
+// never guessed, and the real backend error still surfaces if a race
+// slips through (e.g. someone opened
 // registration in another tab).
-export function TournamentForm({ clubId, tournament, categories, action, onSuccess, onCancel }: TournamentFormProps) {
+export function TournamentForm({ clubId, tournament, categories, action, onSuccess, onCancel, minMaxPairs = 1 }: TournamentFormProps) {
   const [state, formAction, pending] = useActionState(action, initialState);
   const isEdit = !!tournament;
   const structuralFieldsLocked =
     tournament?.status === "registration_open" || tournament?.status === "registration_closed";
 
-  // Controlled (unlike the rest of this form's uncontrolled defaultValue
-  // fields) only because the secondary-category options depend reactively
-  // on which primary category is currently selected — sort_order-based,
-  // never a string/number comparison of the code itself.
+  // Todos los campos de este formulario son controlados (value+onChange,
+  // nunca defaultValue) por la misma razón: React resetea los campos no
+  // controlados de un <form action={...}> en cuanto la Server Action
+  // resuelve — sin importar si el resultado fue éxito o un {error: "..."}
+  // devuelto normalmente (React solo sabe que la promesa no fue
+  // rechazada). Un campo controlado no depende de ese reset nativo porque
+  // React vuelve a aplicar su propio `value` en cada render, incluida la
+  // re-renderización que muestra el error.
   const [categoryCode, setCategoryCode] = useState(tournament?.category ?? "");
   const [secondaryCategoryCode, setSecondaryCategoryCode] = useState(tournament?.secondary_category ?? "");
+  const [nameInput, setNameInput] = useState(tournament?.name ?? "");
+  const [descriptionInput, setDescriptionInput] = useState(tournament?.description ?? "");
+  const [visibilityInput, setVisibilityInput] = useState(tournament?.visibility ?? "private");
+  const [prizeInput, setPrizeInput] = useState(tournament?.prize_description ?? "");
 
   // Al crear: la hora local actual, calculada en el momento en que este
   // formulario se monta (nunca al momento del build, nunca una constante
   // global) — el usuario puede editarla libremente después. Al editar: el
   // valor ya guardado del torneo, nunca reemplazado por la hora actual.
-  const [initialRegistrationOpensAt] = useState(() =>
+  const [registrationOpensAtInput, setRegistrationOpensAtInput] = useState(() =>
     isEdit ? isoToBogotaWallClock(tournament!.registration_opens_at) : isoToBogotaWallClock(new Date().toISOString())
   );
 
@@ -98,10 +124,30 @@ export function TournamentForm({ clubId, tournament, categories, action, onSucce
     setDurationTouched(true);
   }
 
-  const primarySortOrder = categories.find((c) => c.code === categoryCode)?.sort_order;
-  const secondaryOptions = categories.filter(
+  // Defensa ante cualquier divergencia entre categoryCode (siempre
+  // inicializado desde tournament.category/secondary_category, nunca
+  // desde una "categoría por defecto") y el catálogo `categories`
+  // recibido: si el código real del torneo no tiene una <option>
+  // correspondiente, un <select> controlado cuyo value no matchea
+  // ninguna opción cae al fallback silencioso del navegador (la primera
+  // opción habilitada de la lista) — sustituyendo visualmente la
+  // categoría real por otra sin que el estado de React cambie. Se
+  // garantiza aquí que la opción siempre exista, para cualquiera de las
+  // 7 categorías fijas (nunca una hardcodeada) — nunca afecta la
+  // elegibilidad real ni el catálogo mostrado al crear.
+  const categoryOptions =
+    categoryCode && !categories.some((c) => c.code === categoryCode)
+      ? [{ code: categoryCode, sort_order: -1 }, ...categories]
+      : categories;
+
+  const primarySortOrder = categoryOptions.find((c) => c.code === categoryCode)?.sort_order;
+  const secondaryOptionsBase = categoryOptions.filter(
     (c) => primarySortOrder !== undefined && c.sort_order < primarySortOrder
   );
+  const secondaryOptions =
+    secondaryCategoryCode && !secondaryOptionsBase.some((c) => c.code === secondaryCategoryCode)
+      ? [{ code: secondaryCategoryCode, sort_order: -1 }, ...secondaryOptionsBase]
+      : secondaryOptionsBase;
 
   function handleCategoryChange(code: string) {
     setCategoryCode(code);
@@ -129,7 +175,8 @@ export function TournamentForm({ clubId, tournament, categories, action, onSucce
             name="name"
             label="Nombre del torneo"
             type="text"
-            defaultValue={tournament?.name ?? ""}
+            value={nameInput}
+            onChange={(e) => setNameInput(e.target.value)}
             required
             placeholder="Torneo de verano"
           />
@@ -138,7 +185,8 @@ export function TournamentForm({ clubId, tournament, categories, action, onSucce
             <label className="text-sm font-medium text-white/80">Descripción</label>
             <textarea
               name="description"
-              defaultValue={tournament?.description ?? ""}
+              value={descriptionInput}
+              onChange={(e) => setDescriptionInput(e.target.value)}
               placeholder="Descripción o reglas opcionales..."
               rows={3}
               className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-base md:text-sm text-white placeholder:text-brand-muted/60 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20 resize-none"
@@ -148,43 +196,67 @@ export function TournamentForm({ clubId, tournament, categories, action, onSucce
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-white/80">Categoría principal</label>
-              <select
-                name="category"
-                value={categoryCode}
-                onChange={(e) => handleCategoryChange(e.target.value)}
-                disabled={structuralFieldsLocked}
-                required
-                className="w-full h-10 rounded-xl border border-white/10 bg-white/5 px-3 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <option value="" disabled className="bg-[#001A24]">
-                  Selecciona...
-                </option>
-                {categories.map((c) => (
-                  <option key={c.code} value={c.code} className="bg-[#001A24]">
-                    {c.code}
+              {/* Sin `name` en ningún caso: el input oculto de abajo es
+                  quien siempre envía el valor real. Cuando la categoría
+                  está congelada por reglas de negocio (inscripciones
+                  abiertas o cerradas), no se renderiza un <select
+                  disabled> en absoluto — un control de formulario
+                  deshabilitado sigue siendo un elemento nativo que el
+                  navegador puede resetear a su primera <option> al
+                  reenviar el formulario (p.ej. tras un error de otro
+                  campo), lo que antes hacía que categoryCode y el propio
+                  DOM del <select> divergieran visualmente sin que React
+                  llegara a notarlo. Un <div> de solo lectura no es un
+                  control de formulario: no puede ser reseteado por el
+                  navegador bajo ninguna circunstancia. */}
+              {structuralFieldsLocked ? (
+                <div className="w-full h-10 rounded-xl border border-white/10 bg-white/5 px-3 flex items-center text-base md:text-sm text-white/50">
+                  {categoryCode || "—"}
+                </div>
+              ) : (
+                <select
+                  value={categoryCode}
+                  onChange={(e) => handleCategoryChange(e.target.value)}
+                  required
+                  className="w-full h-10 rounded-xl border border-white/10 bg-white/5 px-3 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20"
+                >
+                  <option value="" disabled className="bg-[#001A24]">
+                    Selecciona...
                   </option>
-                ))}
-              </select>
+                  {categoryOptions.map((c) => (
+                    <option key={c.code} value={c.code} className="bg-[#001A24]">
+                      {c.code}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <input type="hidden" name="category" value={categoryCode} />
             </div>
 
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-white/80">Categoría secundaria</label>
-              <select
-                name="secondary_category"
-                value={secondaryCategoryCode}
-                onChange={(e) => setSecondaryCategoryCode(e.target.value)}
-                disabled={structuralFieldsLocked || !categoryCode}
-                className="w-full h-10 rounded-xl border border-white/10 bg-white/5 px-3 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <option value="" className="bg-[#001A24]">
-                  Ninguna
-                </option>
-                {secondaryOptions.map((c) => (
-                  <option key={c.code} value={c.code} className="bg-[#001A24]">
-                    {c.code}
+              {structuralFieldsLocked ? (
+                <div className="w-full h-10 rounded-xl border border-white/10 bg-white/5 px-3 flex items-center text-base md:text-sm text-white/50">
+                  {secondaryCategoryCode || "Ninguna"}
+                </div>
+              ) : (
+                <select
+                  value={secondaryCategoryCode}
+                  onChange={(e) => setSecondaryCategoryCode(e.target.value)}
+                  disabled={!categoryCode}
+                  className="w-full h-10 rounded-xl border border-white/10 bg-white/5 px-3 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <option value="" className="bg-[#001A24]">
+                    Ninguna
                   </option>
-                ))}
-              </select>
+                  {secondaryOptions.map((c) => (
+                    <option key={c.code} value={c.code} className="bg-[#001A24]">
+                      {c.code}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <input type="hidden" name="secondary_category" value={secondaryCategoryCode} />
             </div>
           </div>
           <p className="text-xs text-brand-muted -mt-2">
@@ -192,19 +264,19 @@ export function TournamentForm({ clubId, tournament, categories, action, onSucce
           </p>
           {structuralFieldsLocked && (
             <p className="text-xs text-brand-muted -mt-2">
-              Categoría, cupo máximo y apertura de inscripciones ya no son editables.
+              Categoría y apertura de inscripciones ya no son editables.
             </p>
           )}
 
           <Input
             name="max_pairs"
-            label="Cupo máximo de parejas"
+            label="Cupo máximo de duplas"
             type="number"
-            min={1}
+            min={minMaxPairs}
             step={1}
             value={maxPairsInput}
             onChange={(e) => handleMaxPairsChange(e.target.value)}
-            disabled={structuralFieldsLocked}
+            hint={isEdit ? `Mínimo permitido: ${minMaxPairs} duplas registradas actualmente.` : undefined}
             required
           />
         </div>
@@ -217,7 +289,8 @@ export function TournamentForm({ clubId, tournament, categories, action, onSucce
             <label className="text-sm font-medium text-white/80">Visibilidad</label>
             <select
               name="visibility"
-              defaultValue={tournament?.visibility ?? "private"}
+              value={visibilityInput}
+              onChange={(e) => setVisibilityInput(e.target.value)}
               className="w-full h-10 rounded-xl border border-white/10 bg-white/5 px-3 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20"
             >
               <option value="private" className="bg-[#001A24]">
@@ -233,7 +306,8 @@ export function TournamentForm({ clubId, tournament, categories, action, onSucce
             <label className="text-sm font-medium text-white/80">Premios (opcional)</label>
             <textarea
               name="prize_description"
-              defaultValue={tournament?.prize_description ?? ""}
+              value={prizeInput}
+              onChange={(e) => setPrizeInput(e.target.value)}
               placeholder={"Ej.\n🥇 1er lugar: Trofeo + $500.000\n🥈 2do lugar: Gatorade + bonos\n🎁 Rifas de patrocinadores"}
               rows={4}
               className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-base md:text-sm text-white placeholder:text-brand-muted/60 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20 resize-none"
@@ -245,12 +319,37 @@ export function TournamentForm({ clubId, tournament, categories, action, onSucce
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium text-white/80">Apertura de inscripciones</label>
+          {/* Mismo motivo que la categoría: sin `name` en el control
+              visible, y sin dejarlo como un <input disabled> nativo
+              cuando está congelado — un input deshabilitado se excluye
+              del FormData del submit (lo que hacía que
+              registration_opens_at llegara como null al backend y
+              disparara "cannot change" incluso sin haberlo tocado), y
+              además sigue siendo un control nativo que el navegador
+              puede resetear. El input oculto de abajo es la única fuente
+              real del valor enviado, siempre. */}
+          {structuralFieldsLocked ? (
+            <div className="w-full h-10 rounded-xl border border-white/10 bg-white/5 px-3 flex items-center text-base md:text-sm text-white/50">
+              {formatWallClockDisplay(registrationOpensAtInput)}
+            </div>
+          ) : (
+            <input
+              type="datetime-local"
+              value={registrationOpensAtInput}
+              onChange={(e) => setRegistrationOpensAtInput(e.target.value)}
+              className="w-full h-10 rounded-xl border border-white/10 bg-white/5 px-3 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20"
+            />
+          )}
+          <input type="hidden" name="registration_opens_at" value={registrationOpensAtInput} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-white/80">Inicio del torneo</label>
           <input
             type="datetime-local"
-            name="registration_opens_at"
-            defaultValue={initialRegistrationOpensAt}
-            disabled={structuralFieldsLocked}
-            className="w-full h-10 rounded-xl border border-white/10 bg-white/5 px-3 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
+            name="starts_at"
+            value={startsAtInput}
+            onChange={(e) => handleStartsAtChange(e.target.value)}
+            className="w-full h-10 rounded-xl border border-white/10 bg-white/5 px-3 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20"
           />
         </div>
         <div className="flex flex-col gap-1.5">
@@ -260,16 +359,6 @@ export function TournamentForm({ clubId, tournament, categories, action, onSucce
             name="registration_closes_at"
             value={registrationClosesAtInput}
             onChange={(e) => handleClosesAtChange(e.target.value)}
-            className="w-full h-10 rounded-xl border border-white/10 bg-white/5 px-3 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20"
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-white/80">Inicio del torneo</label>
-          <input
-            type="datetime-local"
-            name="starts_at"
-            value={startsAtInput}
-            onChange={(e) => handleStartsAtChange(e.target.value)}
             className="w-full h-10 rounded-xl border border-white/10 bg-white/5 px-3 text-base md:text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary/50 focus:border-brand-primary/50 hover:border-white/20"
           />
         </div>

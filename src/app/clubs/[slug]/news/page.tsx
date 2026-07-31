@@ -32,7 +32,7 @@ export default async function ClubNewsListPage({ params }: Props) {
 
   const { data: news } = await supabase
     .from("club_news")
-    .select("id, title, content, image_url, published_at")
+    .select("id, slug, title, content, image_url, published_at")
     .eq("club_id", club.id)
     .order("published_at", { ascending: false });
 

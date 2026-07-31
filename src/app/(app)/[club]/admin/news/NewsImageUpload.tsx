@@ -77,7 +77,7 @@ export function NewsImageUpload({ clubId, currentImageUrl }: NewsImageUploadProp
         type="button"
         onClick={() => fileRef.current?.click()}
         disabled={uploading}
-        className="relative w-full aspect-video rounded-xl border border-dashed border-white/15 bg-white/[0.02] overflow-hidden flex items-center justify-center hover:border-white/30 transition-colors disabled:opacity-60"
+        className="relative w-full aspect-[3/4] rounded-xl border border-dashed border-white/15 bg-white/[0.02] overflow-hidden flex items-center justify-center hover:border-white/30 transition-colors disabled:opacity-60"
       >
         {previewUrl ? (
           // eslint-disable-next-line @next/next/no-img-element

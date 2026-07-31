@@ -52,6 +52,7 @@ export type Court = {
 
 export type ClubNewsCard = {
   id: string;
+  slug: string;
   title: string;
   content: string;
   image_url: string;

@@ -6,7 +6,7 @@ import { Plus, Users, X } from "lucide-react";
 import { Button, ConfirmDialog, Toast } from "@/components/ui";
 import { EntryCard } from "./EntryCard";
 import { RegisterEntryModal } from "./RegisterEntryModal";
-import { ReplaceMemberModal } from "./ReplaceMemberModal";
+import type { PlayerComboboxCandidate } from "./PlayerCombobox";
 import {
   confirmTournamentEntryAction,
   rejectTournamentEntryAction,
@@ -14,6 +14,7 @@ import {
 } from "@/lib/tournamentEntryActions";
 import { isOwnEntry, type TournamentEntriesCapacity, type TournamentEntryWithMembers } from "@/lib/tournamentEntries";
 import { tournamentCategoryLabel } from "@/lib/tournamentLabels";
+import { cn } from "@/lib/utils/cn";
 import type { Tournament, TournamentEntryRow } from "@/types/database";
 
 interface EntriesSectionProps {
@@ -33,6 +34,13 @@ interface EntriesSectionProps {
   // never a security boundary.
   ownCategory: string | null;
   revalidatePaths: string[];
+  // Torneo "En curso" (TournamentDetailView): la Clasificación ya muestra
+  // exactamente las mismas duplas confirmadas de forma más deportiva y
+  // compacta, así que las tarjetas grandes dejan de ocupar el flujo
+  // principal aquí — nunca se elimina el dato ni el componente, Pendientes/
+  // Rechazadas/"Registrar dupla" siguen intactos (el organizador puede
+  // seguir registrando duplas durante in_progress, ver canAdminRegister).
+  hideConfirmedList?: boolean;
 }
 
 type PendingAction = { type: "confirm" | "withdraw"; entryId: string } | null;
@@ -42,12 +50,18 @@ function CapacityBar({ capacity }: { capacity: TournamentEntriesCapacity }) {
   const pct = capacity.total > 0 ? Math.min(100, Math.round((capacity.occupied / capacity.total) * 100)) : 0;
   const full = capacity.occupied >= capacity.total;
   const almostFull = !full && capacity.occupied >= capacity.total - 1;
-  const barColor = full ? "bg-red-400" : almostFull ? "bg-amber-400" : "bg-brand-primary";
+  // Cupo completo es un estado de éxito (el torneo llenó su cupo), nunca
+  // un error — mismo verde ya usado por Badge variant="success" en el
+  // resto de Mi Pádel Club. Nunca rojo para representar "lleno".
+  const barColor = full ? "bg-emerald-400" : almostFull ? "bg-amber-400" : "bg-brand-primary";
 
   return (
     <div className="flex flex-col gap-1.5">
-      <p className="text-sm text-white">
-        {capacity.occupied} de {capacity.total} parejas inscritas
+      <p className="text-sm text-white flex items-center gap-2 flex-wrap">
+        <span>
+          {capacity.occupied} de {capacity.total} duplas inscritas
+        </span>
+        {full && <span className="text-xs font-medium text-emerald-400">Cupo completo</span>}
       </p>
       <div className="h-1.5 w-full max-w-xs rounded-full bg-white/10 overflow-hidden">
         <div className={`h-full ${barColor} transition-all`} style={{ width: `${pct}%` }} />
@@ -67,15 +81,29 @@ export function EntriesSection({
   ownAvatarUrl,
   ownCategory,
   revalidatePaths,
+  hideConfirmedList = false,
 }: EntriesSectionProps) {
   const router = useRouter();
   const isAdmin = role === "OWNER" || role === "ADMIN";
   const [entries, setEntries] = useState(initialEntries);
+  // entries mirrors the initialEntries prop (fresh server data after
+  // router.refresh()) but is also updated locally right after a
+  // successful action — React's documented "adjusting state when a prop
+  // changes" pattern (setState during render, not inside an effect) so a
+  // completed server refetch always wins over any earlier optimistic
+  // local update, exactly like TournamentDetailView already does for
+  // `tournament`. Without this, entries stayed permanently disconnected
+  // from initialEntries after the very first mount — router.refresh()
+  // alone never reached the rendered UI.
+  const [prevInitialEntries, setPrevInitialEntries] = useState(initialEntries);
+  if (initialEntries !== prevInitialEntries) {
+    setPrevInitialEntries(initialEntries);
+    setEntries(initialEntries);
+  }
   const [registering, setRegistering] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [rejecting, setRejecting] = useState<RejectingEntry>(null);
   const [rejectReason, setRejectReason] = useState("");
-  const [replacingEntry, setReplacingEntry] = useState<TournamentEntryWithMembers | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -84,36 +112,62 @@ export function EntriesSection({
     .filter((e) => e.status === "pending" || e.status === "confirmed")
     .flatMap((e) => e.members.map((m) => m.club_member_id));
 
+  // Única fuente de verdad de "cupo completo" — la misma que ya usa
+  // CapacityBar (capacity.occupied/capacity.total) para la barra verde y
+  // el texto "Cupo completo". canPlayerRegister/canAdminRegister deben
+  // aplicar siempre `!full`, sin excepción por estado: el backend sigue
+  // permitiendo a un ADMIN registrar más allá del cupo durante
+  // registration_closed/in_progress (ver register_tournament_entry), pero
+  // el botón ya no ofrece esa acción en la UI cuando el cupo está lleno —
+  // solo oculta la entrada, nunca bloquea ni debilita esa validación real.
   const full = capacity.occupied >= capacity.total;
-  // El organizador puede seguir registrando parejas directamente durante
+  // Un jugador solo puede inscribirse mientras las inscripciones están
+  // abiertas; el organizador puede seguir registrando parejas durante
   // registration_closed/in_progress ("agregar nuevas duplas durante el
-  // torneo", sin restricción de cupo fuera de registration_open) — un
-  // jugador solo puede inscribirse mientras las inscripciones están
-  // abiertas.
+  // torneo") — ambos casos ahora exigen además que quede cupo disponible.
   const canPlayerRegister = tournament.status === "registration_open" && !full;
   const canAdminRegister =
-    tournament.status === "registration_open"
-      ? !full
-      : tournament.status === "registration_closed" || tournament.status === "in_progress";
+    (tournament.status === "registration_open" ||
+      tournament.status === "registration_closed" ||
+      tournament.status === "in_progress") &&
+    !full;
   const canConfirmOrRejectStatus = tournament.status === "registration_open" || tournament.status === "registration_closed";
   const canWithdrawStatus = tournament.status === "registration_open" || tournament.status === "registration_closed";
 
+  // Únicamente pending/confirmed cuentan como "activa" — una inscripción
+  // retirada o rechazada sigue existiendo (historial intacto en
+  // entries/base de datos), pero deja de ser la inscripción vigente del
+  // jugador: no debe seguir ocupando el bloque "Tu inscripción" ni bloquear
+  // que vuelva a registrarse.
   const ownActiveEntry = entries.find(
     (e) => (e.status === "pending" || e.status === "confirmed") && isOwnEntry(e, ownUserId, ownClubMemberId)
   );
-  const ownAnyEntry = entries.find((e) => isOwnEntry(e, ownUserId, ownClubMemberId));
 
-  function handleRegisterSuccess(entry: TournamentEntryRow | undefined) {
+  function handleRegisterSuccess(entry: TournamentEntryRow | undefined, selectedMembers: PlayerComboboxCandidate[]) {
     setRegistering(false);
     setToastMessage(
-      isAdmin ? "Pareja registrada correctamente" : "Tu inscripción fue enviada y está pendiente de aprobación."
+      isAdmin ? "Dupla registrada correctamente" : "Tu inscripción fue enviada y está pendiente de aprobación."
     );
     if (entry) {
       // Optimistic local append so the new entry is visible immediately —
-      // members will resolve fully on the next router.refresh() (server
-      // re-fetch), consistent with how the rest of this section stays in
-      // sync with the server.
-      setEntries((prev) => [...prev, { ...entry, members: [] }]);
+      // built with the two real players already selected in the modal
+      // (name/avatar/category), never empty slots, so "Por confirmar"
+      // never flashes even for the instant before router.refresh()
+      // resolves. The prop-sync above then reconciles this with the
+      // server's own authoritative row once the refetch lands.
+      setEntries((prev) => [
+        ...prev,
+        {
+          ...entry,
+          members: selectedMembers.map((m) => ({
+            club_member_id: m.club_member_id,
+            profile_id: null,
+            full_name: m.full_name,
+            avatar_url: m.avatar_url,
+            category: m.category,
+          })),
+        },
+      ]);
     }
     router.refresh();
   }
@@ -136,7 +190,7 @@ export function EntriesSection({
         setEntries((prev) => prev.map((e) => (e.id === result.entry!.id ? { ...e, ...result.entry! } : e)));
       }
       setPendingAction(null);
-      setToastMessage(pendingAction.type === "confirm" ? "Pareja confirmada correctamente" : "Inscripción retirada correctamente");
+      setToastMessage(pendingAction.type === "confirm" ? "Dupla confirmada correctamente" : "Inscripción retirada correctamente");
       router.refresh();
     });
   }
@@ -145,16 +199,17 @@ export function EntriesSection({
     const isMine = isOwnEntry(entry, ownUserId, ownClubMemberId);
     const showConfirm = isAdmin && entry.status === "pending" && canConfirmOrRejectStatus;
     const showReject = isAdmin && entry.status === "pending" && canConfirmOrRejectStatus;
+    // El organizador nunca ve "Retirar" junto a "Confirmar"/"Rechazar" para
+    // la misma dupla pendiente — Confirmar/Rechazar ya cubren resolverla,
+    // así que para el organizador Retirar solo aparece una vez confirmada.
+    // El propio jugador conserva "Retirar" en ambos estados (pending y
+    // confirmed) — es su única acción de autoservicio para cancelar su
+    // propia solicitud antes o después de que el organizador la resuelva.
     const showWithdraw =
       canWithdrawStatus &&
-      (entry.status === "pending" || entry.status === "confirmed") &&
-      (isAdmin || isMine);
-    // Reemplazo/corrección de integrante — solo sobre una pareja
-    // confirmada, solo mientras el torneo está in_progress (backend:
-    // replace_tournament_entry_member).
-    const showReplace = isAdmin && entry.status === "confirmed" && tournament.status === "in_progress";
+      (isAdmin ? entry.status === "confirmed" : isMine && (entry.status === "pending" || entry.status === "confirmed"));
 
-    if (!showConfirm && !showReject && !showWithdraw && !showReplace) return null;
+    if (!showConfirm && !showReject && !showWithdraw) return null;
 
     return (
       <>
@@ -181,18 +236,6 @@ export function EntriesSection({
             }}
           >
             Rechazar
-          </Button>
-        )}
-        {showReplace && (
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => {
-              setActionError(null);
-              setReplacingEntry(entry);
-            }}
-          >
-            Reemplazar integrante
           </Button>
         )}
         {showWithdraw && (
@@ -235,7 +278,9 @@ export function EntriesSection({
 
   const confirmed = entries.filter((e) => e.status === "confirmed");
   const pending = entries.filter((e) => e.status === "pending");
-  const withdrawn = entries.filter((e) => e.status === "withdrawn");
+  // Retiradas ya no se listan aquí — TournamentDetailView las muestra en
+  // un acordeón de historial en la columna derecha (OWNER/ADMIN), fuera
+  // de la lista principal de inscripciones activas.
   const rejected = entries.filter((e) => e.status === "rejected");
 
   // A player is eligible when their own current category is either of the
@@ -255,7 +300,7 @@ export function EntriesSection({
         {isAdmin && eligibleToRegister && (
           <Button size="sm" onClick={() => setRegistering(true)}>
             <Plus className="w-3.5 h-3.5" />
-            Registrar pareja
+            Registrar dupla
           </Button>
         )}
       </div>
@@ -264,27 +309,29 @@ export function EntriesSection({
 
       {tournament.status === "draft" && (
         <p className="text-sm text-brand-muted bg-white/5 border border-white/10 rounded-xl px-4 py-3">
-          Abre las inscripciones para comenzar a registrar parejas.
+          Abre las inscripciones para comenzar a registrar duplas.
         </p>
       )}
 
       {full && tournament.status === "registration_open" && (
         <p className="text-sm text-amber-400 bg-amber-400/10 border border-amber-400/20 rounded-xl px-4 py-3">
-          El torneo alcanzó su cupo máximo de parejas.
+          El torneo alcanzó su cupo máximo de duplas.
         </p>
       )}
 
-      {/* PLAYER: own pending/withdrawn/rejected entry surfaced explicitly
-          (never duplicated with the confirmed list below, which already
-          shows a confirmed own entry tagged "Tu pareja"). */}
-      {!isAdmin && ownAnyEntry && ownAnyEntry.status !== "confirmed" && (
+      {/* PLAYER: own pending entry surfaced explicitly (never duplicated
+          with the confirmed list below, which already shows a confirmed
+          own entry tagged "Tu dupla"). A withdrawn/rejected own entry is
+          never shown here — it stays in entries/history untouched, it
+          simply stops being the player's "active" one. */}
+      {!isAdmin && ownActiveEntry && ownActiveEntry.status !== "confirmed" && (
         <div>
           <p className="text-xs font-medium text-brand-muted mb-2">Tu inscripción</p>
-          <EntryCard entry={ownAnyEntry} isOwn actions={entryActions(ownAnyEntry)} />
+          <EntryCard entry={ownActiveEntry} isOwn actions={entryActions(ownActiveEntry)} />
         </div>
       )}
 
-      {!isAdmin && !ownAnyEntry && (
+      {!isAdmin && !ownActiveEntry && (
         <>
           {eligibleToRegister ? (
             <Button size="sm" onClick={() => setRegistering(true)} className="self-start">
@@ -302,40 +349,43 @@ export function EntriesSection({
 
       {isAdmin ? (
         <div className="flex flex-col gap-5">
-          <EntryGroup title="Pendientes" entries={pending} entryActions={entryActions} emptyText={null} />
-          <EntryGroup title="Confirmadas" entries={confirmed} entryActions={entryActions} ownUserId={ownUserId} ownClubMemberId={ownClubMemberId} emptyText={null} />
+          <EntryGroup title="Pendientes" entries={pending} entryActions={entryActions} emptyText={null} highlight />
+          {!hideConfirmedList && (
+            <EntryGroup title="Confirmadas" entries={confirmed} entryActions={entryActions} ownUserId={ownUserId} ownClubMemberId={ownClubMemberId} emptyText={null} />
+          )}
           <EntryGroup title="Rechazadas" entries={rejected} entryActions={entryActions} emptyText={null} />
-          <EntryGroup title="Retiradas" entries={withdrawn} entryActions={entryActions} emptyText={null} />
-          {entries.length === 0 && (
+          {pending.length === 0 && confirmed.length === 0 && rejected.length === 0 && (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-4">
                 <Users className="w-6 h-6 text-brand-muted" />
               </div>
-              <h3 className="text-base font-semibold text-white mb-1">Aún no hay parejas inscritas</h3>
+              <h3 className="text-base font-semibold text-white mb-1">Aún no hay duplas inscritas</h3>
               <p className="text-sm text-brand-muted max-w-sm">
                 {tournament.status === "registration_open"
-                  ? "Todavía no hay parejas inscritas. Registra la primera pareja del torneo."
-                  : "Cuando abras las inscripciones podrás registrar parejas para el torneo."}
+                  ? "Todavía no hay duplas inscritas. Registra la primera dupla del torneo."
+                  : "Cuando abras las inscripciones podrás registrar duplas para el torneo."}
               </p>
             </div>
           )}
         </div>
       ) : (
-        <div className="flex flex-col gap-3">
-          <p className="text-xs font-medium text-brand-muted">Parejas confirmadas</p>
-          {confirmed.length === 0 ? (
-            <p className="text-sm text-brand-muted">Aún no hay parejas confirmadas.</p>
-          ) : (
-            confirmed.map((entry) => (
-              <EntryCard
-                key={entry.id}
-                entry={entry}
-                isOwn={isOwnEntry(entry, ownUserId, ownClubMemberId)}
-                actions={entryActions(entry)}
-              />
-            ))
-          )}
-        </div>
+        !hideConfirmedList && (
+          <div className="flex flex-col gap-3">
+            <p className="text-xs font-medium text-brand-muted">Duplas confirmadas</p>
+            {confirmed.length === 0 ? (
+              <p className="text-sm text-brand-muted">Aún no hay duplas confirmadas.</p>
+            ) : (
+              confirmed.map((entry) => (
+                <EntryCard
+                  key={entry.id}
+                  entry={entry}
+                  isOwn={isOwnEntry(entry, ownUserId, ownClubMemberId)}
+                  actions={entryActions(entry)}
+                />
+              ))
+            )}
+          </div>
+        )
       )}
 
       {registering && (
@@ -356,32 +406,14 @@ export function EntriesSection({
         />
       )}
 
-      {replacingEntry && (
-        <ReplaceMemberModal
-          clubId={tournament.club_id}
-          tournamentEntryId={replacingEntry.id}
-          category={tournament.category}
-          secondaryCategory={tournament.secondary_category}
-          members={replacingEntry.members}
-          excludeClubMemberIds={registeredMemberIds}
-          revalidatePaths={revalidatePaths}
-          onClose={() => setReplacingEntry(null)}
-          onSuccess={() => {
-            setReplacingEntry(null);
-            setToastMessage("Integrante reemplazado correctamente");
-            router.refresh();
-          }}
-        />
-      )}
-
       {pendingAction && (
         <ConfirmDialog
           open={!!pendingAction}
-          title={pendingAction.type === "confirm" ? "¿Confirmar esta pareja?" : "¿Retirar esta inscripción?"}
+          title={pendingAction.type === "confirm" ? "¿Confirmar esta dupla?" : "¿Retirar esta inscripción?"}
           message={
             (pendingAction.type === "confirm"
-              ? "La pareja quedará oficialmente inscrita en el torneo."
-              : "La pareja dejará de ocupar un cupo en el torneo.") + (actionError ? `\n\n${actionError}` : "")
+              ? "La dupla quedará oficialmente inscrita en el torneo."
+              : "La dupla dejará de ocupar un cupo en el torneo.") + (actionError ? `\n\n${actionError}` : "")
           }
           confirmLabel={pendingAction.type === "confirm" ? "Confirmar" : "Retirar inscripción"}
           confirmVariant={pendingAction.type === "confirm" ? "primary" : "danger"}
@@ -459,6 +491,10 @@ function EntryGroup({
   ownUserId,
   ownClubMemberId,
   emptyText,
+  // Solo el grupo "Pendientes" lo activa (ver el llamador más abajo) —
+  // refuerzo puramente tipográfico/color, nunca una condición nueva de
+  // negocio: cuando no hay pendientes, no hay nada que reforzar.
+  highlight,
 }: {
   title: string;
   entries: TournamentEntryWithMembers[];
@@ -466,13 +502,18 @@ function EntryGroup({
   ownUserId?: string;
   ownClubMemberId?: string;
   emptyText: string | null;
+  highlight?: boolean;
 }) {
   if (entries.length === 0 && !emptyText) return null;
+  const emphasize = highlight && entries.length > 0;
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-xs font-medium text-brand-muted">
-        {title} ({entries.length})
-      </p>
+      <div className="flex items-center gap-1.5">
+        {emphasize && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" aria-hidden />}
+        <p className={cn("text-xs", emphasize ? "font-semibold text-amber-400" : "font-medium text-brand-muted")}>
+          {title} ({entries.length})
+        </p>
+      </div>
       {entries.length === 0 ? (
         <p className="text-sm text-brand-muted">{emptyText}</p>
       ) : (

@@ -14,6 +14,12 @@ export interface ContextMenuAction {
 interface ContextMenuProps {
   actions: ContextMenuAction[];
   className?: string;
+  // aria-label del botón disparador. Por defecto genérico ("Más
+  // acciones"); cualquier llamador con contexto más específico por fila
+  // (p. ej. "Abrir acciones de la dupla X y Y" en la Clasificación de
+  // torneos) puede sobreescribirlo — nunca cambia el comportamiento, solo
+  // el texto anunciado por lectores de pantalla.
+  triggerLabel?: string;
 }
 
 // Generic ⋮ dropdown — same click-outside-to-close pattern as
@@ -21,24 +27,42 @@ interface ContextMenuProps {
 // arbitrary action list. Used to move destructive actions (e.g. "Quitar
 // administrador") behind a deliberate extra click instead of an
 // always-visible icon next to every row.
-export function ContextMenu({ actions, className }: ContextMenuProps) {
+export function ContextMenu({ actions, className, triggerLabel = "Más acciones" }: ContextMenuProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const firstItemRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
-    function handle(e: MouseEvent) {
+    function handleClickOutside(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setOpen(false);
       }
     }
-    document.addEventListener("mousedown", handle);
-    return () => document.removeEventListener("mousedown", handle);
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    // Patrón estándar de menú accesible (WAI-ARIA Menu Button): al abrir,
+    // el foco pasa a la primera opción — desde ahí Tab/Shift+Tab navegan
+    // entre botones nativos en orden del DOM, sin necesitar manejo propio
+    // de flechas.
+    firstItemRef.current?.focus();
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, [open]);
 
   return (
     <div ref={ref} className={cn("relative", className)}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={(e) => {
           e.preventDefault();
@@ -46,19 +70,26 @@ export function ContextMenu({ actions, className }: ContextMenuProps) {
           setOpen((v) => !v);
         }}
         className="w-7 h-7 flex items-center justify-center rounded-lg text-brand-muted/60 hover:text-white hover:bg-white/10 transition-colors"
-        aria-label="Más acciones"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={triggerLabel}
       >
         <MoreVertical className="w-4 h-4" />
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 bg-[#0e3347] border border-white/20 rounded-xl shadow-xl overflow-hidden min-w-[180px] z-[200] py-1">
+        <div
+          role="menu"
+          className="absolute right-0 top-full mt-1 bg-[#0e3347] border border-white/20 rounded-xl shadow-xl overflow-hidden min-w-[180px] z-[200] py-1"
+        >
           {actions.map((action, i) => {
             const Icon = action.icon;
             return (
               <button
                 key={i}
+                ref={i === 0 ? firstItemRef : undefined}
                 type="button"
+                role="menuitem"
                 onClick={(e) => {
                   e.stopPropagation();
                   setOpen(false);

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ExternalLink, Pencil, Trash2 } from "lucide-react";
 import { ConfirmDialog, Toast } from "@/components/ui";
 import { deleteNews } from "./actions";
+import { newsDetailPath } from "@/lib/newsPaths";
 import type { ClubNewsWithAuthor } from "@/types/database";
 
 interface NewsCardProps {
@@ -71,7 +72,7 @@ export function NewsCard({ news, clubSlug, clubId, onEdit }: NewsCardProps) {
             Eliminar
           </button>
           <a
-            href={`/clubs/${clubSlug}/news/${news.id}`}
+            href={newsDetailPath(clubSlug, news.slug)}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-brand-muted hover:text-white hover:bg-white/5 transition-colors ml-auto"

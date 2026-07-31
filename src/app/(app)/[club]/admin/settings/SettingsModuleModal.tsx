@@ -6,7 +6,12 @@ import { X } from "lucide-react";
 interface SettingsModuleModalProps {
   title: string;
   onClose: () => void;
-  size?: "md" | "lg";
+  // "xl" (1040px, creciendo hasta 1320px en pantallas muy anchas) es
+  // exclusivo del modal de Noticias (layout de dos columnas, imagen con
+  // ancho máximo fijo, formulario ocupando el resto) — puramente
+  // aditivo, "md"/"lg" conservan el mismo ancho de siempre para el
+  // resto de los 7 módulos que ya usan este shell.
+  size?: "md" | "lg" | "xl";
   children: React.ReactNode;
   footer?: React.ReactNode;
 }
@@ -37,7 +42,13 @@ export function SettingsModuleModal({ title, onClose, size = "md", children, foo
       />
       <div className="fixed inset-x-0 bottom-0 md:inset-0 md:flex md:items-center md:justify-center z-[401] pointer-events-none">
         <div
-          className={`pointer-events-auto w-full ${size === "lg" ? "md:w-[640px]" : "md:w-[480px]"} bg-[#082735] border border-white/10 rounded-t-2xl md:rounded-2xl shadow-2xl flex flex-col`}
+          className={`pointer-events-auto w-full ${
+            size === "xl"
+              ? "md:w-[640px] lg:w-[1040px] xl:w-[1200px] 2xl:w-[1320px]"
+              : size === "lg"
+              ? "md:w-[640px]"
+              : "md:w-[480px]"
+          } bg-[#082735] border border-white/10 rounded-t-2xl md:rounded-2xl shadow-2xl flex flex-col`}
           style={{ maxHeight: "90dvh" }}
           onClick={(e) => e.stopPropagation()}
         >

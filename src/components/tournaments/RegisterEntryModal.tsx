@@ -4,8 +4,8 @@ import { useEffect, useState, useTransition } from "react";
 import { X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button, Spinner } from "@/components/ui";
-import { PlayerSportAvatar } from "@/components/players/PlayerSportAvatar";
-import { PlayerCombobox, type PlayerComboboxCandidate } from "./PlayerCombobox";
+import type { PlayerComboboxCandidate } from "./PlayerCombobox";
+import { PlayerTransferList } from "./PlayerTransferList";
 import { registerTournamentEntryAction } from "@/lib/tournamentEntryActions";
 import { tournamentCategoryLabel } from "@/lib/tournamentLabels";
 import type { TournamentEntryRow } from "@/types/database";
@@ -37,7 +37,11 @@ interface RegisterEntryModalProps {
         ownCategory: string | null;
       };
   onClose: () => void;
-  onSuccess: (entry: TournamentEntryRow | undefined) => void;
+  // Segundo argumento: los dos jugadores ya seleccionados (nombre/avatar/
+  // categoría reales, no solo ids) — permite al llamador construir de
+  // inmediato una tarjeta completa sin esperar el próximo refetch del
+  // servidor ni volver a consultar perfiles.
+  onSuccess: (entry: TournamentEntryRow | undefined, selectedMembers: PlayerComboboxCandidate[]) => void;
 }
 
 export function RegisterEntryModal({
@@ -125,18 +129,44 @@ export function RegisterEntryModal({
     return candidates;
   }
 
-  // Player mode: slot 1 is the caller, fixed — resolved once from the
-  // already-loaded candidates (they must appear there to be eligible at
-  // all; EntriesSection never renders the "Inscribirme" action otherwise).
-  const slotOneId = mode.type === "player" ? mode.ownClubMemberId : memberOneId;
-  const companionOptions = companionCandidates(slotOneId);
+  const excludeIds = mode.type === "player" ? [...excludeClubMemberIds, mode.ownClubMemberId] : excludeClubMemberIds;
 
-  function handleMemberOneChange(id: string | null) {
-    setMemberOneId(id);
-    // If the previously-chosen companion is no longer valid under the new
-    // slot-1 category, clear it instead of silently keeping an invalid pair.
-    const nextCompanionOptions = companionCandidates(id);
-    if (memberTwoId && !nextCompanionOptions.some((c) => c.club_member_id === memberTwoId)) {
+  // Lista de transferencia — único componente para construir una dupla,
+  // reutilizado tal cual por ambos modos (la diferencia es solo de props,
+  // ver el render más abajo). El orden de selección decide quién es
+  // memberOneId/memberTwoId ("primer seleccionado → Jugador 1"), y en
+  // modo jugador memberOneId ya arranca fijo en mode.ownClubMemberId
+  // (nunca cambia), así que esta misma derivación lo deja siempre primero
+  // y ya resuelto desde `candidates` — nunca una segunda fuente de
+  // elegibilidad ni una consulta aparte para el propio jugador.
+  const selectedIds = [memberOneId, memberTwoId].filter((id): id is string => !!id);
+  const availablePool = memberOneId === null ? candidates ?? [] : companionCandidates(memberOneId);
+  const transferAvailableCandidates = availablePool.filter(
+    (c) => !excludeIds.includes(c.club_member_id) && !selectedIds.includes(c.club_member_id)
+  );
+  const transferSelectedPlayers = selectedIds
+    .map((id) => (candidates ?? []).find((c) => c.club_member_id === id))
+    .filter((c): c is PlayerComboboxCandidate => !!c);
+
+  function handleTransferSelect(id: string) {
+    if (memberOneId === null) {
+      setMemberOneId(id);
+    } else if (memberTwoId === null) {
+      setMemberTwoId(id);
+    }
+  }
+
+  function handleTransferDeselect(id: string) {
+    // El propio jugador nunca se quita a sí mismo — defensa adicional,
+    // ya que su fila ni siquiera expone un control clickeable para esto.
+    if (mode.type === "player" && id === mode.ownClubMemberId) return;
+    if (id === memberOneId) {
+      // El segundo seleccionado (si existe) pasa a ser el único
+      // seleccionado — nunca dos huecos sueltos, y companionCandidates()
+      // se vuelve a evaluar sobre él en el próximo render.
+      setMemberOneId(memberTwoId);
+      setMemberTwoId(null);
+    } else if (id === memberTwoId) {
       setMemberTwoId(null);
     }
   }
@@ -144,7 +174,7 @@ export function RegisterEntryModal({
   function handleSubmit() {
     setError(null);
     if (!memberOneId || !memberTwoId) {
-      setError(mode.type === "player" ? "Selecciona a tu compañero." : "Selecciona a los dos jugadores.");
+      setError(mode.type === "player" ? "Selecciona a tu partner." : "Selecciona a los dos jugadores.");
       return;
     }
     if (memberOneId === memberTwoId) {
@@ -157,14 +187,12 @@ export function RegisterEntryModal({
         setError(result.error);
         return;
       }
-      onSuccess(result.entry);
+      onSuccess(result.entry, transferSelectedPlayers);
     });
   }
 
-  const excludeIds = mode.type === "player" ? [...excludeClubMemberIds, mode.ownClubMemberId] : excludeClubMemberIds;
-
   const helpText = secondaryCategory
-    ? `Puedes registrar una pareja formada por una persona de ${category} y una de ${secondaryCategory}, o por dos personas de ${secondaryCategory}. No se permiten dos jugadores de ${category}.`
+    ? `Puedes registrar una dupla formada por una persona de ${category} y una de ${secondaryCategory}, o por dos personas de ${secondaryCategory}. No se permiten dos jugadores de ${category}.`
     : `Ambos jugadores deben pertenecer a la categoría ${category}.`;
 
   return (
@@ -182,7 +210,7 @@ export function RegisterEntryModal({
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 shrink-0">
-            <h2 className="text-base font-semibold text-white">Registrar pareja</h2>
+            <h2 className="text-base font-semibold text-white">Registrar dupla</h2>
             <button
               type="button"
               onClick={onClose}
@@ -208,37 +236,14 @@ export function RegisterEntryModal({
 
             {candidates !== null && (
               <>
-                {mode.type === "player" && (
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-sm font-medium text-white/80">Jugador 1</label>
-                    <div className="flex items-center gap-2.5 h-12 px-3 rounded-xl border border-white/10 bg-white/5">
-                      <PlayerSportAvatar
-                        player={{ id: mode.ownClubMemberId, full_name: mode.ownFullName, avatar_url: mode.ownAvatarUrl }}
-                        size="sm"
-                        sportCategory={mode.ownCategory}
-                      />
-                      <span className="text-sm text-white">{mode.ownFullName ?? "Tú"} (Tú)</span>
-                    </div>
-                  </div>
-                )}
-
-                {mode.type === "admin" && (
-                  <PlayerCombobox
-                    label="Jugador 1"
-                    candidates={candidates}
-                    excludeIds={[...excludeIds, ...(memberTwoId ? [memberTwoId] : [])]}
-                    value={memberOneId}
-                    onChange={handleMemberOneChange}
-                  />
-                )}
-
-                <PlayerCombobox
-                  label={mode.type === "player" ? "Tu compañero" : "Jugador 2"}
-                  candidates={companionOptions}
-                  excludeIds={[...excludeIds, ...(slotOneId ? [slotOneId] : [])]}
-                  value={memberTwoId}
-                  onChange={setMemberTwoId}
-                  disabled={mode.type === "admin" && !memberOneId}
+                <PlayerTransferList
+                  availableCandidates={transferAvailableCandidates}
+                  selectedPlayers={transferSelectedPlayers}
+                  onSelect={handleTransferSelect}
+                  onDeselect={handleTransferDeselect}
+                  lockedPlayerIds={mode.type === "player" ? [mode.ownClubMemberId] : []}
+                  panelTitle={mode.type === "player" ? "Tu dupla" : "Dupla seleccionada"}
+                  partnerHintText={mode.type === "player" ? "Selecciona tu partner." : undefined}
                 />
 
                 {candidates.length === 0 && (
@@ -256,8 +261,13 @@ export function RegisterEntryModal({
           </div>
 
           <div className="flex items-center gap-3 px-5 py-4 border-t border-white/10 shrink-0">
-            <Button type="button" loading={pending} onClick={handleSubmit} disabled={candidates === null}>
-              Registrar pareja
+            <Button
+              type="button"
+              loading={pending}
+              onClick={handleSubmit}
+              disabled={candidates === null || !memberOneId || !memberTwoId || memberOneId === memberTwoId}
+            >
+              Registrar dupla
             </Button>
             <Button type="button" variant="secondary" disabled={pending} onClick={onClose}>
               Cancelar

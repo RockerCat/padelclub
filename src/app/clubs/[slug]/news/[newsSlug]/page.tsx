@@ -1,0 +1,164 @@
+import { notFound, redirect } from "next/navigation";
+import Link from "next/link";
+import type { Metadata } from "next";
+import { ArrowLeft } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
+import { formatNewsDate } from "@/components/clubs/PublicNewsCard";
+import { NewsTournamentChampions } from "@/components/clubs/NewsTournamentChampions";
+import { ShareNewsButtons } from "./ShareNewsButtons";
+import { newsDetailPath } from "@/lib/newsPaths";
+import { computeTournamentClassification, getTournamentEntriesWithMembers } from "@/lib/tournamentEntries";
+import { tournamentCategoryLabel } from "@/lib/tournamentLabels";
+
+interface Props {
+  params: Promise<{ slug: string; newsSlug: string }>;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug, newsSlug } = await params;
+  const supabase = await createClient();
+
+  const { data: club } = await supabase.from("clubs").select("id").eq("slug", slug).eq("is_active", true).single();
+  if (!club) return { title: "Noticia no encontrada | MiPadelClub" };
+
+  const { data: news } = UUID_RE.test(newsSlug)
+    ? await supabase.from("club_news").select("title, content").eq("id", newsSlug).eq("club_id", club.id).single()
+    : await supabase.from("club_news").select("title, content").eq("slug", newsSlug).eq("club_id", club.id).single();
+  if (!news) return { title: "Noticia no encontrada | MiPadelClub" };
+
+  return {
+    title: `${news.title} | MiPadelClub`,
+    description: news.content.slice(0, 150),
+  };
+}
+
+export default async function ClubNewsDetailPage({ params }: Props) {
+  const { slug, newsSlug } = await params;
+  const supabase = await createClient();
+
+  const { data: club } = await supabase
+    .from("clubs")
+    .select("id, name, slug")
+    .eq("slug", slug)
+    .eq("is_active", true)
+    .single();
+
+  if (!club) notFound();
+
+  // Compatibilidad con enlaces antiguos basados en UUID: si el parámetro
+  // tiene forma de UUID, se resuelve por id (siempre acotado a club_id) y
+  // se redirige de inmediato a la URL canónica con slug — mismo patrón ya
+  // usado por el detalle de torneo. Nunca se deja indexable la variante
+  // por UUID; solo existe la URL con slug de aquí en adelante.
+  const { data: news } = UUID_RE.test(newsSlug)
+    ? await supabase
+        .from("club_news")
+        .select("id, slug, title, content, image_url, published_at, tournament_id")
+        .eq("id", newsSlug)
+        .eq("club_id", club.id)
+        .single()
+    : await supabase
+        .from("club_news")
+        .select("id, slug, title, content, image_url, published_at, tournament_id")
+        .eq("slug", newsSlug)
+        .eq("club_id", club.id)
+        .single();
+
+  if (!news) notFound();
+
+  if (UUID_RE.test(newsSlug)) {
+    redirect(newsDetailPath(club.slug, news.slug));
+  }
+
+  const path = newsDetailPath(club.slug, news.slug);
+
+  // Campeones del torneo asociado (si existe) — nunca detectado por
+  // título/contenido, siempre a través de news.tournament_id (asociación
+  // persistente, ver 20260929000001). Si el torneo no puede recuperarse
+  // (inconsistencia, RLS, etc.) la noticia sigue mostrándose normal, sin
+  // el bloque deportivo — nunca rompe la página.
+  let championRows: ReturnType<typeof computeTournamentClassification> = [];
+  let tournamentCategoryText: string | null = null;
+
+  if (news.tournament_id) {
+    try {
+      const { data: tournament } = await supabase
+        .from("tournaments")
+        .select("id, club_id, category, secondary_category")
+        .eq("id", news.tournament_id)
+        .eq("club_id", club.id)
+        .single();
+
+      if (tournament) {
+        const categories = [tournament.category, tournament.secondary_category].filter((c): c is string => !!c);
+        const { entries, error: entriesError } = await getTournamentEntriesWithMembers(
+          supabase,
+          tournament.id,
+          club.id,
+          categories
+        );
+
+        if (!entriesError) {
+          const classification = computeTournamentClassification(entries);
+          championRows = classification.filter((row) => row.position === 1);
+          tournamentCategoryText = tournamentCategoryLabel(tournament.category, tournament.secondary_category);
+        }
+      }
+    } catch (err) {
+      console.error("[news detail] failed to load tournament champions:", err);
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-brand-bg">
+      <div className="border-b border-white/8 bg-brand-bg/90 backdrop-blur-sm sticky top-0 z-20">
+        <div className="max-w-5xl mx-auto px-5 h-14 flex items-center">
+          <Link
+            href={`/clubs/${club.slug}/news`}
+            className="flex items-center gap-1.5 text-sm text-brand-muted hover:text-white transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Noticias de {club.name}
+          </Link>
+        </div>
+      </div>
+
+      {/* Desktop (lg+): dos columnas — imagen portrait a la izquierda
+          (~35%, con un ancho máximo fijo para que nunca crezca
+          indefinidamente en pantallas grandes), fecha/título/campeones/
+          contenido a la derecha (~65%, el elemento principal). `lg:items-start`
+          (en vez de stretch) deja que la columna de la imagen conserve
+          su propia altura natural — así, con una noticia larga, le
+          queda "recorrido" a `lg:sticky` para pegarse bajo el header
+          mientras el texto sigue haciendo scroll a su lado, sin que la
+          imagen empuje el contenido hacia abajo. Mobile/tablet angosta:
+          sin lg:grid, los bloques son simples <div> en flujo normal —
+          el orden real del DOM (imagen, fecha, título, campeones,
+          contenido) ya coincide con el orden pedido, sin necesitar
+          ninguna clase de reordenamiento. */}
+      <div className="max-w-5xl mx-auto px-5 py-10 lg:grid lg:grid-cols-[minmax(0,min(35%,360px))_minmax(0,1fr)] lg:gap-8 lg:items-start">
+        <div className="mb-6 lg:mb-0 lg:sticky lg:top-20">
+          <div className="rounded-2xl overflow-hidden bg-white/3 border border-white/8 aspect-[3/4]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={news.image_url} alt={news.title} className="w-full h-full object-cover" />
+          </div>
+        </div>
+
+        <div className="min-w-0">
+          <p className="text-xs text-brand-muted mb-2">{formatNewsDate(news.published_at)}</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-white mb-6">{news.title}</h1>
+
+          <NewsTournamentChampions champions={championRows} categoryLabel={tournamentCategoryText} />
+
+          <div className="text-sm text-white/80 leading-relaxed whitespace-pre-line mb-8 max-w-prose">
+            {news.content}
+          </div>
+
+          <ShareNewsButtons title={news.title} path={path} />
+        </div>
+      </div>
+    </div>
+  );
+}

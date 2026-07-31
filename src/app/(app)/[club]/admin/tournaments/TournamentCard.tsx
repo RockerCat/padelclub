@@ -57,8 +57,8 @@ export function TournamentCard({
             <Users className="w-3.5 h-3.5" />
             Categoría {tournamentCategoryLabel(tournament.category, tournament.secondary_category)} ·{" "}
             {confirmedCount !== undefined
-              ? `${confirmedCount}/${tournament.max_pairs} parejas confirmadas`
-              : `${tournament.max_pairs} parejas`}
+              ? `${confirmedCount}/${tournament.max_pairs} duplas confirmadas`
+              : `${tournament.max_pairs} duplas`}
           </span>
           <span className="inline-flex items-center gap-1">
             {tournament.visibility === "public" ? (

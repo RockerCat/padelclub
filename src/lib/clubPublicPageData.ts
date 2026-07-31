@@ -34,7 +34,7 @@ export async function getClubPublicPageData(
     supabase.rpc("count_active_players", { p_club_id: clubId }),
     supabase
       .from("club_news")
-      .select("id, title, content, image_url, published_at")
+      .select("id, slug, title, content, image_url, published_at")
       .eq("club_id", clubId)
       .order("published_at", { ascending: false })
       .limit(RECENT_NEWS_LIMIT),

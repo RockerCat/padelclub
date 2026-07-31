@@ -91,7 +91,7 @@ export function ReplaceMemberModal({
   function handleSubmit() {
     setError(null);
     if (!outgoingId) {
-      setError("Selecciona qué jugador sale de la pareja.");
+      setError("Selecciona qué jugador sale de la dupla.");
       return;
     }
     if (!incomingId) {
@@ -131,7 +131,7 @@ export function ReplaceMemberModal({
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 shrink-0">
-            <h2 className="text-base font-semibold text-white">Reemplazar integrante</h2>
+            <h2 className="text-base font-semibold text-white">Cambiar jugadores</h2>
             <button
               type="button"
               onClick={onClose}
@@ -144,7 +144,7 @@ export function ReplaceMemberModal({
 
           <div className="overflow-y-auto flex-1 px-5 py-5 flex flex-col gap-4">
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-white/80">¿Quién sale de la pareja?</label>
+              <label className="text-sm font-medium text-white/80">¿Quién sale de la dupla?</label>
               {members.map((m) => (
                 <button
                   key={m.club_member_id}

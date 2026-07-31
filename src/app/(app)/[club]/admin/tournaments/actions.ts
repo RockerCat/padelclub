@@ -78,6 +78,27 @@ function tournamentErrorMessage(error: { code?: string; message?: string }): str
     ) {
       return "El torneo cambió de estado y esta acción ya no está disponible.";
     }
+    // Los tres campos que update_tournament congela una vez abiertas las
+    // inscripciones ya emiten mensajes distintos entre sí desde el propio
+    // RPC ('category cannot change...', 'secondary_category cannot
+    // change...', 'registration_opens_at cannot change...') — el bug real
+    // era que aquí se colapsaban en un único texto genérico, dejando al
+    // usuario sin forma de saber cuál de los tres había cambiado. Deben
+    // revisarse en este orden: "secondary_category cannot change..." es en
+    // sí misma una superstring de "category cannot change...", así que la
+    // variante más específica va primero o nunca se alcanzaría.
+    if (msg.includes("secondary_category cannot change once registration is open")) {
+      return "La categoría secundaria ya no puede modificarse porque las inscripciones están abiertas.";
+    }
+    if (msg.includes("category cannot change once registration is open")) {
+      return "La categoría ya no puede modificarse porque las inscripciones están abiertas.";
+    }
+    if (msg.includes("registration_opens_at cannot change once registration is open")) {
+      return "La apertura de inscripciones ya no puede modificarse porque las inscripciones están abiertas.";
+    }
+    // Red de seguridad para cualquier otro campo que en el futuro se sume a
+    // ese mismo bloqueo sin una traducción específica todavía — nunca debe
+    // ser lo primero que matchee para los tres campos de arriba.
     if (msg.includes("cannot change once registration is open")) {
       return "Este campo ya no puede modificarse porque las inscripciones están abiertas.";
     }
@@ -86,7 +107,16 @@ function tournamentErrorMessage(error: { code?: string; message?: string }): str
       return "La combinación de categorías no es válida: la categoría principal debe ser superior a la secundaria.";
     }
     if (msg.includes("Invalid category")) return "Selecciona una categoría válida.";
-    if (msg.includes("Invalid max pairs")) return "El número máximo de parejas debe ser mayor a cero.";
+    if (msg.includes("Invalid max pairs")) return "El número máximo de duplas debe ser mayor a cero.";
+    // El RPC interpola el conteo real de duplas activas directamente en el
+    // mensaje ('max_pairs cannot be less than N active tournament
+    // entries') — se extrae aquí en vez de recalcularlo con minMaxPairs en
+    // el cliente, para no mantener una segunda fuente de verdad del mismo
+    // número.
+    const activeEntriesMatch = msg.match(/max_pairs cannot be less than (\d+) active tournament entries/);
+    if (activeEntriesMatch) {
+      return `El cupo máximo no puede ser menor que las ${activeEntriesMatch[1]} duplas activas registradas.`;
+    }
     if (msg.includes("Invalid visibility")) return "Selecciona una visibilidad válida.";
     if (msg.includes("registration_opens_at must be before registration_closes_at")) {
       return "La apertura de inscripciones debe ser anterior a su cierre.";
@@ -101,10 +131,10 @@ function tournamentErrorMessage(error: { code?: string; message?: string }): str
       return "Completa todas las fechas del torneo (inscripción e inicio/fin) antes de abrir las inscripciones.";
     }
     if (msg.includes("needs at least one confirmed pair to start")) {
-      return "El torneo necesita al menos una pareja confirmada para iniciar.";
+      return "El torneo necesita al menos una dupla confirmada para iniciar.";
     }
     if (msg.includes("has no confirmed entries")) {
-      return "El torneo no tiene parejas confirmadas.";
+      return "El torneo no tiene duplas confirmadas.";
     }
     if (msg.includes("inconsistent state")) {
       return "Los puntos de este torneo están en un estado inconsistente. Contacta a soporte.";
@@ -141,7 +171,7 @@ function parseTournamentFields(formData: FormData) {
     return { error: "La categoría secundaria debe ser distinta de la principal." } as const;
   }
   if (!Number.isInteger(maxPairs) || maxPairs < 1) {
-    return { error: "El número máximo de parejas debe ser mayor a cero." } as const;
+    return { error: "El número máximo de duplas debe ser mayor a cero." } as const;
   }
   if (!VISIBILITIES.includes(visibility)) return { error: "Selecciona una visibilidad válida." } as const;
   if (!Number.isInteger(estimatedDurationMinutes) || estimatedDurationMinutes < 1) {
@@ -203,6 +233,20 @@ export async function createTournament(
     p_cover_image_url: f.coverImageUrl,
   });
 
+  // TEMPORARY diagnostic logging — remove once the root cause of the
+  // generic "No fue posible completar la acción" message is confirmed.
+  // Logs unconditionally (not just in tournamentErrorMessage's fallback
+  // branch) so we also see it for a 22023 whose message isn't in the
+  // mapped list (currently returns "Datos inválidos." with no log at all).
+  if (error) {
+    console.error("[createTournament] create_tournament RPC error:", {
+      code: error.code,
+      message: error.message,
+      details: (error as { details?: string }).details,
+      hint: (error as { hint?: string }).hint,
+    });
+  }
+
   if (error) return { error: tournamentErrorMessage(error) };
 
   revalidatePath(`/${clubSlug}/admin/tournaments`);
@@ -214,6 +258,7 @@ export async function createTournament(
 export async function updateTournament(
   clubId: string,
   tournamentId: string,
+  tournamentSlug: string,
   clubSlug: string,
   _prevState: TournamentActionState,
   formData: FormData
@@ -244,7 +289,40 @@ export async function updateTournament(
   if (error) return { error: tournamentErrorMessage(error) };
 
   revalidatePath(`/${clubSlug}/admin/tournaments`);
-  revalidatePath(`/${clubSlug}/admin/tournaments/${tournamentId}`);
+  revalidatePath(`/${clubSlug}/tournaments/${tournamentSlug}`);
+  return { success: true, tournament: data?.[0] };
+}
+
+// ─── updateTournamentCoverImage ────────────────────────────────────────────────
+// Única propiedad editable en cualquier estado del torneo (draft,
+// registration_open, registration_closed, in_progress, completed,
+// cancelled) — nunca reabre el torneo, nunca toca ningún otro campo.
+// RPC dedicado (update_tournament_cover_image), separado a propósito de
+// update_tournament, que sigue exactamente igual de bloqueado fuera de
+// draft/registration_open/registration_closed para todo lo demás.
+
+export async function updateTournamentCoverImage(
+  clubId: string,
+  tournamentId: string,
+  tournamentSlug: string,
+  clubSlug: string,
+  _prevState: TournamentActionState,
+  formData: FormData
+): Promise<TournamentActionState> {
+  const { supabase, error: authError } = await requireAdminRole(clubId);
+  if (authError || !supabase) return { error: authError! };
+
+  const coverImageUrl = (formData.get("cover_image_url") as string | null)?.trim() || null;
+
+  const { data, error } = await supabase.rpc("update_tournament_cover_image", {
+    p_tournament_id: tournamentId,
+    p_cover_image_url: coverImageUrl,
+  });
+
+  if (error) return { error: tournamentErrorMessage(error) };
+
+  revalidatePath(`/${clubSlug}/admin/tournaments`);
+  revalidatePath(`/${clubSlug}/tournaments/${tournamentSlug}`);
   return { success: true, tournament: data?.[0] };
 }
 
@@ -253,6 +331,7 @@ export async function updateTournament(
 export async function openTournamentRegistration(
   clubId: string,
   tournamentId: string,
+  tournamentSlug: string,
   clubSlug: string
 ): Promise<TournamentActionState> {
   const { supabase, error: authError } = await requireAdminRole(clubId);
@@ -265,7 +344,7 @@ export async function openTournamentRegistration(
   if (error) return { error: tournamentErrorMessage(error) };
 
   revalidatePath(`/${clubSlug}/admin/tournaments`);
-  revalidatePath(`/${clubSlug}/admin/tournaments/${tournamentId}`);
+  revalidatePath(`/${clubSlug}/tournaments/${tournamentSlug}`);
   return { success: true, tournament: data?.[0] };
 }
 
@@ -274,6 +353,7 @@ export async function openTournamentRegistration(
 export async function closeTournamentRegistration(
   clubId: string,
   tournamentId: string,
+  tournamentSlug: string,
   clubSlug: string
 ): Promise<TournamentActionState> {
   const { supabase, error: authError } = await requireAdminRole(clubId);
@@ -286,7 +366,7 @@ export async function closeTournamentRegistration(
   if (error) return { error: tournamentErrorMessage(error) };
 
   revalidatePath(`/${clubSlug}/admin/tournaments`);
-  revalidatePath(`/${clubSlug}/admin/tournaments/${tournamentId}`);
+  revalidatePath(`/${clubSlug}/tournaments/${tournamentSlug}`);
   return { success: true, tournament: data?.[0] };
 }
 
@@ -295,6 +375,7 @@ export async function closeTournamentRegistration(
 export async function reopenTournamentRegistration(
   clubId: string,
   tournamentId: string,
+  tournamentSlug: string,
   clubSlug: string
 ): Promise<TournamentActionState> {
   const { supabase, error: authError } = await requireAdminRole(clubId);
@@ -307,7 +388,7 @@ export async function reopenTournamentRegistration(
   if (error) return { error: tournamentErrorMessage(error) };
 
   revalidatePath(`/${clubSlug}/admin/tournaments`);
-  revalidatePath(`/${clubSlug}/admin/tournaments/${tournamentId}`);
+  revalidatePath(`/${clubSlug}/tournaments/${tournamentSlug}`);
   return { success: true, tournament: data?.[0] };
 }
 
@@ -316,6 +397,7 @@ export async function reopenTournamentRegistration(
 export async function cancelTournament(
   clubId: string,
   tournamentId: string,
+  tournamentSlug: string,
   clubSlug: string
 ): Promise<TournamentActionState> {
   const { supabase, error: authError } = await requireAdminRole(clubId);
@@ -328,7 +410,7 @@ export async function cancelTournament(
   if (error) return { error: tournamentErrorMessage(error) };
 
   revalidatePath(`/${clubSlug}/admin/tournaments`);
-  revalidatePath(`/${clubSlug}/admin/tournaments/${tournamentId}`);
+  revalidatePath(`/${clubSlug}/tournaments/${tournamentSlug}`);
   return { success: true, tournament: data?.[0] };
 }
 
@@ -338,6 +420,7 @@ export async function cancelTournament(
 export async function startTournament(
   clubId: string,
   tournamentId: string,
+  tournamentSlug: string,
   clubSlug: string
 ): Promise<TournamentActionState> {
   const { supabase, error: authError } = await requireAdminRole(clubId);
@@ -350,7 +433,7 @@ export async function startTournament(
   if (error) return { error: tournamentErrorMessage(error) };
 
   revalidatePath(`/${clubSlug}/admin/tournaments`);
-  revalidatePath(`/${clubSlug}/admin/tournaments/${tournamentId}`);
+  revalidatePath(`/${clubSlug}/tournaments/${tournamentSlug}`);
   return { success: true, tournament: data?.[0] };
 }
 
@@ -361,6 +444,7 @@ export async function startTournament(
 export async function finalizeTournament(
   clubId: string,
   tournamentId: string,
+  tournamentSlug: string,
   clubSlug: string
 ): Promise<TournamentFinalizeState> {
   const { supabase, error: authError } = await requireAdminRole(clubId);
@@ -373,6 +457,6 @@ export async function finalizeTournament(
   if (error) return { error: tournamentErrorMessage(error) };
 
   revalidatePath(`/${clubSlug}/admin/tournaments`);
-  revalidatePath(`/${clubSlug}/admin/tournaments/${tournamentId}`);
+  revalidatePath(`/${clubSlug}/tournaments/${tournamentSlug}`);
   return { success: true, alreadyFinalized: data?.[0]?.already_finalized ?? false };
 }

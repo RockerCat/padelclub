@@ -27,12 +27,13 @@ export function TournamentsGrid({
 
   // Preference per spec: navigate straight to the new tournament's detail
   // page rather than staying on the list — the success toast is shown there
-  // (?created=1, consumed once by TournamentDetailActions) since the list
-  // is left immediately, not refreshed in place.
+  // (?created=1, consumed once by TournamentDetailView) since the list is
+  // left immediately, not refreshed in place. Detail lives at the canonical
+  // URL (/tournaments/[slug], shared with PLAYER), never under /admin/.
   function handleCreateSuccess(tournament: Tournament | undefined) {
     setCreating(false);
     if (tournament) {
-      router.push(`/${clubSlug}/admin/tournaments/${tournament.id}?created=1`);
+      router.push(`/${clubSlug}/tournaments/${tournament.slug}?created=1`);
     } else {
       router.refresh();
     }
@@ -81,7 +82,7 @@ export function TournamentsGrid({
             <TournamentCard
               key={t.id}
               tournament={t}
-              href={`/${clubSlug}/admin/tournaments/${t.id}`}
+              href={`/${clubSlug}/tournaments/${t.slug}`}
               confirmedCount={confirmedCountByTournamentId?.[t.id] ?? 0}
             />
           ))}

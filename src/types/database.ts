@@ -591,9 +591,18 @@ export interface Database {
           id: string;
           club_id: string;
           title: string;
+          // 20261001000001 — URL legible, único por club (UNIQUE
+          // (club_id, slug)). Generado una sola vez al publicar
+          // (create_club_news); nunca se reescribe al editar el título —
+          // la URL compartida debe permanecer estable.
+          slug: string;
           content: string;
           image_url: string;
           created_by: string;
+          // 20260929000001 — cierre editorial del torneo: nullable, noticias
+          // normales nunca lo tocan. Un índice único parcial (WHERE NOT
+          // NULL) garantiza como máximo una noticia por torneo.
+          tournament_id: string | null;
           published_at: string;
           created_at: string;
           updated_at: string;
@@ -602,9 +611,11 @@ export interface Database {
           id?: string;
           club_id: string;
           title: string;
+          slug: string;
           content: string;
           image_url: string;
           created_by: string;
+          tournament_id?: string | null;
           published_at?: string;
           created_at?: string;
           updated_at?: string;
@@ -629,6 +640,13 @@ export interface Database {
             columns: ["created_by"];
             isOneToOne: false;
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "club_news_tournament_id_fkey";
+            columns: ["tournament_id"];
+            isOneToOne: true;
+            referencedRelation: "tournaments";
             referencedColumns: ["id"];
           },
         ];
@@ -911,6 +929,7 @@ export interface Database {
           id: string;
           club_id: string;
           name: string;
+          slug: string;
           description: string | null;
           category: string;
           secondary_category: string | null;
@@ -937,6 +956,7 @@ export interface Database {
           id?: string;
           club_id: string;
           name: string;
+          slug: string;
           description?: string | null;
           category: string;
           secondary_category?: string | null;
@@ -961,6 +981,7 @@ export interface Database {
         };
         Update: {
           name?: string;
+          slug?: string;
           description?: string | null;
           category?: string;
           secondary_category?: string | null;
@@ -1132,6 +1153,20 @@ export interface Database {
       is_club_member: {
         Args: { p_club_id: string };
         Returns: boolean;
+      };
+      // 20261001000002 — publica una noticia con slug único generado y
+      // reintentado de forma segura ante concurrencia (mismo patrón que
+      // create_tournament). tournament_id opcional revalida pertenencia
+      // al club, estado completed y unicidad por torneo.
+      create_club_news: {
+        Args: {
+          p_club_id: string;
+          p_title: string;
+          p_content: string;
+          p_image_url: string;
+          p_tournament_id: string | null;
+        };
+        Returns: Array<Database["public"]["Tables"]["club_news"]["Row"]>;
       };
       // public.create_club_with_owner — atomic club creation + owner bootstrap
       create_club_with_owner: {
@@ -1625,6 +1660,16 @@ export interface Database {
           p_estimated_duration_minutes: number | null;
           p_secondary_category: string | null;
           p_prize_description: string | null;
+          p_cover_image_url: string | null;
+        };
+        Returns: Array<Database["public"]["Tables"]["tournaments"]["Row"]>;
+      };
+      // 20260930000001 — única propiedad editable en cualquier estado del
+      // torneo (a diferencia de update_tournament, que sigue bloqueado
+      // fuera de draft/registration_open/registration_closed).
+      update_tournament_cover_image: {
+        Args: {
+          p_tournament_id: string;
           p_cover_image_url: string | null;
         };
         Returns: Array<Database["public"]["Tables"]["tournaments"]["Row"]>;

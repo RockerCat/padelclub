@@ -25,10 +25,24 @@
 -- luego el resto vía la misma regla que usará el formulario (30 min por
 -- pareja) — nunca deja una fila con valor NULL cuando bastaba con
 -- derivarlo de datos ya existentes.
-ALTER TABLE public.tournaments ADD COLUMN estimated_duration_minutes integer;
+--
+-- IF NOT EXISTS/IF EXISTS en los ALTER TABLE de abajo: hace este archivo
+-- seguro de reintentar tal cual quedó (mismo nombre) después de corregir
+-- el bug real que impedía que corriera completo — ver nota siguiente.
+ALTER TABLE public.tournaments ADD COLUMN IF NOT EXISTS estimated_duration_minutes integer;
 
+-- BUG REAL (causa de que la tabla siguiera con ends_at y sin
+-- estimated_duration_minutes): EXTRACT(EPOCH FROM interval) devuelve
+-- double precision, y Postgres NO tiene round(double precision) — solo
+-- round(numeric)/round(numeric, integer). Cualquier fila con starts_at y
+-- ends_at simultáneamente no nulos hacía fallar este UPDATE con
+-- "function round(double precision) does not exist" (42883); como
+-- Supabase aplica cada archivo de migración dentro de una única
+-- transacción, ese error revertía TODO el archivo — incluido el ADD
+-- COLUMN ya ejecutado — dejando la tabla exactamente como antes. Fix:
+-- castear a numeric antes de round().
 UPDATE public.tournaments
-SET estimated_duration_minutes = GREATEST(1, ROUND(EXTRACT(EPOCH FROM (ends_at - starts_at)) / 60))::integer
+SET estimated_duration_minutes = GREATEST(1, ROUND((EXTRACT(EPOCH FROM (ends_at - starts_at)) / 60)::numeric))::integer
 WHERE starts_at IS NOT NULL AND ends_at IS NOT NULL;
 
 UPDATE public.tournaments
@@ -36,13 +50,15 @@ SET estimated_duration_minutes = max_pairs * 30
 WHERE estimated_duration_minutes IS NULL;
 
 ALTER TABLE public.tournaments
+  DROP CONSTRAINT IF EXISTS tournaments_estimated_duration_positive;
+ALTER TABLE public.tournaments
   ADD CONSTRAINT tournaments_estimated_duration_positive
   CHECK (estimated_duration_minutes IS NULL OR estimated_duration_minutes > 0);
 
 -- tournaments_event_window_valid referenciaba starts_at/ends_at — se cae
 -- junto con la columna, nunca queda huérfana.
-ALTER TABLE public.tournaments DROP CONSTRAINT tournaments_event_window_valid;
-ALTER TABLE public.tournaments DROP COLUMN ends_at;
+ALTER TABLE public.tournaments DROP CONSTRAINT IF EXISTS tournaments_event_window_valid;
+ALTER TABLE public.tournaments DROP COLUMN IF EXISTS ends_at;
 
 DO $$
 BEGIN

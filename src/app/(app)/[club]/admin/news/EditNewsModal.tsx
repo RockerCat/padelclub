@@ -16,7 +16,7 @@ export function EditNewsModal({ clubId, news, onClose, onSuccess }: EditNewsModa
   const boundUpdate = updateNews.bind(null, clubId, news.id);
 
   return (
-    <SettingsModuleModal title="Editar noticia" onClose={onClose} size="lg">
+    <SettingsModuleModal title="Editar noticia" onClose={onClose} size="xl">
       <NewsForm clubId={clubId} news={news} action={boundUpdate} onSuccess={onSuccess} onCancel={onClose} />
     </SettingsModuleModal>
   );
