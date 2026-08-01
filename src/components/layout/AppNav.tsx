@@ -4,8 +4,6 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import {
-  Menu,
-  X,
   LayoutDashboard,
   CalendarDays,
   Users,
@@ -21,6 +19,7 @@ import {
   Swords,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { PlayerAvatar } from "@/components/players/PlayerAvatar";
 import { cn } from "@/lib/utils/cn";
 import { clubHubPath } from "@/lib/clubHubPaths";
 import { ClubHeader } from "./ClubHeader";
@@ -58,6 +57,20 @@ function getDisplayName(identity: SidebarIdentityData): string {
     return local || "Usuario";
   }
   return source || "Usuario";
+}
+
+// Única fuente de "¿esta ruta está activa?" — un item está activo en su
+// propia ruta O en cualquier subruta (`${href}/...`), nunca solo por
+// igualdad exacta. Antes se repetía este mismo par de comparaciones en
+// tres lugares (sidebar de escritorio, tab bar OWNER/ADMIN, y ahora la tab
+// bar del PLAYER); centralizado aquí para que los tres midan "activo"
+// exactamente igual. Cubre todas las rutas reales del PLAYER sin casos
+// especiales: Reservaciones (listado/creación/detalle viven todos en
+// `/[club]/reservations`, nunca una subruta — un id de reserva es un query
+// param, no un segmento) ya empata por igualdad exacta; Torneos sí tiene
+// una subruta real (`/[club]/tournaments/[slug]`) y la cubre el `startsWith`.
+function isNavItemActive(pathname: string, href: string): boolean {
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 interface NavItem {
@@ -199,29 +212,43 @@ function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequest
   return base;
 }
 
-// ─── Mobile tab bar (OWNER/ADMIN only) ─────────────────────────────────────────
-// 6 fixed items, same order/labels regardless of role — OWNER's and ADMIN's
-// navItems now both carry Dashboard/Jugadores/Reservaciones/Torneos/
-// Ranking/Club with identical href/icon (see getNavItems above), so this
-// stays a single shared list. There is no overflow menu anymore — every
-// personal action (Mi Perfil, cambiar/crear club, Salir) lives in the
-// user-name dropdown in the top bar instead (see userMenuOpen below), never
-// duplicated here. href/icon are read straight from navItems — the single
-// source of truth already used by the desktop sidebar — never a second,
-// possibly-drifting hardcoded route list. Dashboard/Reservaciones get a
-// shorter mobile-only label ("Inicio"/"Reservas") — the route itself is
-// untouched.
-const TAB_BAR_LABELS = ["Dashboard", "Jugadores", "Reservaciones", "Torneos", "Ranking", "Club"] as const;
-const TAB_BAR_LABEL_OVERRIDES: Record<string, string> = {
+// ─── Mobile tab bar (todos los roles) ──────────────────────────────────────────
+// OWNER/ADMIN: 6 items fijos, mismo orden/labels para ambos — sus navItems
+// ya traen Dashboard/Jugadores/Reservaciones/Torneos/Ranking/Club con
+// href/icon idénticos (ver getNavItems arriba), así que sigue siendo una
+// sola lista compartida. Sin menú "Más": toda acción personal (Mi Perfil,
+// cambiar/crear club, Salir) vive en el menú de usuario del top bar (ver
+// userMenuOpen). Dashboard/Reservaciones usan una etiqueta más corta
+// ("Inicio"/"Reservas") solo en esta tab bar — la ruta real no cambia.
+//
+// PLAYER: 5 items, mismo orden en que ya los devuelve getNavItems
+// (Dashboard, Página del club, Reservaciones, Ranking, Torneos) — caben
+// todos sin menú "Más" y sin abreviar labels (a diferencia de OWNER/ADMIN,
+// que sí las abrevia por tener un ítem más).
+//
+// Ambos casos leen href/icon directamente de navItems — nunca una segunda
+// lista de rutas hardcodeada que pueda desalinearse del sidebar de
+// escritorio.
+const OWNER_ADMIN_TAB_BAR_LABELS = ["Dashboard", "Jugadores", "Reservaciones", "Torneos", "Ranking", "Club"] as const;
+const OWNER_ADMIN_TAB_BAR_LABEL_OVERRIDES: Record<string, string> = {
   Dashboard: "Inicio",
   Reservaciones: "Reservas",
 };
 
-function getTabBarItems(navItems: NavItem[]): NavItem[] {
+const PLAYER_TAB_BAR_LABELS = ["Dashboard", "Página del club", "Reservaciones", "Ranking", "Torneos"] as const;
+
+function getTabBarItems(navItems: NavItem[], role: AppNavProps["role"]): NavItem[] {
   const byLabel = new Map(navItems.map((item) => [item.label, item] as const));
-  return TAB_BAR_LABELS.map((label) => byLabel.get(label))
+
+  if (role === "PLAYER") {
+    return PLAYER_TAB_BAR_LABELS.map((label) => byLabel.get(label)).filter((item): item is NavItem => !!item);
+  }
+
+  return OWNER_ADMIN_TAB_BAR_LABELS.map((label) => byLabel.get(label))
     .filter((item): item is NavItem => !!item)
-    .map((item) => (TAB_BAR_LABEL_OVERRIDES[item.label] ? { ...item, label: TAB_BAR_LABEL_OVERRIDES[item.label] } : item));
+    .map((item) =>
+      OWNER_ADMIN_TAB_BAR_LABEL_OVERRIDES[item.label] ? { ...item, label: OWNER_ADMIN_TAB_BAR_LABEL_OVERRIDES[item.label] } : item
+    );
 }
 
 function MobileTabBarItem({
@@ -321,10 +348,7 @@ function NavContent({
       {/* Nav items */}
       <ul className="flex-1 p-3 flex flex-col gap-0.5 overflow-y-auto">
         {navItems.map((item) => {
-          const isActive = item.href
-            ? pathname === item.href ||
-              pathname.startsWith(item.href + "/")
-            : false;
+          const isActive = item.href ? isNavItemActive(pathname, item.href) : false;
           const Icon = item.icon;
 
           if (item.disabled) {
@@ -493,14 +517,11 @@ export function AppNav({
 }: AppNavProps) {
   const router = useRouter();
   const pathname = usePathname();
-  // PLAYER keeps its existing mobile pattern untouched (hamburger + full
-  // drawer reusing NavContent) — only OWNER/ADMIN get the new top bar + tab
-  // bar below, per this task's explicit scope.
-  const [mobileOpen, setMobileOpen] = useState(false);
-  // OWNER/ADMIN mobile-only user menu, opened from the name button in the
-  // top bar (never an avatar-only trigger) — Mi Perfil/Cambiar de
-  // club/Crear otro club (OWNER)/Salir. Separate from mobileOpen (PLAYER's
-  // drawer) so neither role's state interferes with the other's UI.
+  // Menú de usuario mobile — compartido por los tres roles (cada uno monta
+  // su propio trigger/panel, nunca los dos a la vez, ver los dos bloques
+  // "role === PLAYER ? ... : ..." más abajo): Mi Perfil/Cambiar de
+  // club/Crear otro club (OWNER)/Salir para OWNER/ADMIN; Mi Perfil/Cambiar
+  // de club/Salir para PLAYER.
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuTriggerRef = useRef<HTMLButtonElement>(null);
 
@@ -544,9 +565,11 @@ export function AppNav({
     router.push("/");
   }
 
-  function closeMobile() {
-    setMobileOpen(false);
-  }
+  // Ningún rol tiene ya un drawer mobile que cerrar (PLAYER lo tenía; se
+  // retiró en este mismo cambio) — se mantiene como no-op porque NavContent
+  // (compartido, sidebar de escritorio de los tres roles) sigue exigiendo
+  // un onLinkClick por contrato, y tocar esa interfaz no aporta nada aquí.
+  function closeMobile() {}
 
   // Escape closes the user menu and returns focus to its trigger — same
   // accessible-menu behavior as the existing ContextMenu primitive.
@@ -563,7 +586,7 @@ export function AppNav({
   }, [userMenuOpen]);
 
   const navItems = getNavItems(club.slug, role, pendingJoinRequests);
-  const tabBarItems = getTabBarItems(navItems);
+  const tabBarItems = getTabBarItems(navItems, role);
   const displayName = getDisplayName(identity);
 
   return (
@@ -593,75 +616,142 @@ export function AppNav({
 
       {role === "PLAYER" ? (
         <>
-          {/* Mobile top bar — PLAYER, unchanged */}
-          <div className="md:hidden flex items-center justify-between px-4 py-3 bg-brand-surface border-b border-white/10 sticky top-0 z-40">
-            <div className="flex items-center gap-2.5 min-w-0 mr-2">
-              <div
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden ring-1 ring-white/10"
-                style={
-                  !club.logo_url
-                    ? { backgroundColor: `${CLUB_PRIMARY_COLOR}22`, color: CLUB_PRIMARY_COLOR }
-                    : undefined
-                }
-              >
-                {club.logo_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={club.logo_url}
-                    alt={`Logo de ${club.name}`}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  getInitials(club.name)
-                )}
+          {/* Mobile top bar — PLAYER, mismo patrón aprobado para OWNER/ADMIN
+              (bloque análogo más abajo): identidad del CLUB a la izquierda
+              (logo/nombre/rol — nunca la del usuario), campana + trigger de
+              usuario a la derecha. Reemplaza por completo el hamburger +
+              drawer lateral que tenía antes. Estructura/clases idénticas al
+              bloque OWNER/ADMIN a propósito (mismo patrón visual), pero
+              mantenidas como bloques separados en vez de un componente
+              compartido — así ningún cambio aquí puede tocar, ni por
+              accidente, la navegación de OWNER/ADMIN, que queda intacta. */}
+          <div className="md:hidden sticky top-0 z-50">
+            <div
+              className="flex items-center justify-between gap-2 px-4 bg-brand-surface border-b border-white/10 pb-3"
+              style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))" }}
+            >
+              <div className="flex items-center gap-2.5 min-w-0 mr-2">
+                <div
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden ring-1 ring-white/10"
+                  style={
+                    !club.logo_url
+                      ? { backgroundColor: `${CLUB_PRIMARY_COLOR}22`, color: CLUB_PRIMARY_COLOR }
+                      : undefined
+                  }
+                >
+                  {club.logo_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={club.logo_url}
+                      alt={`Logo de ${club.name}`}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    getInitials(club.name)
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white truncate">{club.name}</p>
+                  <p className="text-[11px] text-brand-muted truncate">{clubRoleLabel(role)}</p>
+                </div>
               </div>
-              <span className="text-sm font-semibold text-white truncate">
-                {club.name}
-              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <NotificationBell initialCount={notificationCount} initialItems={notificationItems} />
+                <button
+                  ref={userMenuTriggerRef}
+                  type="button"
+                  onClick={() => setUserMenuOpen((prev) => !prev)}
+                  aria-label="Menú de usuario"
+                  aria-haspopup="menu"
+                  aria-expanded={userMenuOpen}
+                  className="flex items-center gap-1.5 pl-1 pr-1.5 py-1 rounded-full ring-1 ring-white/10 hover:ring-white/30 transition-colors max-w-[160px]"
+                >
+                  <PlayerAvatar player={{ id: null, full_name: identity.name, avatar_url: identity.avatarUrl }} size="sm" />
+                  <span className="text-sm font-medium text-white truncate">{displayName}</span>
+                  <ChevronDown className={cn("w-4 h-4 text-brand-muted shrink-0 transition-transform", userMenuOpen && "rotate-180")} />
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <NotificationBell initialCount={notificationCount} initialItems={notificationItems} />
-              <button
-                onClick={() => setMobileOpen((prev) => !prev)}
-                className="p-2 rounded-xl text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
-                aria-label="Abrir menú"
-              >
-                {mobileOpen ? (
-                  <X className="w-5 h-5" />
-                ) : (
-                  <Menu className="w-5 h-5" />
-                )}
-              </button>
-            </div>
+
+            {userMenuOpen && (
+              <>
+                {/* Click-away overlay — igual patrón que OWNER/ADMIN: por
+                    encima del top bar y de la tab bar (ambos z-40/z-50),
+                    muy por debajo de cualquier modal real. */}
+                <div
+                  className="fixed inset-0 z-[45]"
+                  onClick={() => setUserMenuOpen(false)}
+                />
+                <div
+                  role="menu"
+                  aria-label="Menú de usuario"
+                  className="absolute right-4 top-full mt-2 z-50 w-64 max-w-[80vw] rounded-2xl border border-white/10 bg-brand-surface shadow-2xl overflow-hidden"
+                >
+                  <div className="p-2 flex flex-col gap-0.5">
+                    <Link
+                      href="/profile"
+                      role="menuitem"
+                      onClick={() => setUserMenuOpen(false)}
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors",
+                        pathname === "/profile"
+                          ? "text-white bg-brand-primary/5"
+                          : "text-brand-muted hover:text-white hover:bg-brand-primary/5"
+                      )}
+                    >
+                      <User className="w-4 h-4 shrink-0" />
+                      <span>Mi Perfil</span>
+                    </Link>
+                    {/* Siempre visible para PLAYER (nunca condicionado a
+                        membershipCount, a diferencia de OWNER/ADMIN) y
+                        siempre hacia /clubs — nunca "Salir del club", que
+                        queda oculto (ver comentario junto a LeaveClubButton
+                        en NavContent). */}
+                    <Link
+                      href="/clubs"
+                      role="menuitem"
+                      onClick={() => setUserMenuOpen(false)}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
+                    >
+                      <ArrowLeftRight className="w-4 h-4 shrink-0" />
+                      <span>Cambiar de club</span>
+                    </Link>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        handleLogout();
+                      }}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors w-full text-left"
+                    >
+                      <LogOut className="w-4 h-4 shrink-0" />
+                      <span>Salir</span>
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
-          {/* Mobile drawer — PLAYER, unchanged */}
-          {mobileOpen && (
-            <div className="md:hidden fixed inset-0 z-30 flex">
-              {/* Overlay */}
-              <div
-                className="absolute inset-0 bg-black/60"
-                onClick={closeMobile}
+          {/* Bottom tab bar — PLAYER, mobile only. Mismo componente
+              (MobileTabBarItem) y misma estructura que la tab bar
+              OWNER/ADMIN, solo con los 5 items de tabBarItems (ver
+              getTabBarItems) en vez de 6 — se distribuyen parejo por el
+              `flex-1` que ya trae ese componente, sin cambios. */}
+          <nav
+            className="md:hidden fixed inset-x-0 bottom-0 z-40 flex items-stretch bg-brand-surface border-t border-white/10"
+            style={{ paddingBottom: "max(0.25rem, env(safe-area-inset-bottom))" }}
+            aria-label="Navegación principal"
+          >
+            {tabBarItems.map((item) => (
+              <MobileTabBarItem
+                key={item.label}
+                item={item}
+                isActive={item.href ? isNavItemActive(pathname, item.href) : false}
               />
-              {/* Drawer */}
-              <div className="relative z-10 w-72 max-w-[85vw] bg-brand-surface border-r border-white/10 h-full flex flex-col">
-                <NavContent
-                  club={club}
-                  role={role}
-                  membershipCount={membershipCount}
-                  navItems={navItems}
-                  pathname={pathname}
-                  notificationCount={notificationCount}
-                  notificationItems={notificationItems}
-                  identity={identity}
-                  onLinkClick={closeMobile}
-                  onLogout={handleLogout}
-                  onOpenChangeClub={handleOpenChangeClub}
-                  onOpenCreateClub={handleOpenCreateClub}
-                />
-              </div>
-            </div>
-          )}
+            ))}
+          </nav>
         </>
       ) : (
         <>
@@ -822,9 +912,7 @@ export function AppNav({
               <MobileTabBarItem
                 key={item.label}
                 item={item}
-                isActive={
-                  item.href ? pathname === item.href || pathname.startsWith(item.href + "/") : false
-                }
+                isActive={item.href ? isNavItemActive(pathname, item.href) : false}
               />
             ))}
           </nav>

@@ -107,11 +107,10 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
         </div>
       )}
 
-      {/* Bottom padding only for OWNER/ADMIN on mobile — clears the new fixed
-          tab bar (AppNav) so the last elements of a page are never hidden
-          behind it; PLAYER keeps its existing drawer-only mobile nav with no
-          fixed bottom element, so it needs no extra space reserved. */}
-      <main className={role === "PLAYER" ? "flex-1 min-w-0" : "flex-1 min-w-0 pb-28 md:pb-0"}>{children}</main>
+      {/* Bottom padding on mobile for every role — all three (OWNER, ADMIN,
+          PLAYER) now render AppNav's fixed bottom tab bar on mobile, so the
+          last elements of any page must never end up hidden behind it. */}
+      <main className="flex-1 min-w-0 pb-28 md:pb-0">{children}</main>
     </ClubThemeProvider>
   );
 }
