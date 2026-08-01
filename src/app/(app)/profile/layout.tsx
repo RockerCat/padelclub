@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AppNav } from "@/components/layout/AppNav";
 import { ClubThemeProvider } from "@/components/layout/ClubThemeProvider";
 import { NotificationBell } from "@/components/layout/NotificationBell";
+import Footer from "@/components/layout/Footer";
 import { getPendingJoinRequestsCount } from "@/lib/joinRequests";
 import { getUnreadNotificationCount, getRecentNotifications } from "@/lib/notifications";
 import { getSidebarIdentity } from "@/lib/userIdentity";
@@ -63,6 +64,7 @@ export default async function ProfileLayout({ children }: { children: React.Reac
           </div>
         </div>
         <main className="flex-1 min-w-0">{children}</main>
+        <Footer />
       </div>
     );
   }
@@ -78,18 +80,22 @@ export default async function ProfileLayout({ children }: { children: React.Reac
 
   return (
     <ClubThemeProvider>
-      <AppNav
-        club={active.club}
-        role={active.role as ClubRole}
-        membershipCount={count ?? 1}
-        pendingJoinRequests={pendingJoinRequests}
-        notificationCount={notificationCount}
-        notificationItems={notificationItems}
-        identity={identity}
-      />
-      <main className={active.role === "PLAYER" ? "flex-1 min-w-0" : "flex-1 min-w-0 pb-28 md:pb-0"}>
-        {children}
-      </main>
+      {/* Misma fila sidebar+contenido que [club]/layout.tsx (ver ese
+          archivo) — el Footer queda fuera, como hermano siguiente, para
+          abarcar todo el ancho. */}
+      <div className="flex flex-col md:flex-row flex-1">
+        <AppNav
+          club={active.club}
+          role={active.role as ClubRole}
+          membershipCount={count ?? 1}
+          pendingJoinRequests={pendingJoinRequests}
+          notificationCount={notificationCount}
+          notificationItems={notificationItems}
+          identity={identity}
+        />
+        <main className="flex-1 min-w-0">{children}</main>
+      </div>
+      <Footer />
     </ClubThemeProvider>
   );
 }

@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState, useEffect } from "react";
-import { Menu, X } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { useState } from "react";
+import { Menu, X, ChevronDown } from "lucide-react";
+import { RegisterMenu } from "@/components/features/marketing/RegisterMenu";
 
 const navLinks = [
   { label: "Características", href: "#features" },
@@ -35,14 +35,6 @@ function Brand() {
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [createClubHref, setCreateClubHref] = useState("/auth/signup");
-
-  useEffect(() => {
-    const supabase = createClient();
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) setCreateClubHref("/clubs/create");
-    });
-  }, []);
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-brand-bg/80 backdrop-blur-md">
@@ -70,12 +62,16 @@ export default function Navbar() {
             >
               Iniciar sesión
             </Link>
-            <Link
-              href={createClubHref}
-              className="rounded-lg bg-brand-primary px-4 py-2 text-sm font-semibold text-brand-bg hover:bg-brand-primary/90 transition-colors"
-            >
-              Crear mi club
-            </Link>
+            <RegisterMenu
+              align="right"
+              triggerClassName="inline-flex items-center gap-1.5 rounded-lg bg-brand-primary px-4 py-2 text-sm font-semibold text-brand-bg hover:bg-brand-primary/90 transition-colors"
+              triggerContent={
+                <>
+                  Registrarme
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </>
+              }
+            />
           </div>
 
           <button
@@ -108,13 +104,16 @@ export default function Navbar() {
             >
               Iniciar sesión
             </Link>
-            <Link
-              href={createClubHref}
-              className="rounded-lg bg-brand-primary px-4 py-2.5 text-sm font-semibold text-brand-bg text-center hover:bg-brand-primary/90 transition-colors"
-              onClick={() => setMobileOpen(false)}
-            >
-              Crear mi club
-            </Link>
+            <RegisterMenu
+              align="left"
+              triggerClassName="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand-primary px-4 py-2.5 text-sm font-semibold text-brand-bg hover:bg-brand-primary/90 transition-colors"
+              triggerContent={
+                <>
+                  Registrarme
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </>
+              }
+            />
           </div>
         </div>
       )}

@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { LayoutDashboard, ClipboardList, Search, Check } from "lucide-react";
-
-const WA_URL =
-  "https://wa.me/573173672033?text=Hola%2C%20quiero%20conocer%20m%C3%A1s%20sobre%20MiPadelClub%20para%20mi%20club%20de%20p%C3%A1del.";
+import { LayoutDashboard, ClipboardList, Search, Check, ChevronDown } from "lucide-react";
+import { RegisterMenu } from "./RegisterMenu";
+import { MARKETING_WA_URL as WA_URL } from "@/lib/constants/marketingWhatsapp";
 
 const profiles = [
   {
@@ -39,14 +38,14 @@ const profiles = [
     icon: Search,
     iconColor: "secondary" as const,
     role: "Jugador",
-    description: "Descubre dónde jugar y reserva canchas sin llamar a nadie.",
+    description: "Reserva canchas y sigue tu propia evolución dentro del club.",
     benefits: [
-      "Explorar clubes disponibles",
       "Reservar canchas en línea",
       "Ver disponibilidad en tiempo real",
-      "Solicitar reservas al instante",
       "Participar en torneos",
-      "Seguir el ranking del club",
+      "Seguir tu ranking y categoría",
+      "Ver tu evolución y logros",
+      "Noticias del club",
     ],
     prominent: false,
   },
@@ -139,18 +138,23 @@ export default function Audience() {
 
           <div className="relative">
             <h3 className="mb-4 text-3xl font-bold tracking-tight text-white sm:text-4xl lg:text-5xl">
-              Empieza hoy. Sin complicaciones.
+              Los clubes crecen cuando sus jugadores participan.
             </h3>
             <p className="mx-auto mb-10 max-w-xl text-lg leading-relaxed text-brand-muted">
-              Crea tu club y empieza a gestionar desde el primer día — o regístrate como jugador y descubre los clubes disponibles.
+              MiPadelClub reúne administración, competencia y comunidad en una sola plataforma — para que tu club
+              opere mejor y tus jugadores quieran volver cada semana.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3 mb-5">
-              <Link
-                href="/clubs/create"
-                className="inline-flex items-center rounded-xl bg-brand-primary px-7 py-3.5 text-base font-semibold text-brand-bg shadow-lg shadow-brand-primary/20 transition-colors hover:bg-brand-primary/90"
-              >
-                Crear mi club
-              </Link>
+              <RegisterMenu
+                align="left"
+                triggerClassName="inline-flex items-center gap-2 rounded-xl bg-brand-primary px-7 py-3.5 text-base font-semibold text-brand-bg shadow-lg shadow-brand-primary/20 transition-colors hover:bg-brand-primary/90"
+                triggerContent={
+                  <>
+                    Registrarme
+                    <ChevronDown className="h-4 w-4" />
+                  </>
+                }
+              />
               <Link
                 href="/clubs"
                 className="inline-flex items-center rounded-xl border border-white/20 px-7 py-3.5 text-base font-semibold text-white transition-colors hover:bg-white/5"

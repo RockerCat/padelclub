@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AppNav } from "@/components/layout/AppNav";
 import { ClubThemeProvider } from "@/components/layout/ClubThemeProvider";
 import { UpdateLastClub } from "@/components/layout/UpdateLastClub";
+import Footer from "@/components/layout/Footer";
 import { getPendingJoinRequestsCount } from "@/lib/joinRequests";
 import { getUnreadNotificationCount, getRecentNotifications } from "@/lib/notifications";
 import { getSidebarIdentity } from "@/lib/userIdentity";
@@ -85,32 +86,38 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
   return (
     <ClubThemeProvider>
       <UpdateLastClub clubId={club.id} />
-      <AppNav
-        club={club}
-        role={role}
-        membershipCount={membershipCount}
-        pendingJoinRequests={pendingJoinRequests}
-        notificationCount={notificationCount}
-        notificationItems={notificationItems}
-        identity={identity}
-      />
-      {/* OWNER-only: the real enforcement is server-side (every write RPC
-          rejects an archived club) — this is just visibility, per CLAUDE.md
-          → Notifications & Live-Update Principles' spirit of never hiding
-          state behind silence. ADMIN/PLAYER learn about it inline, only
-          when they actually attempt a blocked operation. */}
-      {role === "OWNER" && club.archived_at && (
-        <div className="px-4 md:px-6 pt-4">
-          <div className="rounded-xl border border-amber-400/20 bg-amber-400/5 px-4 py-3 text-sm text-amber-300">
-            Este club está archivado. Ya no acepta nuevas reservas, solicitudes de ingreso ni invitaciones. Toda la información histórica se conserva.
-          </div>
-        </div>
-      )}
+      {/* Fila sidebar+contenido — recrea el `md:flex-row` que antes vivía
+          en ClubThemeProvider, ahora acotado a este único hijo para que el
+          Footer (hermano siguiente, ver abajo) quede fuera de la fila y
+          abarque todo el ancho, nunca apretado como tercera columna. */}
+      <div className="flex flex-col md:flex-row flex-1">
+        <AppNav
+          club={club}
+          role={role}
+          membershipCount={membershipCount}
+          pendingJoinRequests={pendingJoinRequests}
+          notificationCount={notificationCount}
+          notificationItems={notificationItems}
+          identity={identity}
+        />
+        <div className="flex-1 min-w-0 flex flex-col">
+          {/* OWNER-only: the real enforcement is server-side (every write RPC
+              rejects an archived club) — this is just visibility, per CLAUDE.md
+              → Notifications & Live-Update Principles' spirit of never hiding
+              state behind silence. ADMIN/PLAYER learn about it inline, only
+              when they actually attempt a blocked operation. */}
+          {role === "OWNER" && club.archived_at && (
+            <div className="px-4 md:px-6 pt-4">
+              <div className="rounded-xl border border-amber-400/20 bg-amber-400/5 px-4 py-3 text-sm text-amber-300">
+                Este club está archivado. Ya no acepta nuevas reservas, solicitudes de ingreso ni invitaciones. Toda la información histórica se conserva.
+              </div>
+            </div>
+          )}
 
-      {/* Bottom padding on mobile for every role — all three (OWNER, ADMIN,
-          PLAYER) now render AppNav's fixed bottom tab bar on mobile, so the
-          last elements of any page must never end up hidden behind it. */}
-      <main className="flex-1 min-w-0 pb-28 md:pb-0">{children}</main>
+          <main className="flex-1 min-w-0">{children}</main>
+        </div>
+      </div>
+      <Footer />
     </ClubThemeProvider>
   );
 }

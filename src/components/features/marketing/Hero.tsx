@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { Calendar, BarChart2, Trophy, Users, MapPin } from "lucide-react";
+import { ChevronDown, Calendar, BarChart2, Trophy, Users } from "lucide-react";
+import { RegisterMenu } from "./RegisterMenu";
+import { MARKETING_WA_URL as WA_URL } from "@/lib/constants/marketingWhatsapp";
 
 // ─── Mockup cards ────────────────────────────────────────────────────────────
 
@@ -109,17 +111,17 @@ function TorneoCard() {
       <CardHeader icon={Trophy} label="Torneo Primavera" />
       <div className="space-y-1.5 mb-3">
         <div className="flex justify-between items-center">
-          <span className="text-xs text-brand-muted">Jugadores</span>
-          <span className="text-xs font-semibold text-white">32</span>
+          <span className="text-xs text-brand-muted">Duplas inscritas</span>
+          <span className="text-xs font-semibold text-white">14/16</span>
         </div>
         <div className="flex justify-between items-center">
-          <span className="text-xs text-brand-muted">Fase</span>
-          <span className="text-xs font-semibold text-white">Octavos</span>
+          <span className="text-xs text-brand-muted">Categoría</span>
+          <span className="text-xs font-semibold text-white">4a</span>
         </div>
       </div>
       <div className="inline-flex items-center gap-1.5 rounded-full bg-brand-primary/15 px-2.5 py-1">
         <span className="h-1.5 w-1.5 rounded-full bg-brand-primary" />
-        <span className="text-xs font-medium text-brand-primary">En progreso</span>
+        <span className="text-xs font-medium text-brand-primary">Inscripciones abiertas</span>
       </div>
     </div>
   );
@@ -146,15 +148,12 @@ function ProductMockup() {
   );
 }
 
-const WA_URL =
-  "https://wa.me/573173672033?text=Hola%2C%20quiero%20conocer%20m%C3%A1s%20sobre%20MiPadelClub%20para%20mi%20club%20de%20p%C3%A1del.";
-
 // ─── Feature highlights ───────────────────────────────────────────────────────
 
 const highlights = [
-  { icon: Calendar, label: "Reservas", sub: "Gestiona tus canchas" },
-  { icon: MapPin, label: "Directorio", sub: "Descubre dónde jugar" },
-  { icon: BarChart2, label: "Rankings", sub: "Motiva tu comunidad" },
+  { icon: Calendar, label: "Reservas", sub: "Canchas y disponibilidad" },
+  { icon: Trophy, label: "Torneos", sub: "Inscripciones y clasificación" },
+  { icon: BarChart2, label: "Ranking", sub: "Evolución de cada jugador" },
 ];
 
 // ─── Hero ─────────────────────────────────────────────────────────────────────
@@ -191,41 +190,35 @@ export default function Hero() {
 
             {/* Headline */}
             <h1 className="text-5xl sm:text-6xl lg:text-[3.5rem] font-bold leading-[1.06] tracking-tight text-white">
-              Más pádel.
+              La plataforma que conecta
               <br />
-              <span className="text-brand-primary">Para clubs y jugadores.</span>
+              <span className="text-brand-primary">tu club y tus jugadores.</span>
             </h1>
 
             {/* Subheadline */}
-            <p className="mt-6 text-lg text-brand-muted leading-relaxed max-w-[420px]">
-              Gestiona reservas, jugadores y rankings si administras un club —
-              o descubre dónde jugar y reserva canchas si eres jugador.
+            <p className="mt-6 text-lg text-brand-muted leading-relaxed max-w-[460px]">
+              Desde un solo lugar: administra tu club, gestiona reservas, organiza
+              torneos, publica noticias y mantén tu ranking al día — mientras cada
+              jugador vive una experiencia deportiva completa.
             </p>
 
-            {/* Dual CTAs */}
-            <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-[420px]">
-              <div className="flex flex-col gap-2">
-                <p className="text-xs font-medium text-brand-muted">
-                  ¿Administras un club?
-                </p>
-                <Link
-                  href="/clubs/create"
-                  className="rounded-xl bg-brand-primary px-5 py-3.5 text-base font-semibold text-brand-bg text-center hover:bg-brand-primary/90 transition-colors shadow-lg shadow-brand-primary/20"
-                >
-                  Crear mi club
-                </Link>
-              </div>
-              <div className="flex flex-col gap-2">
-                <p className="text-xs font-medium text-brand-muted">
-                  ¿Buscas dónde jugar?
-                </p>
-                <Link
-                  href="/clubs"
-                  className="rounded-xl border border-white/20 px-5 py-3.5 text-base font-semibold text-white text-center hover:bg-white/5 transition-colors"
-                >
-                  Explorar clubes →
-                </Link>
-              </div>
+            {/* Primary CTA */}
+            <div className="mt-10 flex flex-col sm:flex-row sm:items-center gap-4 max-w-[460px]">
+              <RegisterMenu
+                triggerClassName="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-brand-primary px-7 py-3.5 text-base font-semibold text-brand-bg hover:bg-brand-primary/90 transition-colors shadow-lg shadow-brand-primary/20"
+                triggerContent={
+                  <>
+                    Registrarme
+                    <ChevronDown className="h-4 w-4" />
+                  </>
+                }
+              />
+              <Link
+                href="/clubs"
+                className="inline-flex items-center justify-center rounded-xl border border-white/20 px-5 py-3.5 text-base font-semibold text-white text-center hover:bg-white/5 transition-colors"
+              >
+                Explorar clubes →
+              </Link>
             </div>
 
             {/* WhatsApp — secondary, sales only */}
