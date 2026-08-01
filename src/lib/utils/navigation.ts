@@ -8,12 +8,13 @@ import { clubHubPath } from "@/lib/clubHubPaths";
  *
  * OWNER  → dashboard (operational home for configured clubs)
  * ADMIN  → reservations (daily operations starting point)
- * PLAYER → home (member's home: reservations/requests first, club info below)
+ * PLAYER → dashboard (personal sport dashboard — same URL as OWNER's, the
+ *          page itself branches by role; see [club]/dashboard/page.tsx)
  */
 export function getClubEntryPath(slug: string, role: string): string {
   if (role === "OWNER") return `/${slug}/dashboard`;
   if (role === "ADMIN") return `/${slug}/admin/reservations`;
-  return `/${slug}/home`;
+  return `/${slug}/dashboard`;
 }
 
 type MembershipRow = { role: string; clubs: { id: string; slug: string; archived_at: string | null } };

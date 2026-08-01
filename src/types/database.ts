@@ -1626,6 +1626,29 @@ export interface Database {
           points_reached_at: string;
         }>;
       };
+      // public.get_my_club_sport_profile — Dashboard deportivo del PLAYER
+      // (20261002000002); self-only, deriva club_member_id de auth.uid() +
+      // p_club_id, nunca lo recibe como parámetro. category/currentPoints/
+      // rankingPosition/rankingTotal reflejan siempre exactamente lo que
+      // /ranking mostraría; evolution es la reconstrucción honesta desde
+      // club_player_point_movements (ver comentario de la migración).
+      get_my_club_sport_profile: {
+        Args: { p_club_id: string };
+        Returns: {
+          category: string | null;
+          currentPoints: number;
+          rankingPosition: number | null;
+          rankingTotal: number;
+          recentCategoryChange: {
+            previousCategory: string;
+            newCategory: string;
+            changeType: string;
+            createdAt: string;
+          } | null;
+          everPromoted: boolean;
+          evolution: Array<{ snapshotAt: string; points: number; rankingPosition: number }>;
+        };
+      };
       // public.get_club_member_email — OWNER/ADMIN only; profiles has no
       // email column, the real value lives in auth.users only reachable
       // via a SECURITY DEFINER join (20260828000001)

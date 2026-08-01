@@ -45,6 +45,8 @@ import { StatusDistributionChart } from "../admin/statistics/StatusDistributionC
 import { CourtUsageList } from "../admin/statistics/CourtUsageList";
 import { WeekdayActivityChart } from "../admin/statistics/WeekdayActivityChart";
 import { HourlySlotsChart } from "../admin/statistics/HourlySlotsChart";
+import { loadPlayerDashboardData } from "./player/loadPlayerDashboardData";
+import { PlayerDashboardView } from "./player/PlayerDashboardView";
 
 interface DashboardPageProps {
   params: Promise<{ club: string }>;
@@ -308,13 +310,36 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
 
   const { data: membership } = await supabase
     .from("club_members")
-    .select("role")
+    .select("id, role")
     .eq("club_id", club.id)
     .eq("profile_id", user.id)
     .eq("is_active", true)
     .single();
   if (!membership) redirect("/unauthorized");
-  if (!["OWNER", "ADMIN"].includes(membership.role)) redirect(`/${slug}`);
+
+  // PLAYER gets its own personal sport Dashboard at this exact same URL
+  // (see getClubEntryPath) — a totally different composition/view, never a
+  // reduced copy of the OWNER/ADMIN operational dashboard below. Nothing
+  // past this branch (queries, tabs, KPIs) ever runs for a PLAYER.
+  if (membership.role === "PLAYER") {
+    const todayStrForPlayer = toDateStr(new Date());
+    const data = await loadPlayerDashboardData(
+      supabase,
+      club.id,
+      slug,
+      membership.id,
+      user.id,
+      user.email ?? null,
+      todayStrForPlayer
+    );
+    return (
+      <div className="p-4 md:p-8 max-w-5xl mx-auto">
+        <PlayerDashboardView clubSlug={slug} clubName={club.name} {...data} />
+      </div>
+    );
+  }
+
+  if (membership.role !== "OWNER" && membership.role !== "ADMIN") redirect(`/${slug}`);
 
   // ─── Date ranges ─────────────────────────────────────────────────────────────
   const now = new Date();

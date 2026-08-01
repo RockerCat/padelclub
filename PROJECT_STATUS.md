@@ -3,7 +3,8 @@
 ## Estado General
 
 * Estado: Validation Gate 1.0
-* Última actualización: 31 de julio de 2026 (Reconstrucción del núcleo de Torneos: se retiró por completo la arquitectura de cuadro eliminatorio — bracket, partidos, programación de canchas, premiación por posición de bracket — y se reemplazó por un modelo más simple, evento de club con inscripciones, clasificación por puntos editada directamente por OWNER/ADMIN y `finalize_tournament` como cierre idempotente que aplica esos puntos al ranking. Sobre ese nuevo modelo: clasificación en vivo rediseñada (medallas reales, fila uniforme, edición de puntos inline), vista de torneo finalizado con podio real en todo ancho de pantalla — incluido mobile — con soporte genuino de empates en cualquier posición, confetti de celebración repetido mientras la pestaña está visible, portada del torneo editable en cualquier estado, cierre editorial que genera una noticia trazada al torneo (`club_news.tournament_id`, máximo una por torneo garantizado por índice único), y URLs legibles por slug tanto para torneos como para noticias, con avatares reales de campeones en el detalle de una noticia de torneo. Ver Módulo de Torneos y CLAUDE.md → Tournament Module Principles)
+* Última actualización: 1 de agosto de 2026 (Dashboard deportivo personal del PLAYER, nuevo punto de entrada al club en `/[club]/dashboard` — bifurca la misma ruta del Dashboard OWNER/ADMIN por rol, sin tocar ese dashboard. Encabezado deportivo con tendencia de ranking, próxima actividad, evolución de puntos/posición reconstruida desde el ledger real, resumen deportivo, mis torneos con clasificación oficial, logros calculados dinámicamente y actividad reciente unificada. Una sola RPC nueva, self-only: `get_my_club_sport_profile`. Ver Dashboard del PLAYER)
+* Actualización anterior: 31 de julio de 2026 (Reconstrucción del núcleo de Torneos: se retiró por completo la arquitectura de cuadro eliminatorio — bracket, partidos, programación de canchas, premiación por posición de bracket — y se reemplazó por un modelo más simple, evento de club con inscripciones, clasificación por puntos editada directamente por OWNER/ADMIN y `finalize_tournament` como cierre idempotente que aplica esos puntos al ranking. Sobre ese nuevo modelo: clasificación en vivo rediseñada (medallas reales, fila uniforme, edición de puntos inline), vista de torneo finalizado con podio real en todo ancho de pantalla — incluido mobile — con soporte genuino de empates en cualquier posición, confetti de celebración repetido mientras la pestaña está visible, portada del torneo editable en cualquier estado, cierre editorial que genera una noticia trazada al torneo (`club_news.tournament_id`, máximo una por torneo garantizado por índice único), y URLs legibles por slug tanto para torneos como para noticias, con avatares reales de campeones en el detalle de una noticia de torneo. Ver Módulo de Torneos y CLAUDE.md → Tournament Module Principles)
 * Actualización anterior: 29 de julio de 2026 (Módulo de Torneos llevado de punta a punta sobre la arquitectura de bracket ya retirada — ver entrada más reciente; en su momento incluyó programación de partidos/canchas, registro y corrección de resultados con cierre automático del torneo, premiación deportiva con resumen de puntos, y noticia asistida tras finalizar. Ranking llevado a Fase 2: UI administrativa completa, Ranking público según visibilidad del club, medallas/badges deportivos unificados, y exportación visual (PNG) de Ranking — ver Módulo Deportivo — Ranking (Fase 2))
 
 ## Visión
@@ -196,14 +197,14 @@ Ruta:
 /[club]/home
 ```
 
-Es ahora el punto de entrada del PLAYER al club (`getClubEntryPath`), en reemplazo de `/[club]/reservations`.
+Ya no es el punto de entrada del PLAYER al club — desde el nuevo Dashboard deportivo (ver "Dashboard del PLAYER" más abajo), `getClubEntryPath` envía a PLAYER a `/[club]/dashboard`. `/[club]/home` sigue existiendo, accesible desde el nav como "Página del club".
 
 Incluye:
 
 * Layout member-first: reservas/solicitudes propias primero, información del club después
-* Reutiliza `getClubPublicPageData` (misma fuente que la página pública) y `getPlayerReservations` (`src/lib/playerReservations.ts`, fuente compartida con la vista de Reservaciones del jugador) — nunca una segunda versión de esas queries
+* Reutiliza `getClubPublicPageData` (misma fuente que la página pública) y `getPlayerReservations` (`src/lib/playerReservations.ts`, fuente compartida con la vista de Reservaciones del jugador y con el nuevo Dashboard) — nunca una segunda versión de esas queries
 * Nunca redirige ni es el componente público (`ClubPublicView`): es una superficie exclusiva para miembros dentro del layout `(app)`, con sidebar, campana de notificaciones e identidad ya provistos ahí
-* El nav lateral del PLAYER ahora muestra dos accesos: "Página del club" (Home) y "Reservaciones"
+* El nav lateral del PLAYER ahora muestra tres accesos: "Dashboard" (nuevo, primer ítem), "Página del club" (Home) y "Reservaciones"
 
 ---
 
@@ -876,6 +877,35 @@ Dos clases de bug real, ya corregidas, siguen siendo relevantes para cualquier f
 * `create_club_news` (RPC nueva, reemplaza el `INSERT` directo desde el cliente que hacía `createNews`): valida rol, campos, y (cuando aplica) que el torneo exista, pertenezca al mismo club y esté `completed`; genera el slug con reintento real ante colisión (mismo patrón `INSERT`-retry ya establecido por `create_tournament`)
 * `newsDetailPath(clubSlug, newsSlug)` (`src/lib/newsPaths.ts`): único constructor de URL de noticia reutilizado en todos los puntos de enlace (tarjetas admin/públicas, `TournamentNewsAction`, la propia página de detalle). Un enlace histórico basado en UUID se resuelve por `id` y redirige de inmediato a la URL canónica con slug
 * `NewsTournamentChampions`: en el detalle de una noticia con `tournament_id`, muestra a los campeones reales (posición 1 de `computeTournamentClassification`, con soporte de empate) — un avatar (`PlayerSportAvatar`) + nombre por jugador, nunca inventado ni aproximado por título/contenido
+
+---
+
+# Dashboard del PLAYER
+
+Estado: ✅ MVP funcional
+
+Ruta:
+
+```text
+/[club]/dashboard
+```
+
+Nuevo punto de entrada del PLAYER al club (`getClubEntryPath`), en la misma URL que ya usaba el Dashboard operativo de OWNER — la página (`dashboard/page.tsx`) ahora se bifurca por rol: OWNER/ADMIN conservan exactamente su dashboard operativo sin ningún cambio; PLAYER recibe una composición completamente distinta, un perfil deportivo personal, nunca una copia reducida del panel administrativo.
+
+Incluye, en orden mobile-first (desktop: máximo dos columnas):
+
+1. **Encabezado deportivo** — avatar (`PlayerSportAvatar`), categoría, posición y puntos actuales; cuando hay historial suficiente, también "Subiste/Bajaste N posiciones" (comparado contra el snapshot real más cercano a 30 días atrás) y un cambio de categoría reciente (últimos 30 días)
+2. **Próxima actividad** — la reserva confirmada/pendiente más próxima (reutiliza `getPlayerReservations`), o si no hay ninguna, el próximo torneo con inscripción propia; sin ninguna de las dos, accesos rápidos a Reservar cancha / Ver torneos. Nunca crea nada
+3. **Evolución deportiva** — gráfica con toggle Puntos/Posición y filtro 30 días/3 meses/6 meses/Histórico, reconstruida 100% desde el ledger real de puntos (nunca una tabla de historial nueva)
+4. **Resumen deportivo** — puntos, posición, categoría, torneos jugados/ganados, podios, horas jugadas (reservas confirmadas ya finalizadas)
+5. **Mis torneos** — tarjetas con la clasificación oficial real (`computeTournamentClassification`, respeta empates), compañero, fecha y puntos
+6. **Logros deportivos** — calculados dinámicamente (primer torneo, primer podio, primer campeonato, Top 3, ascenso de categoría), nunca un sistema de gamificación nuevo
+7. **Actividad reciente** — línea de tiempo personal, unión de eventos ya existentes (reservas, inscripciones/torneos finalizados, movimientos de puntos derivados de la evolución, cambio de categoría)
+
+Backend nuevo, mínimo y acotado:
+
+* `get_my_club_sport_profile(p_club_id)` (`20261002000002_player_dashboard_sport_profile.sql`) — única RPC nueva de este bloque. Self-only (deriva `club_member_id` de `auth.uid()` + `p_club_id`, nunca lo recibe como parámetro), PLAYER-only. Expone lo que `club_member_sport_state`/`club_player_point_movements`/`club_player_category_changes` no exponían a ningún cliente (RLS cerrada sin políticas, ver Módulo Deportivo Fase 1): categoría, puntos y posición actuales (pidiendo el número directamente a `get_club_category_ranking`, nunca una segunda fórmula), el cambio de categoría más reciente, y una reconstrucción honesta de la evolución de puntos/posición a partir del ledger real (cada snapshot = un movimiento propio real; posición de cada snapshot recalculada con el mismo criterio de desempate que el ranking en vivo)
+* Todo lo demás (próxima actividad, mis torneos, resumen, actividad reciente) se resuelve en `src/lib/playerDashboard.ts` reutilizando `getPlayerReservations`, `getTournamentEntriesWithMembers`/`computeTournamentClassification`/`isOwnEntry`, y lectura directa de `reservations`/`tournament_entries`/`tournament_entry_members` bajo su RLS ya existente (el PLAYER es, por definición, miembro activo del club que está viendo) — ninguna regla de reservas, ranking o torneos se modificó
 
 ---
 

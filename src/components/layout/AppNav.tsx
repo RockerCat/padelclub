@@ -27,7 +27,9 @@ import { ClubHeader } from "./ClubHeader";
 import { NotificationBell } from "./NotificationBell";
 import { JoinRequestsListener } from "./JoinRequestsListener";
 import { SidebarIdentity } from "./SidebarIdentity";
-import { LeaveClubButton } from "./LeaveClubButton";
+// LeaveClubButton (./LeaveClubButton) intencionalmente sin importar — ver
+// comentario junto a "Salir del club" más abajo: oculto de la navegación,
+// componente y funcionalidad intactos.
 import { ChangeClubModal } from "./ChangeClubModal";
 import { CreateClubModal } from "./CreateClubModal";
 import type { NotificationRow } from "@/lib/notifications";
@@ -166,6 +168,11 @@ function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequest
   } else {
     // PLAYER
     base.push(
+      {
+        label: "Dashboard",
+        href: `/${slug}/dashboard`,
+        icon: LayoutDashboard,
+      },
       {
         label: "Página del club",
         href: `/${slug}/home`,
@@ -405,6 +412,7 @@ function NavContent({
           <User className="w-4 h-4 shrink-0" />
           <span>Mi Perfil</span>
         </Link>
+        {/* OWNER/ADMIN: sin cambios — sigue oculto con una sola membresía. */}
         {membershipCount >= 2 &&
           (role === "OWNER" ? (
             <button
@@ -418,7 +426,7 @@ function NavContent({
               <ArrowLeftRight className="w-4 h-4 shrink-0" />
               <span>Cambiar de club</span>
             </button>
-          ) : (
+          ) : role === "ADMIN" ? (
             <Link
               href="/clubs"
               onClick={onLinkClick}
@@ -427,7 +435,7 @@ function NavContent({
               <ArrowLeftRight className="w-4 h-4 shrink-0" />
               <span>Cambiar de club</span>
             </Link>
-          ))}
+          ) : null)}
         {role === "OWNER" && (
           <button
             type="button"
@@ -441,7 +449,25 @@ function NavContent({
             <span>Crear otro club</span>
           </button>
         )}
-        {role === "PLAYER" && <LeaveClubButton clubId={club.id} />}
+        {/* PLAYER: "Cambiar de club" siempre visible (a diferencia de OWNER/
+            ADMIN, nunca condicionado a membershipCount — un PLAYER con una
+            sola membresía hoy puede querer unirse a otro club desde aquí
+            mismo) y siempre hacia /clubs, nunca el modal de OWNER. */}
+        {role === "PLAYER" && (
+          <Link
+            href="/clubs"
+            onClick={onLinkClick}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
+          >
+            <ArrowLeftRight className="w-4 h-4 shrink-0" />
+            <span>Cambiar de club</span>
+          </Link>
+        )}
+        {/* "Salir del club" (LeaveClubButton) queda oculto temporalmente de
+            la navegación del PLAYER por decisión de producto — el
+            componente y su server action siguen intactos en
+            ./LeaveClubButton, solo se retira este render. Restaurar:
+            `{role === "PLAYER" && <LeaveClubButton clubId={club.id} />}`. */}
         <button
           onClick={onLogout}
           className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors w-full text-left"
