@@ -102,11 +102,15 @@ export default async function PlayersPage({ params, searchParams }: PlayersPageP
     getClubMatchesPlayedByMember(club.id),
   ]);
 
-  const sportStateByMember: Record<string, { category: string; position: number | null }> = {};
+  const sportStateByMember: Record<string, { category: string; position: number | null; points: number | null }> = {};
   for (const { data: rankingRows, error: rankingError } of rankingByCategory) {
     if (rankingError || !rankingRows) continue;
     for (const row of rankingRows) {
-      sportStateByMember[row.club_member_id] = { category: row.category, position: row.ranking_position };
+      sportStateByMember[row.club_member_id] = {
+        category: row.category,
+        position: row.ranking_position,
+        points: row.current_points,
+      };
     }
   }
 
@@ -133,8 +137,9 @@ export default async function PlayersPage({ params, searchParams }: PlayersPageP
           // No ranking position — inactive members are never part of a
           // live ranking cycle listing, so there is nothing honest to show
           // beyond the category itself; card/modal already render a
-          // missing position as "—".
-          sportStateByMember[m.id] = { category: state.category, position: null };
+          // missing position as "—". currentPoints is still real (the
+          // ledger total doesn't disappear on deactivation), so it's kept.
+          sportStateByMember[m.id] = { category: state.category, position: null, points: state.currentPoints };
         }
       });
     }

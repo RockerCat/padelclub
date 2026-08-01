@@ -5,7 +5,7 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { PlayerSportAvatar } from "@/components/players/PlayerSportAvatar";
 import { FilterDropdown } from "@/components/ui";
 import { MemberModal } from "./MemberModal";
-import { Users, Search } from "lucide-react";
+import { Users, Search, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import type { PlayerCategory, SportCategory } from "@/types/database";
 import { PLAYERS_STATUS_OPTIONS, PLAYERS_CATEGORY_ALL, type PlayersStatusFilter } from "./playersFiltersConfig";
@@ -25,19 +25,20 @@ export type MemberRow = {
   } | null;
 };
 
+// Fase 1 módulo deportivo — categoría + posición vigentes, ya resueltas en
+// el servidor. `points` se agregó únicamente para la fila compacta de
+// mobile (ver CompactMemberRow) — es el mismo `current_points` que
+// get_club_category_ranking_view/get_club_member_sport_state ya devolvían
+// y que antes se descartaba al construir este mapa; nunca una consulta
+// nueva.
+export type MemberSportState = { category: string; position: number | null; points: number | null };
+
 interface MembersClientProps {
   members: MemberRow[];
   clubSlug: string;
   clubId: string;
   sportCategories: SportCategory[];
-  // Fase 1 módulo deportivo — categoría deportiva vigente + posición en el
-  // ranking de su categoría, ya resueltas en el servidor (page.tsx) vía el
-  // mismo RPC get_club_category_ranking_view que usa /[club]/ranking. Nunca
-  // se recalcula el ranking ni se consulta nada nuevo aquí — solo lectura.
-  // position es null para un miembro inactivo (get_club_member_sport_state,
-  // resuelto solo cuando el filtro Estado lo requiere — nunca aparece en el
-  // ranking view mismo, que solo lista miembros activos).
-  sportStateByMember: Record<string, { category: string; position: number | null }>;
+  sportStateByMember: Record<string, MemberSportState>;
   // "Partidos" — resuelto una sola vez para todo el club en page.tsx
   // (getClubMatchesPlayedByMember), nunca por jugador. Cuenta reservas
   // type='match' confirmadas y ya finalizadas (ver Sport / Ranking Module
@@ -60,6 +61,110 @@ function formatDate(iso: string) {
     month: "short",
     year: "numeric",
   });
+}
+
+// La tarjeta grande — desktop la usa para toda la grilla; mobile la reutiliza
+// tal cual, sin ningún cambio visual, únicamente para el Top 3 (ver
+// MembersClient más abajo). Una sola implementación, nunca dos versiones de
+// "la tarjeta del jugador".
+function MemberCard({
+  member,
+  sportState,
+  matchesPlayed,
+  onSelect,
+}: {
+  member: MemberRow;
+  sportState: MemberSportState | undefined;
+  matchesPlayed: number | null;
+  onSelect: () => void;
+}) {
+  const name = member.profiles?.full_name ?? "Sin nombre";
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="flex flex-col items-center text-center gap-2 p-4 rounded-2xl bg-brand-surface border border-white/10 hover:border-brand-primary/25 hover:bg-brand-primary/5 transition-colors"
+    >
+      <PlayerSportAvatar
+        player={{ id: member.profile_id, ...member.profiles }}
+        size="2xl"
+        sportCategory={sportState?.category ?? null}
+        rankingPosition={sportState?.position ?? null}
+      />
+
+      <p className="text-sm font-semibold text-white truncate w-full">{name}</p>
+
+      <p className="text-[11px] text-brand-muted/60">
+        Partidos: <span className="text-white/70 font-medium">{matchesPlayed ?? "—"}</span>
+        <span className="mx-1.5 text-brand-muted/30">·</span>
+        Ranking: <span className="text-white/70 font-medium">{sportState?.position ?? "—"}</span>
+      </p>
+
+      <p className="text-xs">
+        <span className={cn("font-medium", member.is_active ? "text-emerald-400" : "text-brand-muted/70")}>
+          {member.is_active ? "Activo" : "Inactivo"}
+        </span>
+        <span className="mx-1.5 text-brand-muted/30">·</span>
+        <span className="text-brand-muted/60">Desde {formatDate(member.joined_at)}</span>
+      </p>
+    </button>
+  );
+}
+
+// Fila compacta — únicamente mobile ("Todos los jugadores"). Reutiliza el
+// mismo PlayerSportAvatar (avatar + corona + categoría) y el mismo estado
+// Activo/Inactivo que la tarjeta grande, solo que en una sola línea visual
+// para poder recorrer muchos más jugadores por pantalla. Abre exactamente
+// el mismo modal (onSelect, provisto por el caller) — nunca una segunda
+// implementación del detalle del jugador.
+function CompactMemberRow({
+  member,
+  sportState,
+  onSelect,
+}: {
+  member: MemberRow;
+  sportState: MemberSportState | undefined;
+  onSelect: () => void;
+}) {
+  const name = member.profiles?.full_name ?? "Sin nombre";
+  const position = sportState?.position ?? null;
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 active:bg-white/[0.07] transition-colors text-left"
+    >
+      <PlayerSportAvatar
+        player={{ id: member.profile_id, ...member.profiles }}
+        size="sm"
+        sportCategory={sportState?.category ?? null}
+        rankingPosition={position}
+      />
+
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-white truncate">{name}</p>
+        <p className="text-xs text-brand-muted/70 truncate">
+          {sportState?.category ?? "—"}
+          <span className="mx-1 text-brand-muted/30">•</span>
+          {position !== null ? `#${position}` : "—"}
+          <span className="mx-1 text-brand-muted/30">•</span>
+          {sportState?.points ?? 0} pts
+        </p>
+      </div>
+
+      <span
+        className={cn(
+          "text-xs font-medium shrink-0",
+          member.is_active ? "text-emerald-400" : "text-brand-muted/70"
+        )}
+      >
+        {member.is_active ? "Activo" : "Inactivo"}
+      </span>
+      <ChevronRight className="w-4 h-4 text-brand-muted/40 shrink-0" />
+    </button>
+  );
 }
 
 export function MembersClient({
@@ -111,11 +216,26 @@ export function MembersClient({
         : "generic"
       : "search";
 
+  // Mobile-only "Top 3 del ranking" — las 3 mejores posiciones reales entre
+  // lo que ya está filtrado/visible (`filtered`), nunca una consulta ni un
+  // cálculo de ranking nuevo: `position` ya viene resuelto por
+  // get_club_category_ranking_view (page.tsx). Un miembro sin posición
+  // (sin estado deportivo aprovisionado, o inactivo) nunca puede ser "de
+  // los tres mejores" — se excluye en vez de tratarlo como el peor.
+  const rankedForTop3 = filtered
+    .filter((m) => sportStateByMember[m.id]?.position != null)
+    .sort((a, b) => sportStateByMember[a.id]!.position! - sportStateByMember[b.id]!.position!);
+  const top3 = rankedForTop3.slice(0, 3);
+
+  function getMatchesPlayed(member: MemberRow): number | null {
+    return matchesPlayedByMember === null ? null : (matchesPlayedByMember[member.profile_id] ?? 0);
+  }
+
   return (
     <div>
       {/* Search + filters — search takes a full row on mobile, filters sit
           below it side by side; on desktop all three share one row, search
-          taking the remaining width. */}
+          taking the remaining width. Unchanged for every role/breakpoint. */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-6">
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted" />
@@ -174,47 +294,65 @@ export function MembersClient({
         </div>
       )}
 
-      {/* Members gallery — club membership cards, not an admin list */}
       {filtered.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filtered.map((member) => {
-            const name = member.profiles?.full_name ?? "Sin nombre";
-            const sportState = sportStateByMember[member.id];
-            const matchesPlayed = matchesPlayedByMember === null ? null : (matchesPlayedByMember[member.profile_id] ?? 0);
-
-            return (
-              <button
+        <>
+          {/* ── Desktop/tablet: exactamente la grilla de tarjetas de siempre,
+              sin ningún cambio — oculta en mobile, donde las secciones de
+              abajo la reemplazan. ── */}
+          <div className="hidden md:grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {filtered.map((member) => (
+              <MemberCard
                 key={member.id}
-                type="button"
-                onClick={() => setSelectedMember(member)}
-                className="flex flex-col items-center text-center gap-2 p-4 rounded-2xl bg-brand-surface border border-white/10 hover:border-brand-primary/25 hover:bg-brand-primary/5 transition-colors"
-              >
-                <PlayerSportAvatar
-                  player={{ id: member.profile_id, ...member.profiles }}
-                  size="2xl"
-                  sportCategory={sportState?.category ?? null}
-                  rankingPosition={sportState?.position ?? null}
-                />
+                member={member}
+                sportState={sportStateByMember[member.id]}
+                matchesPlayed={getMatchesPlayed(member)}
+                onSelect={() => setSelectedMember(member)}
+              />
+            ))}
+          </div>
 
-                <p className="text-sm font-semibold text-white truncate w-full">{name}</p>
+          {/* ── Mobile only: Top 3 del ranking + listado compacto. ── */}
+          <div className="md:hidden flex flex-col gap-6">
+            {top3.length > 0 && (
+              <div>
+                <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-3">
+                  Top {top3.length} del ranking
+                </h2>
+                {/* Una tarjeta grande debajo de otra — misma tarjeta exacta
+                    que desktop, sin componente ni implementación nuevos;
+                    apiladas verticalmente en vez de en grilla para no
+                    arriesgar overflow horizontal en pantallas angostas. */}
+                <div className="flex flex-col gap-3">
+                  {top3.map((member) => (
+                    <MemberCard
+                      key={member.id}
+                      member={member}
+                      sportState={sportStateByMember[member.id]}
+                      matchesPlayed={getMatchesPlayed(member)}
+                      onSelect={() => setSelectedMember(member)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
 
-                <p className="text-[11px] text-brand-muted/60">
-                  Partidos: <span className="text-white/70 font-medium">{matchesPlayed ?? "—"}</span>
-                  <span className="mx-1.5 text-brand-muted/30">·</span>
-                  Ranking: <span className="text-white/70 font-medium">{sportState?.position ?? "—"}</span>
-                </p>
-
-                <p className="text-xs">
-                  <span className={cn("font-medium", member.is_active ? "text-emerald-400" : "text-brand-muted/70")}>
-                    {member.is_active ? "Activo" : "Inactivo"}
-                  </span>
-                  <span className="mx-1.5 text-brand-muted/30">·</span>
-                  <span className="text-brand-muted/60">Desde {formatDate(member.joined_at)}</span>
-                </p>
-              </button>
-            );
-          })}
-        </div>
+            <div>
+              <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-2">
+                Todos los jugadores
+              </h2>
+              <div className="flex flex-col divide-y divide-white/5">
+                {filtered.map((member) => (
+                  <CompactMemberRow
+                    key={member.id}
+                    member={member}
+                    sportState={sportStateByMember[member.id]}
+                    onSelect={() => setSelectedMember(member)}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {selectedMember && (
