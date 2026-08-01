@@ -138,7 +138,8 @@ export function PendingClubFields() {
           ))}
         </div>
         <p className="text-xs text-brand-muted/70">
-          El club queda inactivo (no visible ni buscable) hasta que su propietario definitivo lo reclame.
+          El club queda activo de inmediato — con visibilidad privada solo tú puedes verlo hasta entregarlo; con
+          visibilidad pública será encontrable y los jugadores podrán unirse desde ya.
         </p>
       </div>
 

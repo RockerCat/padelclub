@@ -121,7 +121,13 @@ export default async function ClubHubPage({ params, searchParams }: ClubHubPageP
     ]);
 
     const teamMembers = (teamResult.data ?? []) as TeamMemberRow[];
-    const owner = teamMembers.find((m) => m.role === "OWNER") ?? null;
+    // is_active matters here specifically for OWNER: after an Entrega de
+    // Club claim, the club can briefly have two OWNER rows in history — the
+    // deactivated SUPERADMIN placeholder (earlier joined_at) and the real,
+    // current OWNER — and .find() without this filter would silently pick
+    // the retired placeholder. ADMIN intentionally keeps showing inactive
+    // rows below (with their own "Inactivo" badge), so only this line changes.
+    const owner = teamMembers.find((m) => m.role === "OWNER" && m.is_active) ?? null;
     const admins = teamMembers.filter((m) => m.role === "ADMIN");
     const invites = (inviteResult.data ?? []) as InviteLinkRow[];
 
