@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import {
@@ -16,7 +16,7 @@ import {
   ArrowLeftRight,
   PlusCircle,
   Building2,
-  MoreHorizontal,
+  ChevronDown,
   Trophy,
   Swords,
 } from "lucide-react";
@@ -28,7 +28,6 @@ import { NotificationBell } from "./NotificationBell";
 import { JoinRequestsListener } from "./JoinRequestsListener";
 import { SidebarIdentity } from "./SidebarIdentity";
 import { LeaveClubButton } from "./LeaveClubButton";
-import { PlayerAvatar } from "@/components/players/PlayerAvatar";
 import type { NotificationRow } from "@/lib/notifications";
 import type { SidebarIdentityData } from "@/lib/userIdentity";
 import { clubRoleLabel } from "@/lib/roleLabels";
@@ -41,6 +40,20 @@ function getInitials(name: string): string {
     .slice(0, 2)
     .join("")
     .toUpperCase();
+}
+
+// Compact label for the mobile user-menu trigger — "Alex Sosa", never the
+// raw club name. getSidebarIdentity() already resolves name → email →
+// "Usuario" server-side (never re-queried here); this only further reduces
+// an email-shaped fallback ("alex@gmail.com") to its local part ("alex")
+// so the button stays short. A real full_name is shown exactly as stored.
+function getDisplayName(identity: SidebarIdentityData): string {
+  const source = identity.name || identity.email || "";
+  if (source.includes("@")) {
+    const local = source.slice(0, source.indexOf("@"));
+    return local || "Usuario";
+  }
+  return source || "Usuario";
 }
 
 interface NavItem {
@@ -178,18 +191,18 @@ function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequest
 }
 
 // ─── Mobile tab bar (OWNER/ADMIN only) ─────────────────────────────────────────
-// 4 fixed nav items + a 5th "Más" action, same order/labels regardless of
-// role — OWNER's and ADMIN's navItems now both carry Dashboard/
-// Reservaciones/Jugadores/Torneos with identical href/icon (see
-// getNavItems above), so this stays a single shared list; every other item
-// (Ranking, Club, Mi Perfil, cambiar/crear club, Salir) lives in the "Más"
-// sheet instead, never
+// 6 fixed items, same order/labels regardless of role — OWNER's and ADMIN's
+// navItems now both carry Dashboard/Jugadores/Reservaciones/Torneos/
+// Ranking/Club with identical href/icon (see getNavItems above), so this
+// stays a single shared list. There is no overflow menu anymore — every
+// personal action (Mi Perfil, cambiar/crear club, Salir) lives in the
+// user-name dropdown in the top bar instead (see userMenuOpen below), never
 // duplicated here. href/icon are read straight from navItems — the single
 // source of truth already used by the desktop sidebar — never a second,
 // possibly-drifting hardcoded route list. Dashboard/Reservaciones get a
 // shorter mobile-only label ("Inicio"/"Reservas") — the route itself is
 // untouched.
-const TAB_BAR_LABELS = ["Dashboard", "Reservaciones", "Jugadores", "Torneos"] as const;
+const TAB_BAR_LABELS = ["Dashboard", "Jugadores", "Reservaciones", "Torneos", "Ranking", "Club"] as const;
 const TAB_BAR_LABEL_OVERRIDES: Record<string, string> = {
   Dashboard: "Inicio",
   Reservaciones: "Reservas",
@@ -205,11 +218,9 @@ function getTabBarItems(navItems: NavItem[]): NavItem[] {
 function MobileTabBarItem({
   item,
   isActive,
-  onClick,
 }: {
   item: NavItem;
   isActive: boolean;
-  onClick?: () => void;
 }) {
   const Icon = item.icon;
   const accent = item.color === "secondary" ? "var(--club-secondary)" : "var(--club-primary)";
@@ -240,22 +251,12 @@ function MobileTabBarItem({
     </>
   );
 
-  if (!item.href) {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        aria-expanded={isActive}
-        className="flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 min-w-0"
-      >
-        {inner}
-      </button>
-    );
-  }
-
+  // Every tab-bar item is a real route now that "Más" is gone — href is
+  // always set here (unlike NavItem in general, which also covers the
+  // desktop sidebar's disabled/soon entries).
   return (
     <Link
-      href={item.href}
+      href={item.href!}
       className="flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 min-w-0"
     >
       {inner}
@@ -443,11 +444,12 @@ export function AppNav({
   // drawer reusing NavContent) — only OWNER/ADMIN get the new top bar + tab
   // bar below, per this task's explicit scope.
   const [mobileOpen, setMobileOpen] = useState(false);
-  // OWNER/ADMIN mobile-only "more options" dropdown — Ranking/Club/Mi
-  // Perfil/Cambiar de club/Crear otro club (OWNER)/Salir. Separate from
-  // mobileOpen (PLAYER's drawer) so neither role's state interferes with
-  // the other's UI.
-  const [secondaryMenuOpen, setSecondaryMenuOpen] = useState(false);
+  // OWNER/ADMIN mobile-only user menu, opened from the name button in the
+  // top bar (never an avatar-only trigger) — Mi Perfil/Cambiar de
+  // club/Crear otro club (OWNER)/Salir. Separate from mobileOpen (PLAYER's
+  // drawer) so neither role's state interferes with the other's UI.
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuTriggerRef = useRef<HTMLButtonElement>(null);
 
   async function handleLogout() {
     const supabase = createClient();
@@ -459,20 +461,23 @@ export function AppNav({
     setMobileOpen(false);
   }
 
+  // Escape closes the user menu and returns focus to its trigger — same
+  // accessible-menu behavior as the existing ContextMenu primitive.
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setUserMenuOpen(false);
+        userMenuTriggerRef.current?.focus();
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [userMenuOpen]);
+
   const navItems = getNavItems(club.slug, role, pendingJoinRequests);
   const tabBarItems = getTabBarItems(navItems);
-
-  // Routes that live inside the "Más" sheet — used only to decide when that
-  // tab should render as active, since none of them is its own bottom-bar
-  // item. Kept local to render (not a NavItem list) since "Más" never
-  // navigates directly.
-  const moreMenuHrefs = [
-    `/${club.slug}/ranking`,
-    clubHubPath(club.slug),
-    "/profile",
-    "/clubs",
-  ];
-  const isMoreActive = moreMenuHrefs.some((href) => pathname === href || pathname.startsWith(href + "/"));
+  const displayName = getDisplayName(identity);
 
   return (
     <>
@@ -569,13 +574,14 @@ export function AppNav({
         </>
       ) : (
         <>
-          {/* Mobile top bar — OWNER/ADMIN: club logo, signed-in user's name/
-              role (never the club name — that's the logo's job here), the
-              existing notification bell, and an avatar trigger for the
-              secondary menu (Ranking/Club/Mi Perfil/cambiar-crear club/
+          {/* Mobile top bar — OWNER/ADMIN: club logo/name/role on the left
+              (the club's identity, never the user's — matches PLAYER's own
+              header and desktop's ClubHeader), the existing notification
+              bell, and a name+chevron trigger on the right for the
+              signed-in user's own menu (Mi Perfil/cambiar-crear club/
               Salir) — replaces the hamburger+drawer entirely. */}
           {/* z-50 (not z-40, matching the tab bar below) so this element's
-              whole stacking context — including the secondary-menu overlay/
+              whole stacking context — including the user-menu overlay/
               panel nested inside it — reliably paints above the bottom tab
               bar regardless of DOM order; a descendant's own z-index can
               never escape its ancestor's stacking context to out-rank a
@@ -606,25 +612,28 @@ export function AppNav({
                   )}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-white truncate">{identity.name}</p>
+                  <p className="text-sm font-semibold text-white truncate">{club.name}</p>
                   <p className="text-[11px] text-brand-muted truncate">{clubRoleLabel(role)}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <NotificationBell initialCount={notificationCount} initialItems={notificationItems} />
                 <button
+                  ref={userMenuTriggerRef}
                   type="button"
-                  onClick={() => setSecondaryMenuOpen((prev) => !prev)}
-                  aria-label="Más opciones"
-                  aria-expanded={secondaryMenuOpen}
-                  className="rounded-full ring-1 ring-white/10 hover:ring-white/30 transition-colors"
+                  onClick={() => setUserMenuOpen((prev) => !prev)}
+                  aria-label="Menú de usuario"
+                  aria-haspopup="menu"
+                  aria-expanded={userMenuOpen}
+                  className="flex items-center gap-1 pl-1 pr-1.5 py-1 rounded-full ring-1 ring-white/10 hover:ring-white/30 transition-colors max-w-[130px]"
                 >
-                  <PlayerAvatar player={{ full_name: identity.name, avatar_url: identity.avatarUrl }} size="sm" />
+                  <span className="text-sm font-medium text-white truncate">{displayName}</span>
+                  <ChevronDown className={cn("w-4 h-4 text-brand-muted shrink-0 transition-transform", userMenuOpen && "rotate-180")} />
                 </button>
               </div>
             </div>
 
-            {secondaryMenuOpen && (
+            {userMenuOpen && (
               <>
                 {/* Click-away overlay — above the top bar and the tab bar
                     (both z-40) so a tap anywhere else, including over the
@@ -632,29 +641,18 @@ export function AppNav({
                     far below any real modal/panel (z-[400]+). */}
                 <div
                   className="fixed inset-0 z-[45]"
-                  onClick={() => setSecondaryMenuOpen(false)}
+                  onClick={() => setUserMenuOpen(false)}
                 />
-                <div className="absolute right-4 top-full mt-2 z-50 w-64 max-w-[80vw] rounded-2xl border border-white/10 bg-brand-surface shadow-2xl overflow-hidden">
+                <div
+                  role="menu"
+                  aria-label="Menú de usuario"
+                  className="absolute right-4 top-full mt-2 z-50 w-64 max-w-[80vw] rounded-2xl border border-white/10 bg-brand-surface shadow-2xl overflow-hidden"
+                >
                   <div className="p-2 flex flex-col gap-0.5">
                     <Link
-                      href={`/${club.slug}/ranking`}
-                      onClick={() => setSecondaryMenuOpen(false)}
-                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
-                    >
-                      <Trophy className="w-4 h-4 shrink-0" />
-                      <span>Ranking</span>
-                    </Link>
-                    <Link
-                      href={clubHubPath(club.slug)}
-                      onClick={() => setSecondaryMenuOpen(false)}
-                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
-                    >
-                      <Building2 className="w-4 h-4 shrink-0" />
-                      <span>Club</span>
-                    </Link>
-                    <Link
                       href="/profile"
-                      onClick={() => setSecondaryMenuOpen(false)}
+                      role="menuitem"
+                      onClick={() => setUserMenuOpen(false)}
                       className={cn(
                         "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors",
                         pathname === "/profile"
@@ -668,7 +666,8 @@ export function AppNav({
                     {membershipCount >= 2 && (
                       <Link
                         href="/clubs"
-                        onClick={() => setSecondaryMenuOpen(false)}
+                        role="menuitem"
+                        onClick={() => setUserMenuOpen(false)}
                         className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
                       >
                         <ArrowLeftRight className="w-4 h-4 shrink-0" />
@@ -678,7 +677,8 @@ export function AppNav({
                     {role === "OWNER" && (
                       <Link
                         href="/clubs/create"
-                        onClick={() => setSecondaryMenuOpen(false)}
+                        role="menuitem"
+                        onClick={() => setUserMenuOpen(false)}
                         className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
                       >
                         <PlusCircle className="w-4 h-4 shrink-0" />
@@ -687,8 +687,9 @@ export function AppNav({
                     )}
                     <button
                       type="button"
+                      role="menuitem"
                       onClick={() => {
-                        setSecondaryMenuOpen(false);
+                        setUserMenuOpen(false);
                         handleLogout();
                       }}
                       className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors w-full text-left"
@@ -718,11 +719,6 @@ export function AppNav({
                 }
               />
             ))}
-            <MobileTabBarItem
-              item={{ label: "Más", icon: MoreHorizontal }}
-              isActive={isMoreActive || secondaryMenuOpen}
-              onClick={() => setSecondaryMenuOpen((prev) => !prev)}
-            />
           </nav>
         </>
       )}
