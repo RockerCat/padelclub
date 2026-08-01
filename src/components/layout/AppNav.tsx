@@ -8,7 +8,6 @@ import {
   X,
   LayoutDashboard,
   CalendarDays,
-  Settings,
   Users,
   Home,
   User,
@@ -16,15 +15,14 @@ import {
   Lock,
   ArrowLeftRight,
   PlusCircle,
-  ShieldCheck,
-  Globe,
-  Megaphone,
-  BarChart3,
+  Building2,
+  MoreHorizontal,
   Trophy,
   Swords,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils/cn";
+import { clubHubPath } from "@/lib/clubHubPaths";
 import { ClubHeader } from "./ClubHeader";
 import { NotificationBell } from "./NotificationBell";
 import { JoinRequestsListener } from "./JoinRequestsListener";
@@ -85,9 +83,10 @@ function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequest
         color: "secondary" as const,
       },
       {
-        label: "Canchas",
-        href: `/${slug}/admin/courts`,
-        icon: Home,
+        label: "Reservaciones",
+        href: `/${slug}/admin/reservations`,
+        icon: CalendarDays,
+        color: "secondary" as const,
       },
       {
         label: "Jugadores",
@@ -95,17 +94,6 @@ function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequest
         icon: Users,
         color: "secondary" as const,
         badgeCount: pendingJoinRequests,
-      },
-      {
-        label: "Equipo",
-        href: `/${slug}/admin/team`,
-        icon: ShieldCheck,
-      },
-      {
-        label: "Reservaciones",
-        href: `/${slug}/admin/reservations`,
-        icon: CalendarDays,
-        color: "secondary" as const,
       },
       {
         label: "Ranking",
@@ -118,38 +106,24 @@ function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequest
         icon: Swords,
       },
       {
-        label: "Estadísticas",
-        href: `/${slug}/admin/statistics`,
-        icon: BarChart3,
-      },
-      {
-        label: "Noticias",
-        href: `/${slug}/admin/news`,
-        icon: Megaphone,
-      },
-      {
-        label: "Página Pública",
-        href: `/${slug}/admin/public-page`,
-        icon: Globe,
-      },
-      {
-        label: "Configuración",
-        href: `/${slug}/admin/settings`,
-        icon: Settings,
+        label: "Club",
+        href: clubHubPath(slug),
+        icon: Building2,
       }
     );
   } else if (role === "ADMIN") {
     base.push(
       {
+        label: "Dashboard",
+        href: `/${slug}/dashboard`,
+        icon: LayoutDashboard,
+        color: "secondary" as const,
+      },
+      {
         label: "Reservaciones",
         href: `/${slug}/admin/reservations`,
         icon: CalendarDays,
         color: "secondary" as const,
-      },
-      {
-        label: "Canchas",
-        href: `/${slug}/admin/courts`,
-        icon: Home,
       },
       {
         label: "Jugadores",
@@ -169,19 +143,9 @@ function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequest
         icon: Swords,
       },
       {
-        label: "Estadísticas",
-        href: `/${slug}/admin/statistics`,
-        icon: BarChart3,
-      },
-      {
-        label: "Noticias",
-        href: `/${slug}/admin/news`,
-        icon: Megaphone,
-      },
-      {
-        label: "Página Pública",
-        href: `/${slug}/admin/public-page`,
-        icon: Globe,
+        label: "Club",
+        href: clubHubPath(slug),
+        icon: Building2,
       }
     );
   } else {
@@ -214,53 +178,58 @@ function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequest
 }
 
 // ─── Mobile tab bar (OWNER/ADMIN only) ─────────────────────────────────────────
-// Exactly 5 fixed items, same order/labels regardless of role — OWNER's and
-// ADMIN's navItems already share identical href/icon for all 5 (see
-// getNavItems above); OWNER's extra items (Dashboard/Equipo/Configuración)
-// live in the secondary menu instead, never duplicated here. Reservaciones
-// is always the centered, primary item. href/icon are read straight from
-// navItems — the single source of truth already used by the desktop
-// sidebar — never a second, possibly-drifting hardcoded route list. Only
-// the label for "Página Pública" is shortened to "Pública" for this compact
-// bar; the route itself is untouched.
-const TAB_BAR_LABELS = ["Canchas", "Jugadores", "Reservaciones", "Noticias", "Página Pública"] as const;
+// 4 fixed nav items + a 5th "Más" action, same order/labels regardless of
+// role — OWNER's and ADMIN's navItems now both carry Dashboard/
+// Reservaciones/Jugadores/Torneos with identical href/icon (see
+// getNavItems above), so this stays a single shared list; every other item
+// (Ranking, Club, Mi Perfil, cambiar/crear club, Salir) lives in the "Más"
+// sheet instead, never
+// duplicated here. href/icon are read straight from navItems — the single
+// source of truth already used by the desktop sidebar — never a second,
+// possibly-drifting hardcoded route list. Dashboard/Reservaciones get a
+// shorter mobile-only label ("Inicio"/"Reservas") — the route itself is
+// untouched.
+const TAB_BAR_LABELS = ["Dashboard", "Reservaciones", "Jugadores", "Torneos"] as const;
+const TAB_BAR_LABEL_OVERRIDES: Record<string, string> = {
+  Dashboard: "Inicio",
+  Reservaciones: "Reservas",
+};
 
 function getTabBarItems(navItems: NavItem[]): NavItem[] {
   const byLabel = new Map(navItems.map((item) => [item.label, item] as const));
   return TAB_BAR_LABELS.map((label) => byLabel.get(label))
     .filter((item): item is NavItem => !!item)
-    .map((item) => (item.label === "Página Pública" ? { ...item, label: "Pública" } : item));
+    .map((item) => (TAB_BAR_LABEL_OVERRIDES[item.label] ? { ...item, label: TAB_BAR_LABEL_OVERRIDES[item.label] } : item));
 }
 
-function MobileTabBarItem({ item, isActive }: { item: NavItem; isActive: boolean }) {
+function MobileTabBarItem({
+  item,
+  isActive,
+  onClick,
+}: {
+  item: NavItem;
+  isActive: boolean;
+  onClick?: () => void;
+}) {
   const Icon = item.icon;
-  const isPrimary = item.label === "Reservaciones";
   const accent = item.color === "secondary" ? "var(--club-secondary)" : "var(--club-primary)";
-  // Reservaciones keeps the same footprint as every other item (same
-  // flex-1/py/icon size) — its only "sutil" distinction is a permanent,
-  // low-opacity accent tint on the icon circle (barely there when inactive,
-  // same 18% tint every other item only gets once active).
-  const showAccentBg = isActive || isPrimary;
 
-  return (
-    <Link
-      href={item.href!}
-      className="flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 min-w-0"
-    >
+  const inner = (
+    <>
       <span
         className="w-8 h-8 flex items-center justify-center rounded-xl transition-colors"
         style={{
-          backgroundColor: showAccentBg
-            ? `color-mix(in srgb, ${accent} ${isActive ? 18 : 10}%, transparent)`
+          backgroundColor: isActive
+            ? `color-mix(in srgb, ${accent} 18%, transparent)`
             : undefined,
           // lucide-react icons default to stroke="currentColor" — setting
           // color on this wrapper tints the icon without needing a `style`
           // prop on the icon component itself (NavItem["icon"] only accepts
           // `className`, same contract the desktop sidebar already relies on).
-          color: isActive || isPrimary ? accent : undefined,
+          color: isActive ? accent : undefined,
         }}
       >
-        <Icon className={cn("w-[18px] h-[18px]", !isActive && !isPrimary && "text-brand-muted")} />
+        <Icon className={cn("w-[18px] h-[18px]", !isActive && "text-brand-muted")} />
       </span>
       <span
         className={cn("text-[10px] leading-none truncate max-w-full", isActive ? "font-semibold" : "text-brand-muted")}
@@ -268,6 +237,28 @@ function MobileTabBarItem({ item, isActive }: { item: NavItem; isActive: boolean
       >
         {item.label}
       </span>
+    </>
+  );
+
+  if (!item.href) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-expanded={isActive}
+        className="flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 min-w-0"
+      >
+        {inner}
+      </button>
+    );
+  }
+
+  return (
+    <Link
+      href={item.href}
+      className="flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 min-w-0"
+    >
+      {inner}
     </Link>
   );
 }
@@ -452,10 +443,10 @@ export function AppNav({
   // drawer reusing NavContent) — only OWNER/ADMIN get the new top bar + tab
   // bar below, per this task's explicit scope.
   const [mobileOpen, setMobileOpen] = useState(false);
-  // OWNER/ADMIN mobile-only "more options" dropdown — Dashboard (OWNER)/
-  // Equipo (OWNER)/Configuración (OWNER)/Cambiar de club/Crear otro club
-  // (OWNER)/Mi Perfil/Salir. Separate from mobileOpen (PLAYER's drawer) so
-  // neither role's state interferes with the other's UI.
+  // OWNER/ADMIN mobile-only "more options" dropdown — Ranking/Club/Mi
+  // Perfil/Cambiar de club/Crear otro club (OWNER)/Salir. Separate from
+  // mobileOpen (PLAYER's drawer) so neither role's state interferes with
+  // the other's UI.
   const [secondaryMenuOpen, setSecondaryMenuOpen] = useState(false);
 
   async function handleLogout() {
@@ -470,6 +461,18 @@ export function AppNav({
 
   const navItems = getNavItems(club.slug, role, pendingJoinRequests);
   const tabBarItems = getTabBarItems(navItems);
+
+  // Routes that live inside the "Más" sheet — used only to decide when that
+  // tab should render as active, since none of them is its own bottom-bar
+  // item. Kept local to render (not a NavItem list) since "Más" never
+  // navigates directly.
+  const moreMenuHrefs = [
+    `/${club.slug}/ranking`,
+    clubHubPath(club.slug),
+    "/profile",
+    "/clubs",
+  ];
+  const isMoreActive = moreMenuHrefs.some((href) => pathname === href || pathname.startsWith(href + "/"));
 
   return (
     <>
@@ -569,8 +572,8 @@ export function AppNav({
           {/* Mobile top bar — OWNER/ADMIN: club logo, signed-in user's name/
               role (never the club name — that's the logo's job here), the
               existing notification bell, and an avatar trigger for the
-              secondary menu (Mi Perfil/Salir/Dashboard/Equipo/Configuración/
-              cambiar-crear club) — replaces the hamburger+drawer entirely. */}
+              secondary menu (Ranking/Club/Mi Perfil/cambiar-crear club/
+              Salir) — replaces the hamburger+drawer entirely. */}
           {/* z-50 (not z-40, matching the tab bar below) so this element's
               whole stacking context — including the secondary-menu overlay/
               panel nested inside it — reliably paints above the bottom tab
@@ -633,56 +636,35 @@ export function AppNav({
                 />
                 <div className="absolute right-4 top-full mt-2 z-50 w-64 max-w-[80vw] rounded-2xl border border-white/10 bg-brand-surface shadow-2xl overflow-hidden">
                   <div className="p-2 flex flex-col gap-0.5">
-                    {role === "OWNER" && (
-                      <Link
-                        href={`/${club.slug}/dashboard`}
-                        onClick={() => setSecondaryMenuOpen(false)}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
-                      >
-                        <LayoutDashboard className="w-4 h-4 shrink-0" />
-                        <span>Dashboard</span>
-                      </Link>
-                    )}
-                    {(role === "OWNER" || role === "ADMIN") && (
-                      <Link
-                        href={`/${club.slug}/admin/statistics`}
-                        onClick={() => setSecondaryMenuOpen(false)}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
-                      >
-                        <BarChart3 className="w-4 h-4 shrink-0" />
-                        <span>Estadísticas</span>
-                      </Link>
-                    )}
-                    {(role === "OWNER" || role === "ADMIN") && (
-                      <Link
-                        href={`/${club.slug}/admin/tournaments`}
-                        onClick={() => setSecondaryMenuOpen(false)}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
-                      >
-                        <Swords className="w-4 h-4 shrink-0" />
-                        <span>Torneos</span>
-                      </Link>
-                    )}
-                    {role === "OWNER" && (
-                      <Link
-                        href={`/${club.slug}/admin/team`}
-                        onClick={() => setSecondaryMenuOpen(false)}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
-                      >
-                        <ShieldCheck className="w-4 h-4 shrink-0" />
-                        <span>Equipo</span>
-                      </Link>
-                    )}
-                    {role === "OWNER" && (
-                      <Link
-                        href={`/${club.slug}/admin/settings`}
-                        onClick={() => setSecondaryMenuOpen(false)}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
-                      >
-                        <Settings className="w-4 h-4 shrink-0" />
-                        <span>Configuración</span>
-                      </Link>
-                    )}
+                    <Link
+                      href={`/${club.slug}/ranking`}
+                      onClick={() => setSecondaryMenuOpen(false)}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
+                    >
+                      <Trophy className="w-4 h-4 shrink-0" />
+                      <span>Ranking</span>
+                    </Link>
+                    <Link
+                      href={clubHubPath(club.slug)}
+                      onClick={() => setSecondaryMenuOpen(false)}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
+                    >
+                      <Building2 className="w-4 h-4 shrink-0" />
+                      <span>Club</span>
+                    </Link>
+                    <Link
+                      href="/profile"
+                      onClick={() => setSecondaryMenuOpen(false)}
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors",
+                        pathname === "/profile"
+                          ? "text-white bg-brand-primary/5"
+                          : "text-brand-muted hover:text-white hover:bg-brand-primary/5"
+                      )}
+                    >
+                      <User className="w-4 h-4 shrink-0" />
+                      <span>Mi Perfil</span>
+                    </Link>
                     {membershipCount >= 2 && (
                       <Link
                         href="/clubs"
@@ -703,19 +685,6 @@ export function AppNav({
                         <span>Crear otro club</span>
                       </Link>
                     )}
-                    <Link
-                      href="/profile"
-                      onClick={() => setSecondaryMenuOpen(false)}
-                      className={cn(
-                        "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors",
-                        pathname === "/profile"
-                          ? "text-white bg-brand-primary/5"
-                          : "text-brand-muted hover:text-white hover:bg-brand-primary/5"
-                      )}
-                    >
-                      <User className="w-4 h-4 shrink-0" />
-                      <span>Mi Perfil</span>
-                    </Link>
                     <button
                       type="button"
                       onClick={() => {
@@ -749,6 +718,11 @@ export function AppNav({
                 }
               />
             ))}
+            <MobileTabBarItem
+              item={{ label: "Más", icon: MoreHorizontal }}
+              isActive={isMoreActive || secondaryMenuOpen}
+              onClick={() => setSecondaryMenuOpen((prev) => !prev)}
+            />
           </nav>
         </>
       )}

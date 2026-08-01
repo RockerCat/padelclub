@@ -1,51 +1,15 @@
-import { notFound, redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { NewsGrid } from "./NewsGrid";
-import type { ClubNewsWithAuthor } from "@/types/database";
+import { redirect } from "next/navigation";
+import { clubHubPath } from "@/lib/clubHubPaths";
 
 interface NewsPageProps {
   params: Promise<{ club: string }>;
 }
 
+// Noticias administrativas se movieron al hub "Club" (vista "Noticias") —
+// ver CLAUDE.md, bloque de reorganización #2. Session/club/membership/rol se
+// revalidan en el propio hub. El detalle público de una noticia
+// (/clubs/[slug]/news/[newsSlug]) no se toca.
 export default async function NewsPage({ params }: NewsPageProps) {
   const { club: slug } = await params;
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect("/auth/login");
-
-  const { data: club } = await supabase
-    .from("clubs")
-    .select("id, name")
-    .eq("slug", slug)
-    .eq("is_active", true)
-    .single();
-
-  if (!club) notFound();
-
-  const { data: membership } = await supabase
-    .from("club_members")
-    .select("role")
-    .eq("club_id", club.id)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-
-  if (!membership) redirect("/unauthorized");
-  if (!["OWNER", "ADMIN"].includes(membership.role)) redirect(`/${slug}`);
-
-  const { data: news } = await supabase
-    .from("club_news")
-    .select("*, created_by_profile:profiles!club_news_created_by_fkey(full_name)")
-    .eq("club_id", club.id)
-    .order("published_at", { ascending: false });
-
-  return (
-    <div className="p-6 md:p-10">
-      <NewsGrid news={(news ?? []) as ClubNewsWithAuthor[]} clubSlug={slug} clubId={club.id} />
-    </div>
-  );
+  redirect(clubHubPath(slug, "noticias"));
 }

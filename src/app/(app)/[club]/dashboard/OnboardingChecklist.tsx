@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Check, ChevronRight, X } from "lucide-react";
+import { clubHubPath } from "@/lib/clubHubPaths";
 
 interface Props {
   clubId: string;
@@ -26,9 +27,9 @@ export function OnboardingChecklist({ clubId, clubSlug, hasPublicPage, hasCourts
   }, [clubId]);
 
   const steps = [
-    { label: "Personalizar página pública", done: hasPublicPage,    href: `/${clubSlug}/admin/settings` },
-    { label: "Agregar primera cancha",      done: hasCourts,        href: `/${clubSlug}/admin/courts` },
-    { label: "Configurar horarios",         done: hasHours,         href: `/${clubSlug}/admin/settings` },
+    { label: "Personalizar página pública", done: hasPublicPage,    href: clubHubPath(clubSlug) },
+    { label: "Agregar primera cancha",      done: hasCourts,        href: `/${clubSlug}/dashboard?tab=canchas` },
+    { label: "Configurar horarios",         done: hasHours,         href: clubHubPath(clubSlug, "configuracion") },
     { label: "Invitar jugadores",           done: hasMembers,       href: `/${clubSlug}/admin/players` },
     { label: "Crear primera reserva",       done: hasReservations,  href: `/${clubSlug}/admin/reservations/new` },
   ];

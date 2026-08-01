@@ -94,7 +94,7 @@ export default async function NewReservationPage({
         <p className="text-sm text-brand-muted">
           No hay canchas activas. Agrega una cancha primero en{" "}
           <a
-            href={`/${slug}/admin/courts`}
+            href={`/${slug}/dashboard?tab=canchas`}
             className="text-brand-primary hover:underline"
           >
             Canchas

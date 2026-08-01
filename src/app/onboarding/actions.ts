@@ -140,7 +140,7 @@ export async function createClub(
       club,
       hasId: !!club?.id,
       hasSlug: !!club?.slug,
-      redirectTarget: club ? `/${club.slug}/admin/settings` : null,
+      redirectTarget: club ? `/${club.slug}/admin/club?tab=configuracion` : null,
     });
 
     if (!club?.slug) {

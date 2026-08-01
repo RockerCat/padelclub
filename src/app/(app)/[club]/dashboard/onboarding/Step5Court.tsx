@@ -46,7 +46,7 @@ export function Step5Court({ clubId, clubSlug, formId, alreadyHasCourt, onNext }
           <p className="text-xs text-brand-muted/60 mt-0.5">
             Ya tienes canchas activas.{" "}
             <Link
-              href={`/${clubSlug}/admin/courts`}
+              href={`/${clubSlug}/dashboard?tab=canchas`}
               className="underline hover:text-brand-muted transition-colors"
             >
               Administrar canchas
@@ -103,7 +103,7 @@ export function Step5Court({ clubId, clubSlug, formId, alreadyHasCourt, onNext }
           <p className="text-xs text-brand-muted/60">
             Puedes configurar más detalles y agregar canchas adicionales desde{" "}
             <Link
-              href={`/${clubSlug}/admin/courts`}
+              href={`/${clubSlug}/dashboard?tab=canchas`}
               className="underline hover:text-brand-muted transition-colors"
             >
               Administrar canchas

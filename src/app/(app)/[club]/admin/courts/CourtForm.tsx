@@ -52,7 +52,7 @@ export function CourtForm({
       router.refresh();
       onSuccess?.();
     } else {
-      router.push(`/${clubSlug}/admin/courts`);
+      router.push(`/${clubSlug}/dashboard?tab=canchas`);
       router.refresh();
     }
   }, [state.success, router, clubSlug, isInline, onSuccess]);
@@ -163,7 +163,7 @@ export function CourtForm({
           type="button"
           variant="secondary"
           size={isInline ? "md" : "lg"}
-          onClick={() => (isInline ? onCancel?.() : router.push(`/${clubSlug}/admin/courts`))}
+          onClick={() => (isInline ? onCancel?.() : router.push(`/${clubSlug}/dashboard?tab=canchas`))}
         >
           Cancelar
         </Button>

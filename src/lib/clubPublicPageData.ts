@@ -13,7 +13,8 @@ export interface ClubPublicPageData {
 
 // Single source of truth for the courts/hours/player-count/news dataset that
 // feeds ClubPublicView — used by both the real public page (/clubs/[slug])
-// and the owner's Vista Previa (/[club]/admin/public-page), so neither route
+// and the owner's Vista Previa (/[club]/admin/club, vista "Perfil público"),
+// so neither route
 // can drift from the other by fetching a different shape of data.
 export async function getClubPublicPageData(
   supabase: SupabaseClient,

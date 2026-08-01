@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { DAY_NAMES, validateOperatingHours, type OperatingHour } from "@/lib/operatingHours";
 import { DURATION_CATALOG, getClubDurations, durationLabel } from "@/lib/durations";
 import { roundToCents } from "@/lib/reservationPricing";
+import { clubHubPath } from "@/lib/clubHubPaths";
 
 export type UpdateAllowedDurationsState = { success?: boolean; error?: string };
 
@@ -568,6 +569,6 @@ export async function configureDefaultPlayerCategory(
   }
 
   const result = data?.[0];
-  revalidatePath(`/${clubSlug}/admin/settings`);
+  revalidatePath(clubHubPath(clubSlug, "configuracion"));
   return { success: true, provisionedCount: result?.provisioned_count ?? 0 };
 }

@@ -3,9 +3,7 @@ import Link from "next/link";
 import {
   CalendarDays,
   Clock,
-  TrendingUp,
   Users,
-  ArrowRight,
   Home,
   Settings,
   AlertTriangle,
@@ -22,19 +20,29 @@ import {
   DEFAULT_OPERATING_HOURS,
   DAY_NAMES,
   computeAvailableMinutesForRange,
-  computeAvailableMinutesByWeekday,
   type OperatingHour,
 } from "@/lib/operatingHours";
-import { resolveDashboardRange, getTrendBuckets } from "@/lib/dashboardRange";
 import { DashboardTabs } from "./DashboardTabs";
 import { resolveDashboardTab } from "./dashboardTabsConfig";
 import { OnboardingWizard } from "./OnboardingWizard";
+import { getRecentActivity } from "./activity";
+import { ActivityFeed } from "./ActivityFeed";
+import { clubHubPath } from "@/lib/clubHubPaths";
 import { ClubHero } from "@/components/clubs/ClubHero";
 import { CourtIllustration, getSurfaceLabel } from "@/components/courts/CourtIllustration";
-import { TrendChart } from "./TrendChart";
 import { WeekdayOccupancyChart } from "./WeekdayOccupancyChart";
-import { TopHoursChart } from "./TopHoursChart";
-import { DateRangeSelector } from "./DateRangeSelector";
+import type { Court } from "@/types/database";
+import { CourtsGrid } from "../admin/courts/CourtsGrid";
+import { CreateCourtButton } from "../admin/courts/CreateCourtButton";
+import { getClubStatistics } from "@/lib/clubStatistics";
+import { resolveStatsPeriodKey, resolveStatsPeriod } from "@/lib/clubStatisticsRange";
+import { PeriodSelector } from "../admin/statistics/PeriodSelector";
+import { StatsKpiGrid } from "../admin/statistics/StatsKpiGrid";
+import { TimelineChart } from "../admin/statistics/TimelineChart";
+import { StatusDistributionChart } from "../admin/statistics/StatusDistributionChart";
+import { CourtUsageList } from "../admin/statistics/CourtUsageList";
+import { WeekdayActivityChart } from "../admin/statistics/WeekdayActivityChart";
+import { HourlySlotsChart } from "../admin/statistics/HourlySlotsChart";
 
 interface DashboardPageProps {
   params: Promise<{ club: string }>;
@@ -53,16 +61,6 @@ function addDays(d: Date, n: number): Date {
   return r;
 }
 
-const MONTH_ES   = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
-const WEEKDAY_ES = ["dom","lun","mar","mié","jue","vie","sáb"];
-
-function formatDate(dateStr: string, todayStr: string, yesterdayStr: string): string {
-  if (dateStr === todayStr) return "Hoy";
-  if (dateStr === yesterdayStr) return "Ayer";
-  const d = new Date(dateStr + "T00:00:00");
-  return `${WEEKDAY_ES[d.getDay()]} ${d.getDate()} ${MONTH_ES[d.getMonth()]}`;
-}
-
 function formatHours(minutes: number): string {
   if (minutes === 0) return "0";
   const h = minutes / 60;
@@ -76,16 +74,6 @@ function calcEndTime(startTime: string, durationMinutes: number): string {
 }
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
-
-type RecentRow = {
-  id: string;
-  date: string;
-  start_time: string;
-  duration_minutes: number;
-  type: string;
-  status: string;
-  courts: { name: string } | null;
-};
 
 type UpcomingRow = {
   id: string;
@@ -152,9 +140,28 @@ function MiniStat({ value, label }: { value: string; label: string }) {
   );
 }
 
-// Per-court occupancy card grid — shared by "Ocupación por cancha" (Rendimiento
-// Histórico) and "Proyección por cancha" (Operación Próxima). Only the
-// underlying dataset and captions differ between the two.
+// Section wrapper shared by the Rendimiento view's cards — mirrors the
+// standalone Estadísticas screen's own SectionCard exactly (moved here
+// verbatim, that page now only redirects).
+function SectionCard({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="bg-brand-surface border border-white/10 rounded-2xl p-4 sm:p-5">
+      <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-1">{title}</h2>
+      {subtitle && <p className="text-[11px] text-brand-muted/70 mb-3">{subtitle}</p>}
+      <div className={subtitle ? "" : "mt-4"}>{children}</div>
+    </div>
+  );
+}
+
+// Per-court occupancy card grid — used by "Proyección por cancha" (Operación).
 type CourtOccupancyItem = {
   id: string;
   name: string;
@@ -257,28 +264,16 @@ function CourtOccupancyGrid({
   );
 }
 
-// ─── Constants ─────────────────────────────────────────────────────────────────
-
-const TYPE_LABELS: Record<string, string> = {
-  match: "Partido",
-  class: "Clase",
-  block: "Bloqueo",
-};
-
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
 export default async function DashboardPage({ params, searchParams }: DashboardPageProps) {
   const { club: slug } = await params;
   const resolvedSearchParams = await searchParams;
-  const rangeParam =
-    typeof resolvedSearchParams.range === "string" ? resolvedSearchParams.range : undefined;
-  const fromParam =
-    typeof resolvedSearchParams.from === "string" ? resolvedSearchParams.from : undefined;
-  const toParam =
-    typeof resolvedSearchParams.to === "string" ? resolvedSearchParams.to : undefined;
   const activeTab = resolveDashboardTab(
     typeof resolvedSearchParams.tab === "string" ? resolvedSearchParams.tab : undefined
   );
+  const periodParam =
+    typeof resolvedSearchParams.period === "string" ? resolvedSearchParams.period : undefined;
 
   const supabase = await createClient();
   const {
@@ -309,405 +304,65 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
   const nowTimeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:00`;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const todayStr      = toDateStr(today);
-  const yesterdayStr  = toDateStr(addDays(today, -1));
+  const todayStr = toDateStr(today);
 
-  // Selected analysis range (?range=, +?from=/?to= for custom) — drives all
-  // historical/analytics sections below. "Próximo turno" stays real-time and
-  // is NOT affected by it.
-  const range = resolveDashboardRange(rangeParam, today, fromParam, toParam);
+  // ─── Baseline fetches — needed on every view (onboarding banner, empty
+  // state, "Canchas" KPI) regardless of which tab is active ───────────────────
+  const [courtsRes, operatingHoursRes, hasAnyReservationRes, playerCountRes, adminCountRes] =
+    await Promise.all([
+      // Active courts — id/name/surface, used by onboarding step4 and by the
+      // Operación view's per-court breakdown.
+      supabase
+        .from("courts")
+        .select("id, name, surface")
+        .eq("club_id", club.id)
+        .eq("is_active", true)
+        .order("name"),
 
-  // ─── Round 1: all independent fetches in parallel ────────────────────────────
-  const [
-    rangeCountRes,
-    courtsRes,
-    rangeOccupancyRes,
-    rangeInsightsRes,
-    operatingHoursRes,
-    recentRes,
-    hasAnyReservationRes,
-    upcomingRes,
-    prevRangeCountRes,
-    playerCountRes,
-    adminCountRes,
-    futureWeekRes,
-  ] = await Promise.all([
-    // KPI 1 — confirmed reservations in the selected range
-    supabase
-      .from("reservations")
-      .select("id", { count: "exact", head: true })
-      .eq("club_id", club.id)
-      .eq("status", "confirmed")
-      .gte("date", range.current.startStr)
-      .lte("date", range.current.endStr),
+      // Occupancy denominator (Operación) + onboarding step3 check.
+      supabase
+        .from("club_operating_hours")
+        .select("day_of_week, is_open, opens_at, closes_at")
+        .eq("club_id", club.id),
 
-    // Courts — id + name + surface ordered for per-court breakdown
-    supabase
-      .from("courts")
-      .select("id, name, surface")
-      .eq("club_id", club.id)
-      .eq("is_active", true)
-      .order("name"),
+      // Empty-state check — does this club have ANY reservation, ever.
+      supabase
+        .from("reservations")
+        .select("id", { count: "exact", head: true })
+        .eq("club_id", club.id)
+        .limit(1),
 
-    // KPI 2 + KPI 3 + per-court occupancy + trend chart: confirmed in the
-    // selected range, with court_id and date (date powers the trend buckets)
-    supabase
-      .from("reservations")
-      .select("court_id, duration_minutes, date")
-      .eq("club_id", club.id)
-      .eq("status", "confirmed")
-      .gte("date", range.current.startStr)
-      .lte("date", range.current.endStr),
+      supabase
+        .from("club_members")
+        .select("id", { count: "exact", head: true })
+        .eq("club_id", club.id)
+        .eq("role", "PLAYER")
+        .eq("is_active", true),
 
-    // Insights source: all reservations in the selected range (confirmed + cancelled)
-    // Used for: active players (overall + trend), peak hour
-    supabase
-      .from("reservations")
-      .select("id, status, start_time, date")
-      .eq("club_id", club.id)
-      .gte("date", range.current.startStr)
-      .lte("date", range.current.endStr),
+      supabase
+        .from("club_members")
+        .select("id", { count: "exact", head: true })
+        .eq("club_id", club.id)
+        .in("role", ["OWNER", "ADMIN"])
+        .eq("is_active", true),
+    ]);
 
-    // Occupancy denominator + onboarding step3 check
-    supabase
-      .from("club_operating_hours")
-      .select("day_of_week, is_open, opens_at, closes_at")
-      .eq("club_id", club.id),
-
-    // Actividad reciente — last 10 by created_at within the selected range, any status
-    supabase
-      .from("reservations")
-      .select("id, date, start_time, duration_minutes, type, status, courts(name)")
-      .eq("club_id", club.id)
-      .gte("date", range.current.startStr)
-      .lte("date", range.current.endStr)
-      .order("created_at", { ascending: false })
-      .limit(10),
-
-    // Empty-state check — does this club have ANY reservation, ever (any status,
-    // any date)? Decoupled from the selected range so the empty dashboard only
-    // depends on whether the club has ever had activity, not on the filter.
-    supabase
-      .from("reservations")
-      .select("id", { count: "exact", head: true })
-      .eq("club_id", club.id)
-      .limit(1),
-
-    // Próximo turno por cancha — upcoming confirmed reservations from right now
-    // onward, sorted chronologically; the first row per court_id is its next
-    // slot. Always real-time — NOT affected by the selected analysis range.
-    supabase
-      .from("reservations")
-      .select(
-        `id, court_id, date, start_time, duration_minutes,
-         reservation_players(profiles(full_name))`
-      )
-      .eq("club_id", club.id)
-      .eq("status", "confirmed")
-      .or(`date.gt.${todayStr},and(date.eq.${todayStr},start_time.gte.${nowTimeStr})`)
-      .order("date", { ascending: true })
-      .order("start_time", { ascending: true })
-      .limit(50),
-
-    // Comparison — confirmed count in the immediately preceding period (same length)
-    supabase
-      .from("reservations")
-      .select("id", { count: "exact", head: true })
-      .eq("club_id", club.id)
-      .eq("status", "confirmed")
-      .gte("date", range.previous.startStr)
-      .lte("date", range.previous.endStr),
-
-    // Empty-state KPI — active players
-    supabase
-      .from("club_members")
-      .select("id", { count: "exact", head: true })
-      .eq("club_id", club.id)
-      .eq("role", "PLAYER")
-      .eq("is_active", true),
-
-    // Empty-state KPI — active owners/admins
-    supabase
-      .from("club_members")
-      .select("id", { count: "exact", head: true })
-      .eq("club_id", club.id)
-      .in("role", ["OWNER", "ADMIN"])
-      .eq("is_active", true),
-
-    // "Operación próxima" — confirmed reservations today through +6 days
-    // (fixed 7-day window, independent of the historical range selector).
-    supabase
-      .from("reservations")
-      .select("court_id, date, start_time, duration_minutes")
-      .eq("club_id", club.id)
-      .eq("status", "confirmed")
-      .gte("date", todayStr)
-      .lte("date", toDateStr(addDays(today, 6))),
-  ]);
-
-  const rangeCount     = rangeCountRes.count ?? 0;
-  const prevRangeCount = prevRangeCountRes.count ?? 0;
-  const courts         = courtsRes.data ?? [];
-  const rangeInsightsAll = rangeInsightsRes.data ?? [];
-  const recent          = (recentRes.data ?? []) as unknown as RecentRow[];
+  const courts = courtsRes.data ?? [];
   const hasAnyReservation = (hasAnyReservationRes.count ?? 0) > 0;
-  const playerCount     = playerCountRes.count ?? 0;
-  const adminCount      = adminCountRes.count ?? 0;
+  const playerCount = playerCountRes.count ?? 0;
+  const adminCount = adminCountRes.count ?? 0;
+  const isEmpty = !hasAnyReservation;
 
-  // Next slot per court — rows arrive sorted chronologically, so the first
-  // occurrence of each court_id is that court's nearest upcoming reservation.
-  const nextSlotByCourtId = new Map<
-    string,
-    { startTime: string; endTime: string; playerName: string }
-  >();
-  for (const r of (upcomingRes.data ?? []) as unknown as UpcomingRow[]) {
-    if (nextSlotByCourtId.has(r.court_id)) continue;
-    nextSlotByCourtId.set(r.court_id, {
-      startTime: r.start_time.slice(0, 5),
-      endTime: calcEndTime(r.start_time.slice(0, 5), r.duration_minutes),
-      playerName:
-        r.reservation_players.map((rp) => rp.profiles?.full_name).filter(Boolean)[0] ??
-        "—",
-    });
-  }
-
-  // Split range data by status
-  const confirmedRange   = rangeInsightsAll.filter((r) => r.status === "confirmed");
-  const confirmedIdsRange = confirmedRange.map((r) => r.id);
-  const dateByReservationId = new Map(confirmedRange.map((r) => [r.id, r.date]));
-
-  // ─── Round 2: active players (depends on confirmedIdsRange) ──────────────────
-  const activePlayers =
-    confirmedIdsRange.length > 0
-      ? await supabase
-          .from("reservation_players")
-          .select("profile_id, reservation_id")
-          .in("reservation_id", confirmedIdsRange)
-          .then((r) => r.data ?? [])
-      : [];
-
-  const activePlayerCount = new Set(activePlayers.map((p) => p.profile_id)).size;
-
-  // ─── Operating hours (occupancy denominator) ─────────────────────────────────
   const dbHours = (operatingHoursRes.data ?? []) as OperatingHour[];
   const effectiveHours: OperatingHour[] = DEFAULT_OPERATING_HOURS.map((def) => {
     const found = dbHours.find((h) => h.day_of_week === def.day_of_week);
     return found ?? def;
   });
-  const availableMinPerCourt = computeAvailableMinutesForRange(
-    effectiveHours,
-    range.current.start,
-    range.current.end
-  );
-
-  // ─── KPI 2: Horas reservadas · KPI 3: Ocupación del período ─────────────────
-  type OccupancyRow = { court_id: string; duration_minutes: number; date: string };
-  const rangeOccupancyData = (rangeOccupancyRes.data ?? []) as OccupancyRow[];
-  const rangeMinutes = rangeOccupancyData.reduce((sum, r) => sum + r.duration_minutes, 0);
-  const totalAvailableMinutes = availableMinPerCourt * courts.length;
-  const occupancyPct =
-    totalAvailableMinutes > 0
-      ? Math.min(100, Math.round((rangeMinutes / totalAvailableMinutes) * 100))
-      : 0;
-  const occupancyColor =
-    occupancyPct >= 70 ? "#22C55E" : occupancyPct >= 40 ? "#EAB308" : "#EF4444";
-
-  // ─── Evolución de Reservas: cantidad de reservas confirmadas por bucket ─────
-  // Reuses rangeOccupancyData (one row per confirmed reservation) — counting
-  // rows per bucket avoids a separate query. The "vs período anterior" badge
-  // reuses periodChangeLabel/periodChangeColor (same reservation-count
-  // comparison already computed below for the "Vs período anterior" card).
-  const trendBuckets = getTrendBuckets(range);
-  const trendPoints = trendBuckets.map((b) => {
-    const count = rangeOccupancyData.filter(
-      (r) => r.date >= b.startStr && r.date <= b.endStr
-    ).length;
-    return { id: b.startStr, label: b.label, value: count };
-  });
-
-  // ─── Jugadores Activos por bucket: jugadores únicos con reserva en el bucket ─
-  // Reuses activePlayers (profile_id + reservation_id) and dateByReservationId
-  // (built above) — no new query.
-  const activePlayersTrendPoints = trendBuckets.map((b) => {
-    const profileIds = new Set<string>();
-    for (const ap of activePlayers) {
-      const date = dateByReservationId.get(ap.reservation_id);
-      if (date && date >= b.startStr && date <= b.endStr) profileIds.add(ap.profile_id);
-    }
-    return { id: b.startStr, label: b.label, value: profileIds.size };
-  });
-
-  // ─── Ocupación por día de la semana ──────────────────────────────────────────
-  // Reuses the same rangeOccupancyData (no new query) and the same per-day
-  // operating-hours lookup as the main occupancy denominator, just bucketed
-  // by weekday instead of summed into one total.
-  const reservedMinByWeekday = [0, 0, 0, 0, 0, 0, 0];
-  for (const r of rangeOccupancyData) {
-    const dayNum = new Date(r.date + "T00:00:00").getDay();
-    reservedMinByWeekday[dayNum] += r.duration_minutes;
-  }
-  const availableMinByWeekday = computeAvailableMinutesByWeekday(
-    effectiveHours,
-    range.current.start,
-    range.current.end
-  );
-  const weekdayOccupancyPoints = [1, 2, 3, 4, 5, 6, 0]
-    .map((dayNum) => {
-      const totalAvailable = availableMinByWeekday[dayNum] * courts.length;
-      const pct =
-        totalAvailable > 0
-          ? Math.min(100, Math.round((reservedMinByWeekday[dayNum] / totalAvailable) * 100))
-          : 0;
-      return { id: String(dayNum), label: DAY_NAMES[dayNum].slice(0, 3), pct };
-    })
-    .sort((a, b) => b.pct - a.pct);
-
-  // ─── Insights: per-court occupancy ───────────────────────────────────────────
-  const reservedMinByCourt = new Map<string, number>();
-  for (const r of rangeOccupancyData) {
-    reservedMinByCourt.set(r.court_id, (reservedMinByCourt.get(r.court_id) ?? 0) + r.duration_minutes);
-  }
-  const courtOccupancy = (courts as { id: string; name: string; surface: string | null }[]).map((c) => {
-    const reservedMin = reservedMinByCourt.get(c.id) ?? 0;
-    const pct =
-      availableMinPerCourt > 0
-        ? Math.min(100, Math.round((reservedMin / availableMinPerCourt) * 100))
-        : 0;
-    return {
-      id: c.id,
-      name: c.name,
-      surface: c.surface,
-      reservedHours: +(reservedMin / 60).toFixed(1),
-      availableHours: +(availableMinPerCourt / 60).toFixed(1),
-      pct,
-      color: pct >= 70 ? "#22C55E" : pct >= 40 ? "#EAB308" : "#EF4444",
-      nextSlot: nextSlotByCourtId.get(c.id) ?? null,
-    };
-  });
-
-  // ─── Horas Más Demandadas: top 5 horarios por cantidad de reservas ──────────
-  const confirmedStartTimes = rangeInsightsAll
-    .filter((r) => r.status === "confirmed")
-    .map((r) => r.start_time as string);
-  const hourFrequency = new Map<number, number>();
-  for (const t of confirmedStartTimes) {
-    const hour = parseInt(t.slice(0, 2), 10);
-    hourFrequency.set(hour, (hourFrequency.get(hour) ?? 0) + 1);
-  }
-  const topHoursPoints = [...hourFrequency.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([hour, count]) => ({ label: `${String(hour).padStart(2, "0")}:00`, count }));
-
-  // ─── Insights: comparación vs período anterior (badge en Evolución de Reservas) ─
-  let periodChangeLabel  = "—";
-  let periodChangeColor  = "#94A3B8";
-  if (prevRangeCount === 0 && rangeCount > 0) {
-    periodChangeLabel = `+${rangeCount}`;
-    periodChangeColor = "#22C55E";
-  } else if (prevRangeCount > 0) {
-    const pct = Math.round(((rangeCount - prevRangeCount) / prevRangeCount) * 100);
-    periodChangeLabel = pct > 0 ? `▲ +${pct}%` : pct < 0 ? `▼ ${pct}%` : "=";
-    periodChangeColor = pct > 0 ? "#22C55E" : pct < 0 ? "#EF4444" : "#94A3B8";
-  }
-
-  // Decoupled from the selected range — a populated club must keep showing the
-  // operational dashboard even if the chosen period has zero activity.
-  const isEmpty = !hasAnyReservation;
-
-  // ─── Operación próxima: fixed 7-day window (today..+6), independent of the
-  // historical range selector above. Source of truth is exclusively confirmed
-  // reservations already in the DB — no projection/extrapolation.
-  type FutureRow = { court_id: string; date: string; start_time: string; duration_minutes: number };
-  const futureWeekRows = (futureWeekRes.data ?? []) as FutureRow[];
-  const next7End = addDays(today, 6);
-
-  const todayRows = futureWeekRows.filter((r) => r.date === todayStr);
-  const todayReservedMin = todayRows.reduce((sum, r) => sum + r.duration_minutes, 0);
-  const todayAvailableMinPerCourt = computeAvailableMinutesForRange(effectiveHours, today, today);
-  const todayCapacityMin = todayAvailableMinPerCourt * courts.length;
-  const todayFreeMin = Math.max(0, todayCapacityMin - todayReservedMin);
-
-  const next7ReservedMin = futureWeekRows.reduce((sum, r) => sum + r.duration_minutes, 0);
-  const next7AvailableMinPerCourt = computeAvailableMinutesForRange(effectiveHours, today, next7End);
-  const next7CapacityMin = next7AvailableMinPerCourt * courts.length;
-  const next7FreeMin = Math.max(0, next7CapacityMin - next7ReservedMin);
-  const next7OccupancyPct =
-    next7CapacityMin > 0 ? Math.min(100, Math.round((next7ReservedMin / next7CapacityMin) * 100)) : 0;
-  const next7OccupancyColor =
-    next7OccupancyPct >= 70 ? "#22C55E" : next7OccupancyPct >= 40 ? "#EAB308" : "#EF4444";
-
-  // Next single upcoming reservation overall (any court) — reuses the
-  // already-fetched upcomingRes (sorted chronologically from right now on).
-  const nextUpcoming = ((upcomingRes.data ?? []) as unknown as UpcomingRow[])[0] ?? null;
-  const nextUpcomingCourtName = nextUpcoming
-    ? courts.find((c) => c.id === nextUpcoming.court_id)?.name ?? "—"
-    : null;
-
-  // Canchas más ocupadas — próximos 7 días (capacity is the same per court,
-  // since operating hours are club-wide, not per-court).
-  const next7ReservedMinByCourt = new Map<string, number>();
-  for (const r of futureWeekRows) {
-    next7ReservedMinByCourt.set(r.court_id, (next7ReservedMinByCourt.get(r.court_id) ?? 0) + r.duration_minutes);
-  }
-  const busiestCourts = courts
-    .map((c) => {
-      const reservedMin = next7ReservedMinByCourt.get(c.id) ?? 0;
-      const pct =
-        next7AvailableMinPerCourt > 0
-          ? Math.min(100, Math.round((reservedMin / next7AvailableMinPerCourt) * 100))
-          : 0;
-      return { id: c.id, name: c.name, pct };
-    })
-    .sort((a, b) => b.pct - a.pct);
-
-  // Proyección por cancha — mismo dataset que "Canchas más ocupadas" arriba
-  // (next7ReservedMinByCourt / next7AvailableMinPerCourt), agregando el
-  // "Próximo turno" real-time ya calculado para Ocupación por cancha.
-  const next7CourtProjection = (
-    courts as { id: string; name: string; surface: string | null }[]
-  ).map((c) => {
-    const reservedMin = next7ReservedMinByCourt.get(c.id) ?? 0;
-    const pct =
-      next7AvailableMinPerCourt > 0
-        ? Math.min(100, Math.round((reservedMin / next7AvailableMinPerCourt) * 100))
-        : 0;
-    return {
-      id: c.id,
-      name: c.name,
-      surface: c.surface,
-      pct,
-      color: pct >= 70 ? "#22C55E" : pct >= 40 ? "#EAB308" : "#EF4444",
-      nextSlot: nextSlotByCourtId.get(c.id) ?? null,
-    };
-  });
-
-  // Heatmap — each of the next 7 calendar days individually (not a weekday
-  // aggregate): reserved/available for that exact date. Closed days are
-  // flagged rather than shown as a misleading 0%.
-  const next7ReservedMinByDate = new Map<string, number>();
-  for (const r of futureWeekRows) {
-    next7ReservedMinByDate.set(r.date, (next7ReservedMinByDate.get(r.date) ?? 0) + r.duration_minutes);
-  }
-  const next7DayHeatmap = Array.from({ length: 7 }, (_, i) => {
-    const d = addDays(today, i);
-    const dateStr = toDateStr(d);
-    const hours = effectiveHours.find((h) => h.day_of_week === d.getDay())!;
-    if (!hours.is_open) return { id: dateStr, label: DAY_NAMES[d.getDay()].slice(0, 3), pct: 0, closed: true };
-    const availableMin = computeAvailableMinutesForRange(effectiveHours, d, d) * courts.length;
-    const reservedMin = next7ReservedMinByDate.get(dateStr) ?? 0;
-    const pct = availableMin > 0 ? Math.min(100, Math.round((reservedMin / availableMin) * 100)) : 0;
-    return { id: dateStr, label: DAY_NAMES[d.getDay()].slice(0, 3), pct, closed: false };
-  });
 
   // ─── Onboarding wizard step completion ───────────────────────────────────────
-  // Step 1: club has a description (social links remain optional)
   const step1Done = !!club.description;
-  // Step 2: club has city as minimum location signal
   const step2Done = !!club.city;
-  // Step 3: operating hours + durations configured
   const step3Done = dbHours.length > 0 && (club.allowed_reservation_durations?.length ?? 0) > 0;
-  // Step 4: at least one active court exists
   const step4Done = courts.length > 0;
 
   const pendingSetupItems = [
@@ -730,13 +385,13 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
         {(step4Done
           ? [
               { label: "Reservaciones", Icon: CalendarDays, href: `/${slug}/admin/reservations`, color: "var(--club-primary)" },
-              { label: "Canchas",       Icon: Home,         href: `/${slug}/admin/courts`,        color: "var(--club-secondary)" },
+              { label: "Canchas",       Icon: Home,         href: `/${slug}/dashboard?tab=canchas`, color: "var(--club-secondary)" },
               { label: "Jugadores",     Icon: Users,        href: `/${slug}/admin/players`,       color: "var(--club-primary)" },
-              { label: "Configuración", Icon: Settings,     href: `/${slug}/admin`,               color: "var(--club-secondary)" },
+              { label: "Configuración", Icon: Settings,     href: clubHubPath(slug, "configuracion"), color: "var(--club-secondary)" },
             ]
           : [
-              { label: "Canchas",       Icon: Home,         href: `/${slug}/admin/courts`,        color: "var(--club-primary)" },
-              { label: "Configuración", Icon: Settings,     href: `/${slug}/admin`,               color: "var(--club-secondary)" },
+              { label: "Canchas",       Icon: Home,         href: `/${slug}/dashboard?tab=canchas`, color: "var(--club-primary)" },
+              { label: "Configuración", Icon: Settings,     href: clubHubPath(slug, "configuracion"), color: "var(--club-secondary)" },
               { label: "Jugadores",     Icon: Users,        href: `/${slug}/admin/players`,       color: "var(--club-primary)" },
               { label: "Reservaciones", Icon: CalendarDays, href: `/${slug}/admin/reservations`,  color: "var(--club-secondary)" },
             ]
@@ -764,6 +419,377 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
       </div>
     </div>
   );
+
+  // ─── Per-view fetches — only the active tab's data is loaded, so switching
+  // views never pays for the other three's queries ─────────────────────────────
+  let operacionContent: React.ReactNode = null;
+  let rendimientoContent: React.ReactNode = null;
+  let actividadContent: React.ReactNode = null;
+  let canchasContent: React.ReactNode = null;
+
+  if (!isEmpty && activeTab === "operacion") {
+    const [upcomingRes, futureWeekRes] = await Promise.all([
+      // Próximo turno por cancha — upcoming confirmed reservations from right
+      // now onward, sorted chronologically; the first row per court_id is
+      // that court's nearest upcoming reservation.
+      supabase
+        .from("reservations")
+        .select(
+          `id, court_id, date, start_time, duration_minutes,
+           reservation_players(profiles(full_name))`
+        )
+        .eq("club_id", club.id)
+        .eq("status", "confirmed")
+        .or(`date.gt.${todayStr},and(date.eq.${todayStr},start_time.gte.${nowTimeStr})`)
+        .order("date", { ascending: true })
+        .order("start_time", { ascending: true })
+        .limit(50),
+
+      // "Operación próxima" — confirmed reservations today through +6 days.
+      supabase
+        .from("reservations")
+        .select("court_id, date, start_time, duration_minutes")
+        .eq("club_id", club.id)
+        .eq("status", "confirmed")
+        .gte("date", todayStr)
+        .lte("date", toDateStr(addDays(today, 6))),
+    ]);
+
+    const nextSlotByCourtId = new Map<
+      string,
+      { startTime: string; endTime: string; playerName: string }
+    >();
+    for (const r of (upcomingRes.data ?? []) as unknown as UpcomingRow[]) {
+      if (nextSlotByCourtId.has(r.court_id)) continue;
+      nextSlotByCourtId.set(r.court_id, {
+        startTime: r.start_time.slice(0, 5),
+        endTime: calcEndTime(r.start_time.slice(0, 5), r.duration_minutes),
+        playerName:
+          r.reservation_players.map((rp) => rp.profiles?.full_name).filter(Boolean)[0] ?? "—",
+      });
+    }
+
+    type FutureRow = { court_id: string; date: string; start_time: string; duration_minutes: number };
+    const futureWeekRows = (futureWeekRes.data ?? []) as FutureRow[];
+    const next7End = addDays(today, 6);
+
+    const todayRows = futureWeekRows.filter((r) => r.date === todayStr);
+    const todayReservedMin = todayRows.reduce((sum, r) => sum + r.duration_minutes, 0);
+    const todayAvailableMinPerCourt = computeAvailableMinutesForRange(effectiveHours, today, today);
+    const todayCapacityMin = todayAvailableMinPerCourt * courts.length;
+    const todayFreeMin = Math.max(0, todayCapacityMin - todayReservedMin);
+
+    const next7ReservedMin = futureWeekRows.reduce((sum, r) => sum + r.duration_minutes, 0);
+    const next7AvailableMinPerCourt = computeAvailableMinutesForRange(effectiveHours, today, next7End);
+    const next7CapacityMin = next7AvailableMinPerCourt * courts.length;
+    const next7FreeMin = Math.max(0, next7CapacityMin - next7ReservedMin);
+    const next7OccupancyPct =
+      next7CapacityMin > 0 ? Math.min(100, Math.round((next7ReservedMin / next7CapacityMin) * 100)) : 0;
+    const next7OccupancyColor =
+      next7OccupancyPct >= 70 ? "#22C55E" : next7OccupancyPct >= 40 ? "#EAB308" : "#EF4444";
+
+    const nextUpcoming = ((upcomingRes.data ?? []) as unknown as UpcomingRow[])[0] ?? null;
+    const nextUpcomingCourtName = nextUpcoming
+      ? courts.find((c) => c.id === nextUpcoming.court_id)?.name ?? "—"
+      : null;
+
+    const next7ReservedMinByCourt = new Map<string, number>();
+    for (const r of futureWeekRows) {
+      next7ReservedMinByCourt.set(r.court_id, (next7ReservedMinByCourt.get(r.court_id) ?? 0) + r.duration_minutes);
+    }
+    const busiestCourts = courts
+      .map((c) => {
+        const reservedMin = next7ReservedMinByCourt.get(c.id) ?? 0;
+        const pct =
+          next7AvailableMinPerCourt > 0
+            ? Math.min(100, Math.round((reservedMin / next7AvailableMinPerCourt) * 100))
+            : 0;
+        return { id: c.id, name: c.name, pct };
+      })
+      .sort((a, b) => b.pct - a.pct);
+
+    const next7CourtProjection = (
+      courts as { id: string; name: string; surface: string | null }[]
+    ).map((c) => {
+      const reservedMin = next7ReservedMinByCourt.get(c.id) ?? 0;
+      const pct =
+        next7AvailableMinPerCourt > 0
+          ? Math.min(100, Math.round((reservedMin / next7AvailableMinPerCourt) * 100))
+          : 0;
+      return {
+        id: c.id,
+        name: c.name,
+        surface: c.surface,
+        pct,
+        color: pct >= 70 ? "#22C55E" : pct >= 40 ? "#EAB308" : "#EF4444",
+        nextSlot: nextSlotByCourtId.get(c.id) ?? null,
+      };
+    });
+
+    const next7ReservedMinByDate = new Map<string, number>();
+    for (const r of futureWeekRows) {
+      next7ReservedMinByDate.set(r.date, (next7ReservedMinByDate.get(r.date) ?? 0) + r.duration_minutes);
+    }
+    const next7DayHeatmap = Array.from({ length: 7 }, (_, i) => {
+      const d = addDays(today, i);
+      const dateStr = toDateStr(d);
+      const hours = effectiveHours.find((h) => h.day_of_week === d.getDay())!;
+      if (!hours.is_open) return { id: dateStr, label: DAY_NAMES[d.getDay()].slice(0, 3), pct: 0, closed: true };
+      const availableMin = computeAvailableMinutesForRange(effectiveHours, d, d) * courts.length;
+      const reservedMin = next7ReservedMinByDate.get(dateStr) ?? 0;
+      const pct = availableMin > 0 ? Math.min(100, Math.round((reservedMin / availableMin) * 100)) : 0;
+      return { id: dateStr, label: DAY_NAMES[d.getDay()].slice(0, 3), pct, closed: false };
+    });
+
+    operacionContent = (
+      <div className="mb-6 sm:mb-8">
+        <h2 className="sr-only">Operación próxima</h2>
+
+        {/* Hoy — snapshot compacto */}
+        <div className="bg-brand-surface border border-white/10 rounded-2xl p-4 sm:p-5 mb-3 sm:mb-4">
+          <div className="flex items-center gap-2 mb-3">
+            <CalendarClock className="w-4 h-4" style={{ color: "var(--club-primary)" }} />
+            <p className="text-sm font-semibold text-white">Hoy</p>
+          </div>
+          <div className="grid grid-cols-3 gap-3 mb-3">
+            <MiniStat value={String(todayRows.length)} label="reservas" />
+            <MiniStat value={formatHours(todayReservedMin)} label="h reservadas" />
+            <MiniStat value={formatHours(todayFreeMin)} label="h libres" />
+          </div>
+          <div className="pt-2.5 border-t border-white/[0.06] flex items-center justify-between gap-3">
+            <p className="text-[11px] text-brand-muted shrink-0">Próxima reserva</p>
+            {nextUpcoming ? (
+              <p className="text-sm font-semibold text-white truncate">
+                {nextUpcoming.start_time.slice(0, 5)} · {nextUpcomingCourtName}
+              </p>
+            ) : (
+              <p className="text-sm text-brand-muted/70">Sin reservas</p>
+            )}
+          </div>
+        </div>
+
+        {/* Próximos 7 días — reservas + capacidad + ocupación, en una sola tarjeta */}
+        <div className="bg-brand-surface border border-white/10 rounded-2xl p-4 sm:p-5 mb-3 sm:mb-4">
+          <div className="flex items-center gap-2 mb-3">
+            <CalendarRange className="w-4 h-4" style={{ color: "var(--club-secondary)" }} />
+            <p className="text-sm font-semibold text-white">Próximos 7 días</p>
+          </div>
+          <div className="grid grid-cols-4 gap-2 sm:gap-3 mb-4">
+            <MiniStat value={String(futureWeekRows.length)} label="reservas" />
+            <MiniStat value={String(courts.length)} label="canchas" />
+            <MiniStat value={formatHours(next7ReservedMin)} label="h reservadas" />
+            <MiniStat value={formatHours(next7FreeMin)} label="h libres" />
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-2.5 rounded-full bg-white/[0.07] overflow-hidden">
+              <div
+                className="h-full rounded-full"
+                style={{ width: `${next7OccupancyPct}%`, backgroundColor: next7OccupancyColor }}
+              />
+            </div>
+            <span
+              className="text-2xl font-bold tabular-nums shrink-0"
+              style={{ color: next7OccupancyColor }}
+            >
+              {next7OccupancyPct}%
+            </span>
+          </div>
+          <p className="text-[11px] text-brand-muted/70 mt-1.5">Ocupación proyectada de la capacidad total</p>
+        </div>
+
+        {/* Canchas más ocupadas + Días con menor ocupación */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+          <div className="bg-brand-surface border border-white/10 rounded-2xl p-4 sm:p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Flame className="w-4 h-4" style={{ color: "var(--club-secondary)" }} />
+              <p className="text-sm font-semibold text-white">Canchas más ocupadas</p>
+              <span className="text-[11px] text-brand-muted ml-auto">próx. 7 días</span>
+            </div>
+            {busiestCourts.length === 0 ? (
+              <p className="text-sm text-brand-muted">Sin canchas activas</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {busiestCourts.map((c) => {
+                  const color = c.pct >= 70 ? "#22C55E" : c.pct >= 40 ? "#EAB308" : "#EF4444";
+                  return (
+                    <div key={c.id}>
+                      <div className="flex items-center justify-between gap-3 mb-1.5">
+                        <span className="text-sm text-white/90 font-medium truncate">{c.name}</span>
+                        <span
+                          className="text-sm font-bold tabular-nums shrink-0"
+                          style={{ color }}
+                        >
+                          {c.pct}%
+                        </span>
+                      </div>
+                      <div className="h-3.5 rounded-full bg-white/[0.07] overflow-hidden">
+                        <div
+                          className="h-full rounded-full"
+                          style={{ width: `${c.pct}%`, backgroundColor: color }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-brand-surface border border-white/10 rounded-2xl p-4 sm:p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <TrendingDown className="w-4 h-4" style={{ color: "var(--club-primary)" }} />
+              <p className="text-sm font-semibold text-white">Días con menor ocupación</p>
+              <span className="text-[11px] text-brand-muted ml-auto">próx. 7 días</span>
+            </div>
+            <WeekdayOccupancyChart points={next7DayHeatmap} />
+            <p className="text-[11px] text-brand-muted/60 mt-3">
+              Útil para promociones, clínicas o torneos en los días más flojos.
+            </p>
+          </div>
+        </div>
+
+        {/* Proyección por cancha */}
+        <div className="mt-6 sm:mt-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider">
+              Proyección por cancha
+            </h2>
+            <span className="text-[11px] text-brand-muted">próx. 7 días</span>
+          </div>
+          <CourtOccupancyGrid
+            items={next7CourtProjection}
+            pctCaption="ocupación próx. 7 días"
+            noSlotLabel="Sin próximas reservas"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (!isEmpty && activeTab === "rendimiento") {
+    const periodKey = resolveStatsPeriodKey(periodParam);
+    const { start, end } = resolveStatsPeriod(periodKey);
+    const { data: stats, error } = await getClubStatistics(supabase, club.id, start, end);
+
+    rendimientoContent = (
+      <div>
+        <div className="flex justify-end mb-3">
+          <PeriodSelector value={periodKey} />
+        </div>
+
+        {error && (
+          <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">
+            {error}
+          </div>
+        )}
+
+        {stats && stats.summary.totalReservations === 0 && (
+          <div className="text-center py-16 px-4 rounded-2xl border border-dashed border-white/10">
+            <p className="text-white font-semibold mb-1">Aún no hay actividad en este periodo</p>
+            <p className="text-sm text-brand-muted max-w-sm mx-auto">
+              Cuando el club tenga reservas, aquí verás su evolución y uso por cancha.
+            </p>
+          </div>
+        )}
+
+        {stats && stats.summary.totalReservations > 0 && (
+          <div className="flex flex-col gap-6">
+            <StatsKpiGrid summary={stats.summary} previousSummary={stats.previousSummary} />
+
+            <SectionCard
+              title="Evolución de reservas"
+              subtitle="Todas las reservas del periodo (confirmadas, pendientes, canceladas y rechazadas), por fecha de la reserva."
+            >
+              <TimelineChart points={stats.timeline} granularity={stats.timelineGranularity} />
+            </SectionCard>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <SectionCard title="Distribución por estado">
+                <StatusDistributionChart statuses={stats.statuses} />
+              </SectionCard>
+
+              <SectionCard title="Uso por cancha">
+                {stats.courts.length === 0 ? (
+                  <p className="text-sm text-brand-muted/70">Sin reservas confirmadas en este periodo.</p>
+                ) : (
+                  <CourtUsageList courts={stats.courts} />
+                )}
+              </SectionCard>
+
+              <SectionCard title="Actividad por día de la semana">
+                <WeekdayActivityChart weekdays={stats.weekdays} />
+              </SectionCard>
+
+              <SectionCard title="Actividad por franja horaria">
+                {stats.hourlySlots.length === 0 ? (
+                  <p className="text-sm text-brand-muted/70">Sin reservas confirmadas en este periodo.</p>
+                ) : (
+                  <HourlySlotsChart hourlySlots={stats.hourlySlots} />
+                )}
+              </SectionCard>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (!isEmpty && activeTab === "actividad") {
+    const activityItems = await getRecentActivity(supabase, club.id, slug);
+    actividadContent = (
+      <div className="flex flex-col gap-8">
+        <div className="bg-brand-surface border border-white/10 rounded-2xl p-6">
+          <h2 className="text-sm font-semibold text-white mb-5">Actividad reciente</h2>
+          <ActivityFeed items={activityItems} />
+        </div>
+        {quickAccessSection}
+      </div>
+    );
+  }
+
+  if (!isEmpty && activeTab === "canchas") {
+    const { data: fullCourts } = await supabase
+      .from("courts")
+      .select("*")
+      .eq("club_id", club.id)
+      .order("name", { ascending: true });
+    const courtList = (fullCourts ?? []) as Court[];
+
+    canchasContent = (
+      <div>
+        <div className="flex items-start justify-between mb-6 gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Canchas</h2>
+            <p className="text-brand-muted mt-1 text-sm">Gestiona las canchas del club.</p>
+          </div>
+          <CreateCourtButton clubSlug={slug} clubId={club.id} />
+        </div>
+
+        {courtList.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-4">
+              <Home className="w-6 h-6 text-brand-muted" />
+            </div>
+            <h3 className="text-base font-semibold text-white mb-1">
+              No hay canchas registradas
+            </h3>
+            <p className="text-sm text-brand-muted max-w-sm mb-6">
+              Agrega la primera cancha del club para empezar a gestionar reservaciones.
+            </p>
+            <CreateCourtButton
+              clubSlug={slug}
+              clubId={club.id}
+              className="inline-flex items-center gap-2 h-10 px-4 text-sm font-medium rounded-xl bg-brand-primary text-brand-bg hover:brightness-110 active:brightness-95 transition-all duration-200"
+            />
+          </div>
+        )}
+
+        {courtList.length > 0 && (
+          <CourtsGrid courts={courtList} clubSlug={slug} clubId={club.id} />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 md:p-10">
@@ -797,7 +823,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             <KpiCard label="Canchas" value={String(courts.length)} Icon={Home} color="var(--club-primary)" />
             <KpiCard label="Jugadores" value={String(playerCount)} Icon={Users} color="var(--club-secondary)" />
-            <KpiCard label="Reservas" value={String(recent.length)} Icon={CalendarDays} color="var(--club-primary)" />
+            <KpiCard label="Reservas" value="0" Icon={CalendarDays} color="var(--club-primary)" />
             <KpiCard label="Administradores" value={String(adminCount)} Icon={Shield} color="var(--club-secondary)" />
           </div>
 
@@ -877,322 +903,10 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
       ) : (
         <DashboardTabs
           active={activeTab}
-          proxima={
-          <div className="mb-6 sm:mb-8">
-            <h2 className="sr-only">Operación próxima</h2>
-
-            {/* Hoy — snapshot compacto */}
-            <div className="bg-brand-surface border border-white/10 rounded-2xl p-4 sm:p-5 mb-3 sm:mb-4">
-              <div className="flex items-center gap-2 mb-3">
-                <CalendarClock className="w-4 h-4" style={{ color: "var(--club-primary)" }} />
-                <p className="text-sm font-semibold text-white">Hoy</p>
-              </div>
-              <div className="grid grid-cols-3 gap-3 mb-3">
-                <MiniStat value={String(todayRows.length)} label="reservas" />
-                <MiniStat value={formatHours(todayReservedMin)} label="h reservadas" />
-                <MiniStat value={formatHours(todayFreeMin)} label="h libres" />
-              </div>
-              <div className="pt-2.5 border-t border-white/[0.06] flex items-center justify-between gap-3">
-                <p className="text-[11px] text-brand-muted shrink-0">Próxima reserva</p>
-                {nextUpcoming ? (
-                  <p className="text-sm font-semibold text-white truncate">
-                    {nextUpcoming.start_time.slice(0, 5)} · {nextUpcomingCourtName}
-                  </p>
-                ) : (
-                  <p className="text-sm text-brand-muted/70">Sin reservas</p>
-                )}
-              </div>
-            </div>
-
-            {/* Próximos 7 días — reservas + capacidad + ocupación, en una sola tarjeta */}
-            <div className="bg-brand-surface border border-white/10 rounded-2xl p-4 sm:p-5 mb-3 sm:mb-4">
-              <div className="flex items-center gap-2 mb-3">
-                <CalendarRange className="w-4 h-4" style={{ color: "var(--club-secondary)" }} />
-                <p className="text-sm font-semibold text-white">Próximos 7 días</p>
-              </div>
-              <div className="grid grid-cols-4 gap-2 sm:gap-3 mb-4">
-                <MiniStat value={String(futureWeekRows.length)} label="reservas" />
-                <MiniStat value={String(courts.length)} label="canchas" />
-                <MiniStat value={formatHours(next7ReservedMin)} label="h reservadas" />
-                <MiniStat value={formatHours(next7FreeMin)} label="h libres" />
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-2.5 rounded-full bg-white/[0.07] overflow-hidden">
-                  <div
-                    className="h-full rounded-full"
-                    style={{ width: `${next7OccupancyPct}%`, backgroundColor: next7OccupancyColor }}
-                  />
-                </div>
-                <span
-                  className="text-2xl font-bold tabular-nums shrink-0"
-                  style={{ color: next7OccupancyColor }}
-                >
-                  {next7OccupancyPct}%
-                </span>
-              </div>
-              <p className="text-[11px] text-brand-muted/70 mt-1.5">Ocupación proyectada de la capacidad total</p>
-            </div>
-
-            {/* Canchas más ocupadas + Días con menor ocupación */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
-              <div className="bg-brand-surface border border-white/10 rounded-2xl p-4 sm:p-5">
-                <div className="flex items-center gap-2 mb-3">
-                  <Flame className="w-4 h-4" style={{ color: "var(--club-secondary)" }} />
-                  <p className="text-sm font-semibold text-white">Canchas más ocupadas</p>
-                  <span className="text-[11px] text-brand-muted ml-auto">próx. 7 días</span>
-                </div>
-                {busiestCourts.length === 0 ? (
-                  <p className="text-sm text-brand-muted">Sin canchas activas</p>
-                ) : (
-                  <div className="flex flex-col gap-3">
-                    {busiestCourts.map((c) => {
-                      const color = c.pct >= 70 ? "#22C55E" : c.pct >= 40 ? "#EAB308" : "#EF4444";
-                      return (
-                        <div key={c.id}>
-                          <div className="flex items-center justify-between gap-3 mb-1.5">
-                            <span className="text-sm text-white/90 font-medium truncate">{c.name}</span>
-                            <span
-                              className="text-sm font-bold tabular-nums shrink-0"
-                              style={{ color }}
-                            >
-                              {c.pct}%
-                            </span>
-                          </div>
-                          <div className="h-3.5 rounded-full bg-white/[0.07] overflow-hidden">
-                            <div
-                              className="h-full rounded-full"
-                              style={{ width: `${c.pct}%`, backgroundColor: color }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              <div className="bg-brand-surface border border-white/10 rounded-2xl p-4 sm:p-5">
-                <div className="flex items-center gap-2 mb-3">
-                  <TrendingDown className="w-4 h-4" style={{ color: "var(--club-primary)" }} />
-                  <p className="text-sm font-semibold text-white">Días con menor ocupación</p>
-                  <span className="text-[11px] text-brand-muted ml-auto">próx. 7 días</span>
-                </div>
-                <WeekdayOccupancyChart points={next7DayHeatmap} />
-                <p className="text-[11px] text-brand-muted/60 mt-3">
-                  Útil para promociones, clínicas o torneos en los días más flojos.
-                </p>
-              </div>
-            </div>
-
-            {/* Proyección por cancha */}
-            <div className="mt-6 sm:mt-8">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider">
-                  Proyección por cancha
-                </h2>
-                <span className="text-[11px] text-brand-muted">próx. 7 días</span>
-              </div>
-              <CourtOccupancyGrid
-                items={next7CourtProjection}
-                pctCaption="ocupación próx. 7 días"
-                noSlotLabel="Sin próximas reservas"
-              />
-            </div>
-          </div>
-          }
-          historico={
-          <>
-          {/* ─── Selector de rango ─────────────────────────────────────────── */}
-          <div className="flex justify-end mb-3">
-            <DateRangeSelector
-              value={range.key}
-              customFrom={range.key === "custom" ? range.current.startStr : undefined}
-              customTo={range.key === "custom" ? range.current.endStr : undefined}
-              dateRangeLabel={range.dateRangeLabel}
-            />
-          </div>
-
-          {/* ─── KPIs ──────────────────────────────────────────────────────── */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            <KpiCard
-              label={`Reservas ${range.label.toLowerCase()}`}
-              value={String(rangeCount)}
-              Icon={CalendarDays}
-              color="var(--club-primary)"
-            />
-            <KpiCard
-              label="Horas reservadas"
-              value={formatHours(rangeMinutes)}
-              unit="h"
-              sub={range.label.toLowerCase()}
-              Icon={Clock}
-              color="var(--club-secondary)"
-            />
-            <KpiCard
-              label="Ocupación del período"
-              value={String(occupancyPct)}
-              unit="%"
-              Icon={TrendingUp}
-              color={occupancyColor}
-            />
-            <KpiCard
-              label="Jugadores activos"
-              value={String(activePlayerCount)}
-              sub={range.label.toLowerCase()}
-              Icon={Users}
-              color="var(--club-primary)"
-            />
-          </div>
-
-          {/* ─── Insights del Club ───────────────────────────────────────── */}
-          <div className="mb-8">
-            <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-4">
-              Insights del Club
-            </h2>
-
-            {/* Fila 1 — Horas Más Demandadas + Jugadores Activos */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-              <div className="bg-brand-surface border border-white/10 rounded-2xl p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm font-semibold text-white">Horas Más Demandadas</p>
-                  <span className="text-[11px] text-brand-muted">{range.label}</span>
-                </div>
-                <TopHoursChart points={topHoursPoints} />
-              </div>
-
-              <div className="bg-brand-surface border border-white/10 rounded-2xl p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm font-semibold text-white">Jugadores Activos</p>
-                  <span className="text-[11px] text-brand-muted">{range.label}</span>
-                </div>
-                <TrendChart points={activePlayersTrendPoints} />
-              </div>
-            </div>
-
-            {/* Fila 2 — Evolución de Reservas + Ocupación por Día de la Semana */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div className="bg-brand-surface border border-white/10 rounded-2xl p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm font-semibold text-white">Evolución de Reservas</p>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-brand-muted">{range.label}</span>
-                    {range.hasComparison && (
-                      <span
-                        className="text-xs font-semibold tabular-nums"
-                        style={{ color: periodChangeColor }}
-                      >
-                        {periodChangeLabel} vs {range.comparisonLabel}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <TrendChart points={trendPoints} />
-              </div>
-
-              <div className="bg-brand-surface border border-white/10 rounded-2xl p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm font-semibold text-white">Ocupación por Día de la Semana</p>
-                  <span className="text-[11px] text-brand-muted">{range.label}</span>
-                </div>
-                <WeekdayOccupancyChart points={weekdayOccupancyPoints} />
-              </div>
-            </div>
-          </div>
-
-          {/* ─── Ocupación por cancha ───────────────────────────────────────── */}
-          <div className="mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider">
-                Ocupación por cancha
-              </h2>
-              <span className="text-[11px] text-brand-muted">{range.label}</span>
-            </div>
-            <CourtOccupancyGrid
-              items={courtOccupancy}
-              pctCaption={`ocupación ${range.label.toLowerCase()}`}
-            />
-          </div>
-          </>
-          }
-          actividad={
-          <div className="flex flex-col gap-8">
-          {/* Extension point: Solicitudes de ingreso, Invitaciones pendientes,
-              Alertas del sistema, Mantenimientos programados y Reservas
-              canceladas recientemente pueden agregarse aquí como hermanos de
-              este div — no implementados todavía, solo la estructura. */}
-
-          {/* ─── Actividad reciente ──────────────────────────────────────── */}
-          <div className="bg-brand-surface border border-white/10 rounded-2xl p-6">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-sm font-semibold text-white">Actividad reciente</h2>
-              <Link
-                href={`/${slug}/admin/reservations`}
-                className="text-xs text-brand-muted hover:text-white transition-colors flex items-center gap-1"
-              >
-                Ver calendario
-                <ArrowRight className="w-3 h-3" />
-              </Link>
-            </div>
-
-            {recent.length === 0 ? (
-              <p className="text-sm text-brand-muted py-3">No hay reservas en este período.</p>
-            ) : (
-              <>
-                {/* Table header — desktop only */}
-                <div className="hidden md:grid grid-cols-[140px_1fr_80px_120px] gap-4 px-3 pb-2.5 border-b border-white/[0.06]">
-                  {["Fecha", "Cancha", "Horario", "Estado"].map((h) => (
-                    <span
-                      key={h}
-                      className="text-[11px] font-semibold text-brand-muted uppercase tracking-wider"
-                    >
-                      {h}
-                    </span>
-                  ))}
-                </div>
-
-                {/* Rows */}
-                <div className="flex flex-col divide-y divide-white/[0.04]">
-                  {recent.map((r) => (
-                    <Link
-                      key={r.id}
-                      href={`/${slug}/admin/reservations/${r.id}`}
-                      className="flex flex-col md:grid md:grid-cols-[140px_1fr_80px_120px] md:gap-4 md:items-center px-3 py-3 -mx-3 rounded-xl hover:bg-white/[0.03] transition-colors"
-                    >
-                      <span className="text-xs text-brand-muted md:text-sm md:text-white">
-                        {formatDate(r.date, todayStr, yesterdayStr)}
-                      </span>
-                      <div className="flex items-center gap-2 mt-0.5 md:mt-0">
-                        <span className="text-sm font-medium text-white">
-                          {r.courts?.name ?? "—"}
-                        </span>
-                        <span className="md:hidden text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-brand-muted font-medium">
-                          {TYPE_LABELS[r.type] ?? r.type}
-                        </span>
-                      </div>
-                      <span className="text-sm font-mono text-white mt-0.5 md:mt-0">
-                        {r.start_time.slice(0, 5)}
-                      </span>
-                      {r.status === "confirmed" ? (
-                        <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-green-400 mt-0.5 md:mt-0">
-                          <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
-                          Confirmada
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-red-400 mt-0.5 md:mt-0">
-                          <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
-                          Cancelada
-                        </span>
-                      )}
-                    </Link>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-
-          {quickAccessSection}
-          </div>
-          }
+          operacion={operacionContent}
+          rendimiento={rendimientoContent}
+          actividad={actividadContent}
+          canchas={canchasContent}
         />
       )}
 

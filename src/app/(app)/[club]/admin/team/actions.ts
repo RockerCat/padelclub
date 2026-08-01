@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { insertSingleUseInvite } from "@/lib/invitations";
+import { clubHubPath } from "@/lib/clubHubPaths";
 
 type ActionResult = { error?: string };
 
@@ -59,7 +60,7 @@ export async function removeAdmin(
 
   if (error) return { error: "Error al remover al administrador del equipo." };
 
-  revalidatePath(`/${clubSlug}/admin/team`);
+  revalidatePath(clubHubPath(clubSlug, "equipo"));
   return {};
 }
 
@@ -91,7 +92,7 @@ export async function createAdminInvite(
 
   if (error) return { error: "Error al crear la invitación." };
 
-  revalidatePath(`/${clubSlug}/admin/team`);
+  revalidatePath(clubHubPath(clubSlug, "equipo"));
   return {};
 }
 
@@ -111,6 +112,6 @@ export async function deactivateAdminInvite(
 
   if (error) return { error: "Error al revocar la invitación." };
 
-  revalidatePath(`/${clubSlug}/admin/team`);
+  revalidatePath(clubHubPath(clubSlug, "equipo"));
   return {};
 }

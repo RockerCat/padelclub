@@ -1,56 +1,16 @@
-import { notFound, redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { PublicPageSections } from "./PublicPageSections";
-import { getClubPublicPageData } from "@/lib/clubPublicPageData";
-import type { Club } from "@/types/database";
+import { redirect } from "next/navigation";
+import { clubHubPath } from "@/lib/clubHubPaths";
 
 interface PublicPagePageProps {
   params: Promise<{ club: string }>;
 }
 
+// Página Pública administrativa se movió al hub "Club" (vista "Perfil
+// público", la vista por defecto) — ver CLAUDE.md, bloque de reorganización
+// #2. Session/club/membership/rol se revalidan en el propio hub, así que no
+// se duplica esa lógica aquí. La ruta pública real (/clubs/[slug]) no se
+// toca.
 export default async function PublicPagePage({ params }: PublicPagePageProps) {
   const { club: slug } = await params;
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/auth/login");
-  }
-
-  const result = await supabase
-    .from("clubs")
-    .select("*")
-    .eq("slug", slug)
-    .eq("is_active", true)
-    .single();
-
-  const club = result.data;
-  if (!club) notFound();
-
-  const { data: membership } = await supabase
-    .from("club_members")
-    .select("role")
-    .eq("club_id", club.id)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-
-  if (!membership) redirect("/unauthorized");
-  if (!["OWNER", "ADMIN"].includes(membership.role)) redirect(`/${slug}`);
-
-  const { courts, schedule, playerCount, news } = await getClubPublicPageData(supabase, club.id);
-
-  return (
-    <PublicPageSections
-      club={club as Club}
-      courts={courts}
-      schedule={schedule}
-      playerCount={playerCount}
-      news={news}
-      currentUserRole={membership.role}
-    />
-  );
+  redirect(clubHubPath(slug));
 }

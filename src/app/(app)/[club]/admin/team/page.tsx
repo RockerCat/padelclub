@@ -1,26 +1,19 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { TeamClient } from "./TeamClient";
-import type { InviteLinkRow } from "@/components/invites/InviteLinkList";
+import { clubHubPath } from "@/lib/clubHubPaths";
 
 interface TeamPageProps {
   params: Promise<{ club: string }>;
 }
 
-type TeamMemberRow = {
-  id: string;
-  club_id: string;
-  profile_id: string;
-  role: "OWNER" | "ADMIN";
-  is_active: boolean;
-  joined_at: string;
-  profiles: {
-    full_name: string | null;
-    avatar_url: string | null;
-    phone: string | null;
-  } | null;
-};
-
+// Equipo se movió al hub "Club" (vista "Equipo", OWNER-only) — ver
+// CLAUDE.md, bloque de reorganización #2. A diferencia de las otras tres
+// rutas históricas (redirect incondicional, la revalidación vive en el
+// hub), esta conserva su propio chequeo de rol: ADMIN nunca tuvo acceso a
+// Equipo (ni siquiera de lectura), así que redirigirlo ciegamente al hub
+// filtraría por primera vez esa vista hacia una capacidad prohibida. Se
+// mantiene exactamente el mismo destino que ya usaba esta página para un
+// rol insuficiente — `/${slug}` — en vez de inventar una redirección nueva.
 export default async function TeamPage({ params }: TeamPageProps) {
   const { club: slug } = await params;
 
@@ -51,47 +44,5 @@ export default async function TeamPage({ params }: TeamPageProps) {
   if (!membership) redirect("/unauthorized");
   if (membership.role !== "OWNER") redirect(`/${slug}`);
 
-  const [teamResult, inviteResult] = await Promise.all([
-    supabase
-      .from("club_members")
-      .select(
-        "id, club_id, profile_id, role, is_active, joined_at, profiles(full_name, avatar_url, phone)"
-      )
-      .eq("club_id", club.id)
-      .in("role", ["OWNER", "ADMIN"])
-      .order("joined_at", { ascending: true }),
-    // Every ADMIN link, not just active ones — Disponible/Utilizada/Revocada
-    // are all shown explicitly (same as Jugadores), not just the available set.
-    supabase
-      .from("invitation_links")
-      .select("id, token, uses, max_uses, is_active, created_at")
-      .eq("club_id", club.id)
-      .eq("role", "ADMIN")
-      .order("created_at", { ascending: false }),
-  ]);
-
-  const teamMembers = (teamResult.data ?? []) as TeamMemberRow[];
-  const owner = teamMembers.find((m) => m.role === "OWNER") ?? null;
-  const admins = teamMembers.filter((m) => m.role === "ADMIN");
-  const invites = (inviteResult.data ?? []) as InviteLinkRow[];
-
-  return (
-    <div className="p-6 md:p-10">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white">Equipo del club</h1>
-        <p className="text-brand-muted mt-1 text-sm">
-          Gestiona quién opera el club.
-        </p>
-      </div>
-
-      <TeamClient
-        clubId={club.id}
-        clubSlug={slug}
-        owner={owner}
-        admins={admins}
-        currentUserId={user.id}
-        invites={invites}
-      />
-    </div>
-  );
+  redirect(clubHubPath(slug, "equipo"));
 }
