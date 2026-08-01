@@ -6,14 +6,20 @@ import { MembersClient } from "./MembersClient";
 import { ShareClubSection } from "./ShareClubSection";
 import { JoinRequestsSection } from "./JoinRequestsSection";
 import type { JoinRequestRow } from "./JoinRequestsSection";
-import { getClubMatchesPlayedByMember } from "./actions";
+import { getClubMatchesPlayedByMember, getClubMemberSportState } from "./actions";
+import { resolvePlayersStatusFilter, resolvePlayersCategoryFilter } from "./playersFiltersConfig";
 
 interface PlayersPageProps {
   params: Promise<{ club: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
-export default async function PlayersPage({ params }: PlayersPageProps) {
+export default async function PlayersPage({ params, searchParams }: PlayersPageProps) {
   const { club: slug } = await params;
+  const resolvedSearchParams = await searchParams;
+  const statusFilter = resolvePlayersStatusFilter(
+    typeof resolvedSearchParams.status === "string" ? resolvedSearchParams.status : undefined
+  );
 
   const supabase = await createClient();
   const {
@@ -42,13 +48,19 @@ export default async function PlayersPage({ params }: PlayersPageProps) {
   if (!membership) redirect("/unauthorized");
   if (!["OWNER", "ADMIN"].includes(membership.role)) redirect(`/${slug}`);
 
-  // Load PLAYER-role members only
-  const { data: members } = await supabase
+  // Load PLAYER-role members only — status filtered at the query level
+  // (never fetched whole and hidden with CSS) whenever it actually narrows
+  // the result; "all" intentionally omits the .eq so both states come back
+  // in one query rather than two.
+  let membersQuery = supabase
     .from("club_members")
     .select("id, club_id, profile_id, role, is_active, joined_at, category, profiles(full_name, avatar_url, phone)")
     .eq("club_id", club.id)
-    .eq("role", "PLAYER")
-    .order("joined_at", { ascending: false });
+    .eq("role", "PLAYER");
+  if (statusFilter !== "all") {
+    membersQuery = membersQuery.eq("is_active", statusFilter === "active");
+  }
+  const { data: members } = await membersQuery.order("joined_at", { ascending: false });
 
   // Players' second access path (public and private clubs alike since the
   // "join a public club instantly" placeholder was removed), pending
@@ -67,6 +79,10 @@ export default async function PlayersPage({ params }: PlayersPageProps) {
     .order("sort_order", { ascending: true });
 
   const categoryList = sportCategories ?? [];
+  const categoryFilter = resolvePlayersCategoryFilter(
+    typeof resolvedSearchParams.category === "string" ? resolvedSearchParams.category : undefined,
+    categoryList.map((c) => c.code)
+  );
 
   // Categoría deportiva + posición vigente por jugador, para las tarjetas de
   // la grilla — reutiliza exactamente get_club_category_ranking_view, el
@@ -89,7 +105,7 @@ export default async function PlayersPage({ params }: PlayersPageProps) {
     getClubMatchesPlayedByMember(club.id),
   ]);
 
-  const sportStateByMember: Record<string, { category: string; position: number }> = {};
+  const sportStateByMember: Record<string, { category: string; position: number | null }> = {};
   for (const { data: rankingRows, error: rankingError } of rankingByCategory) {
     if (rankingError || !rankingRows) continue;
     for (const row of rankingRows) {
@@ -97,7 +113,43 @@ export default async function PlayersPage({ params }: PlayersPageProps) {
     }
   }
 
-  const memberList = (members ?? []) as Parameters<typeof MembersClient>[0]["members"];
+  const fetchedMembers = (members ?? []) as Parameters<typeof MembersClient>[0]["members"];
+
+  // get_club_category_ranking_view only ever lists active PLAYER members
+  // (see CLAUDE.md → Sport / Ranking Module Principles) — an inactive
+  // member's current category is real and preserved, just invisible to
+  // that RPC by design. Only when inactive members can actually appear in
+  // this view (status = inactive/all) do we resolve their category too,
+  // reusing the existing per-member getClubMemberSportState server action
+  // (the same one MemberModal already calls) — bounded to just the
+  // inactive members on this page, never the whole club, and skipped
+  // entirely on the default "Activos" view.
+  if (statusFilter !== "active") {
+    const inactiveMembers = fetchedMembers.filter((m) => !m.is_active && !sportStateByMember[m.id]);
+    if (inactiveMembers.length > 0) {
+      const inactiveStates = await Promise.all(
+        inactiveMembers.map((m) => getClubMemberSportState(club.id, m.id))
+      );
+      inactiveMembers.forEach((m, i) => {
+        const state = inactiveStates[i];
+        if (state.category) {
+          // No ranking position — inactive members are never part of a
+          // live ranking cycle listing, so there is nothing honest to show
+          // beyond the category itself; card/modal already render a
+          // missing position as "—".
+          sportStateByMember[m.id] = { category: state.category, position: null };
+        }
+      });
+    }
+  }
+
+  // Categoría filtrada server-side reutilizando el mismo mapa anterior —
+  // nunca una consulta nueva, nunca se oculta con CSS.
+  const memberList =
+    categoryFilter === "all"
+      ? fetchedMembers
+      : fetchedMembers.filter((m) => sportStateByMember[m.id]?.category === categoryFilter);
+
   const requests = (joinRequests ?? []) as JoinRequestRow[];
 
   return (
@@ -118,6 +170,8 @@ export default async function PlayersPage({ params }: PlayersPageProps) {
         sportCategories={categoryList}
         sportStateByMember={sportStateByMember}
         matchesPlayedByMember={matchesPlayedByMember}
+        statusFilter={statusFilter}
+        categoryFilter={categoryFilter}
       />
 
       {/* Solicitudes de ingreso — van por encima de "Compartir club" por

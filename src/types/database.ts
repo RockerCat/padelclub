@@ -1386,6 +1386,15 @@ export interface Database {
         Args: { p_club_id: string };
         Returns: void;
       };
+      // public.delete_court — 20261002000001: OWNER/ADMIN-only, permanent
+      // deletion allowed ONLY if the court has never had any reservation
+      // (any status/date). club_pricing_rules scoped to this court cascade
+      // automatically (FK ON DELETE CASCADE); any reservation reference
+      // blocks the delete (23503), backend-checked and race-safe
+      delete_court: {
+        Args: { p_court_id: string };
+        Returns: void;
+      };
       // public.get_club_statistics — Phase 9: OWNER/ADMIN-only, read-only
       // aggregated statistics (period/summary/previousSummary/timeline/
       // statuses/courts/weekdays/hourlySlots as one jsonb object). Excludes

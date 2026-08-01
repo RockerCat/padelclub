@@ -30,6 +30,14 @@ interface MemberModalProps {
   // reactivo a un cambio de categoría hecho desde aquí mismo).
   rankingPosition?: number | null;
   onClose: () => void;
+  // Optional — Jugadores doesn't pass this (router.refresh() on toggle/
+  // category-change already keeps its server-rendered grid in sync, see
+  // MembersClient). Ranking's own list/podium are client-state (`rows`,
+  // set via its own fetchRanking()), never re-derived from a refreshed
+  // server prop, so it passes this to explicitly re-fetch after any
+  // mutation — same rule already applied to toggle/category-change,
+  // extended here to also cover points, the one path that didn't call it.
+  onMutationSuccess?: () => void;
 }
 
 function formatDate(iso: string) {
@@ -62,7 +70,7 @@ function SkeletonBar({ width, height = "h-4", rounded = "rounded" }: { width: st
 // longer displayed or editable here; updateMemberCategory (actions.ts)
 // still exists and still works, it's simply never called from this UI
 // anymore.
-export function MemberModal({ member, clubId, clubSlug, sportCategories, rankingPosition, onClose }: MemberModalProps) {
+export function MemberModal({ member, clubId, clubSlug, sportCategories, rankingPosition, onClose, onMutationSuccess }: MemberModalProps) {
   const router = useRouter();
   const name = member.profiles?.full_name ?? "Sin nombre";
 
@@ -178,6 +186,7 @@ export function MemberModal({ member, clubId, clubSlug, sportCategories, ranking
       }
       setIsActive(nextActive);
       router.refresh();
+      onMutationSuccess?.();
       setToastMessage(nextActive ? "Miembro activado correctamente" : "Miembro desactivado correctamente");
     });
   }
@@ -396,6 +405,7 @@ export function MemberModal({ member, clubId, clubSlug, sportCategories, ranking
             setSportPoints(newTotal);
             setAdjustPointsOpen(false);
             setToastMessage("Puntos actualizados correctamente");
+            onMutationSuccess?.();
           }}
         />
       )}
@@ -414,6 +424,12 @@ export function MemberModal({ member, clubId, clubSlug, sportCategories, ranking
             setSportPoints(0);
             setChangeCategoryOpen(false);
             setToastMessage("Categoría actualizada correctamente");
+            // Same background-refresh pattern as handleConfirmToggle above —
+            // the grid behind this modal is filterable by category now, so
+            // it needs a fresh server read to drop this member if they no
+            // longer match the selected filter.
+            router.refresh();
+            onMutationSuccess?.();
           }}
         />
       )}

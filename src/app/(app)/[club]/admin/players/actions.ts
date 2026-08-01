@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { addMinutes } from "@/lib/courtAvailability";
 import { sanitizeSportNote } from "@/lib/sportOperations";
 import type { PlayerCategory } from "@/types/database";
+import type { MemberRow } from "./MembersClient";
 
 export type ActionState = { success?: boolean; error?: string; data?: unknown };
 
@@ -384,6 +385,35 @@ export async function getClubMemberEmail(clubId: string, clubMemberId: string): 
   }
 
   return { email: data ?? null };
+}
+
+// ─── getClubMemberForModal ──────────────────────────────────────────────────
+// Lets any caller that only has a club_member_id (Ranking's rows, which come
+// from get_club_category_ranking_view and don't carry joined_at/phone) open
+// the exact same "Miembro del club" modal Jugadores uses, with the exact
+// same data shape. Same select Jugadores' page.tsx already runs, just
+// exposed as a callable action (that page's own query is a Server Component
+// query, not reachable from a client component) — one row, by id, scoped to
+// clubId, never a second implementation of the shape.
+export async function getClubMemberForModal(
+  clubId: string,
+  clubMemberId: string
+): Promise<{ member: MemberRow | null; error?: string }> {
+  const { supabase, error: authError } = await requireAdminRole(clubId);
+  if (authError || !supabase) return { member: null, error: authError! };
+
+  const { data, error } = await supabase
+    .from("club_members")
+    .select("id, club_id, profile_id, role, is_active, joined_at, category, profiles(full_name, avatar_url, phone)")
+    .eq("id", clubMemberId)
+    .eq("club_id", clubId)
+    .single();
+
+  if (error || !data) {
+    return { member: null, error: "No se pudo cargar el jugador. Intenta de nuevo." };
+  }
+
+  return { member: data as unknown as MemberRow };
 }
 
 export type AdjustPointsState = {

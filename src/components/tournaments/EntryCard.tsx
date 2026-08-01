@@ -25,9 +25,15 @@ interface EntryCardProps {
   entry: TournamentEntryWithMembers;
   isOwn?: boolean;
   actions?: React.ReactNode;
+  // "Miembro del club" — mismo modal/estado que Ranking (useMemberModal),
+  // nunca una copia. Siblings de `actions` (Confirmar/Rechazar/Retirar):
+  // nunca anidados, así que no hay riesgo de botón dentro de botón.
+  avatarsClickable: boolean;
+  onSelectMember: (clubMemberId: string) => void;
+  loadingMemberId: string | null;
 }
 
-export function EntryCard({ entry, isOwn, actions }: EntryCardProps) {
+export function EntryCard({ entry, isOwn, actions, avatarsClickable, onSelectMember, loadingMemberId }: EntryCardProps) {
   const [memberOne, memberTwo] = entry.members;
   // Pendiente = requiere una acción inmediata del organizador (Confirmar/
   // Rechazar) — tinte ámbar muy sutil sobre el mismo fondo oscuro de
@@ -43,8 +49,20 @@ export function EntryCard({ entry, isOwn, actions }: EntryCardProps) {
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-col gap-2 min-w-0 flex-1">
-          <PairMemberSlot member={memberOne} category={entry.category} />
-          <PairMemberSlot member={memberTwo} category={entry.category} />
+          <PairMemberSlot
+            member={memberOne}
+            category={entry.category}
+            avatarsClickable={avatarsClickable}
+            onSelectMember={onSelectMember}
+            loadingMemberId={loadingMemberId}
+          />
+          <PairMemberSlot
+            member={memberTwo}
+            category={entry.category}
+            avatarsClickable={avatarsClickable}
+            onSelectMember={onSelectMember}
+            loadingMemberId={loadingMemberId}
+          />
         </div>
         <div className="flex flex-col items-end gap-1 shrink-0">
           <Badge variant={ENTRY_STATUS_VARIANT[entry.status] ?? "default"} size="sm">

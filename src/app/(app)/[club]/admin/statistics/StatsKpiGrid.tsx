@@ -114,8 +114,12 @@ export function StatsKpiGrid({
         unit="h"
         comparison={formatComparison(summary.reservedMinutes, previousSummary.reservedMinutes)}
         Icon={Timer}
-        color="var(--club-secondary, #037172)"
+        color="var(--club-primary, #00ffff)"
       />
+      {/* Neutral, not magnitude-colored — a low/high confirmation rate is
+          not automatically bad/good on its own (could reflect a slow
+          season, a new club, etc.), so this never becomes a red/green
+          traffic light; see the Dashboard's semantic color rule. */}
       <StatKpiCard
         label="Tasa de confirmación"
         value={String(summary.confirmationRate)}
@@ -123,7 +127,7 @@ export function StatsKpiGrid({
         sub="Confirmadas sobre el total de reservas del periodo (todos los estados)"
         comparison={formatComparison(summary.confirmationRate, previousConfirmationRate)}
         Icon={Percent}
-        color="#8B5CF6"
+        color="var(--club-primary, #00ffff)"
       />
     </div>
   );

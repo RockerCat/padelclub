@@ -7,6 +7,11 @@ import type { TournamentEntryWithMembers } from "@/lib/tournamentEntries";
 
 interface WithdrawnEntriesAccordionProps {
   entries: TournamentEntryWithMembers[];
+  // "Miembro del club" — mismo modal/estado que Ranking/Clasificación
+  // (useMemberModal), nunca una copia.
+  avatarsClickable: boolean;
+  onSelectMember: (clubMemberId: string) => void;
+  loadingMemberId: string | null;
 }
 
 // No existe un Accordion/Collapsible genérico en src/components/ui/
@@ -16,7 +21,12 @@ interface WithdrawnEntriesAccordionProps {
 // el detalle del torneo — nunca una consulta propia. Solo informativo:
 // EntryCard se usa sin `actions`, así que nunca muestra Confirmar/
 // Rechazar/Retirar.
-export function WithdrawnEntriesAccordion({ entries }: WithdrawnEntriesAccordionProps) {
+export function WithdrawnEntriesAccordion({
+  entries,
+  avatarsClickable,
+  onSelectMember,
+  loadingMemberId,
+}: WithdrawnEntriesAccordionProps) {
   const [open, setOpen] = useState(false);
 
   if (entries.length === 0) return null;
@@ -37,7 +47,13 @@ export function WithdrawnEntriesAccordion({ entries }: WithdrawnEntriesAccordion
       {open && (
         <div className="flex flex-col gap-3 overflow-y-auto px-4 pb-4" style={{ maxHeight: 360 }}>
           {entries.map((entry) => (
-            <EntryCard key={entry.id} entry={entry} />
+            <EntryCard
+              key={entry.id}
+              entry={entry}
+              avatarsClickable={avatarsClickable}
+              onSelectMember={onSelectMember}
+              loadingMemberId={loadingMemberId}
+            />
           ))}
         </div>
       )}

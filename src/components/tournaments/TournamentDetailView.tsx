@@ -32,11 +32,18 @@ import { TournamentNewsAction } from "@/components/tournaments/TournamentNewsAct
 import { ImagePreviewModal } from "@/components/tournaments/ImagePreviewModal";
 import { WithdrawnEntriesAccordion } from "@/components/tournaments/WithdrawnEntriesAccordion";
 import { computeTournamentClassification, type TournamentEntriesCapacity, type TournamentEntryWithMembers } from "@/lib/tournamentEntries";
+import { useMemberModal } from "@/app/(app)/[club]/admin/players/useMemberModal";
+import { MemberModalHost } from "@/app/(app)/[club]/admin/players/MemberModalHost";
 import type { Tournament, SportCategory } from "@/types/database";
 
 interface TournamentDetailViewProps {
   tournament: Tournament;
-  categories: Pick<SportCategory, "code" | "sort_order">[];
+  // Antes Pick<SportCategory, "code" | "sort_order">[] — ensanchado a la
+  // forma completa porque MemberModalHost (mismo "Miembro del club" que
+  // Jugadores/Ranking) necesita sportCategories completo; page.tsx ya
+  // consulta code/sort_order/created_at, así que esto no agrega ninguna
+  // query nueva, solo corrige el tipo declarado.
+  categories: SportCategory[];
   clubSlug: string;
   clubId: string;
   entries: TournamentEntryWithMembers[];
@@ -97,6 +104,18 @@ export function TournamentDetailView({
   // presentación, nunca una consulta nueva. Historial administrativo
   // (OWNER/ADMIN); PLAYER nunca ve este bloque.
   const withdrawnEntries = entries.filter((e) => e.status === "withdrawn");
+
+  // "Miembro del club" — mismo hook/modal que Ranking (useMemberModal),
+  // nunca una copia. Sin onMutationSuccess: a diferencia de RankingView,
+  // `classification`/`podiumRows` se derivan de la prop `entries` (nunca
+  // copiada a estado) y EntriesSection ya reconcilia su propio estado con
+  // initialEntries en cada prop change — el router.refresh() que
+  // MemberModal ya dispara en cada mutación es suficiente. Editar un
+  // jugador desde aquí nunca reescribe puntos/clasificación/resultados del
+  // torneo (ese dato vive en tournament_entries/club_player_point_movements,
+  // nunca tocado por esta modal). Solo OWNER/ADMIN: el modal no tiene modo
+  // de solo lectura para PLAYER todavía, mismo criterio que Ranking.
+  const memberModal = useMemberModal({ clubId });
 
   // tournament mirrors the initialTournament prop (fresh server data after
   // router.refresh()) but is also updated locally right after a successful
@@ -689,6 +708,9 @@ export function TournamentDetailView({
                   ownCategory={ownCategory}
                   revalidatePaths={[`/${clubSlug}/tournaments/${tournament.slug}`]}
                   hideConfirmedList={inProgress}
+                  avatarsClickable={isAdmin}
+                  onSelectMember={memberModal.openMember}
+                  loadingMemberId={memberModal.loadingMemberId}
                 />
               )}
             </div>
@@ -702,7 +724,12 @@ export function TournamentDetailView({
           {isCompleted && podiumRows.length > 0 && (
             <div className={`${podiumOrder} max-w-3xl`}>
               <h2 className="text-lg font-semibold text-white mb-4">Podio final</h2>
-              <TournamentPodium rows={podiumRows} />
+              <TournamentPodium
+                rows={podiumRows}
+                avatarsClickable={isAdmin}
+                onSelectMember={memberModal.openMember}
+                loadingMemberId={memberModal.loadingMemberId}
+              />
             </div>
           )}
 
@@ -752,6 +779,9 @@ export function TournamentDetailView({
                   ownClubMemberId={ownClubMemberId}
                   ownUserId={ownUserId}
                   revalidatePaths={[`/${clubSlug}/tournaments/${tournament.slug}`]}
+                  avatarsClickable={isAdmin}
+                  onSelectMember={memberModal.openMember}
+                  loadingMemberId={memberModal.loadingMemberId}
                 />
               )}
             </div>
@@ -851,11 +881,20 @@ export function TournamentDetailView({
               editorial, sin hueco vacío donde iba este acordeón. */}
           {isAdmin && !isCompleted && (
             <div className={withdrawnOrder}>
-              <WithdrawnEntriesAccordion entries={withdrawnEntries} />
+              <WithdrawnEntriesAccordion
+                entries={withdrawnEntries}
+                avatarsClickable={isAdmin}
+                onSelectMember={memberModal.openMember}
+                loadingMemberId={memberModal.loadingMemberId}
+              />
             </div>
           )}
         </div>
       </div>
+
+      {isAdmin && (
+        <MemberModalHost controller={memberModal} clubId={clubId} clubSlug={clubSlug} sportCategories={categories} />
+      )}
 
       {imagePreviewOpen && tournament.cover_image_url && (
         <ImagePreviewModal

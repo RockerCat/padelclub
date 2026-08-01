@@ -34,6 +34,8 @@ import { WeekdayOccupancyChart } from "./WeekdayOccupancyChart";
 import type { Court } from "@/types/database";
 import { CourtsGrid } from "../admin/courts/CourtsGrid";
 import { CreateCourtButton } from "../admin/courts/CreateCourtButton";
+import { resolveCourtsStatusFilter } from "./courtsStatusFilterConfig";
+import { CourtsStatusFilter } from "./CourtsStatusFilter";
 import { getClubStatistics } from "@/lib/clubStatistics";
 import { resolveStatsPeriodKey, resolveStatsPeriod } from "@/lib/clubStatisticsRange";
 import { PeriodSelector } from "../admin/statistics/PeriodSelector";
@@ -48,6 +50,18 @@ interface DashboardPageProps {
   params: Promise<{ club: string }>;
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
+
+// ─── Semantic color rule ────────────────────────────────────────────────────
+// Fixed meaning, never magnitude: rojo only for something negative/critical
+// (cancelaciones, rechazos, alertas reales), amarillo only for pendiente
+// (esperando confirmación), verde only for un resultado positivo alcanzado
+// (confirmadas, cupo completo), y cyan (la marca de Mi Pádel Club, no el
+// color configurable del club — ver src/lib/constants/clubTheme.ts, ya no
+// existe personalización por club) para todo lo meramente descriptivo:
+// ocupación, horas reservadas, uso de cancha, evolución. Un 12% de
+// ocupación no es "malo" y un 90% no es "bueno" por sí solos — nunca se
+// deriva un color de un porcentaje.
+const NEUTRAL_METRIC_COLOR = "var(--club-primary, #00ffff)";
 
 // ─── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -194,22 +208,24 @@ function CourtOccupancyGrid({
       : columnCount === 2
       ? "grid-cols-1 lg:grid-cols-2"
       : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3";
-  // Desktop-only: illustration column width + the 2-col grid template that
-  // places it. Mobile stays a single column, so these classes are inert
-  // there — the card's own grid falls back to its default 1-col stacking.
-  const courtCardColsClass = columnCount === 3 ? "sm:grid-cols-[200px_1fr]" : "sm:grid-cols-[260px_1fr]";
-  const illustrationSmWidthClass = columnCount === 3 ? "sm:w-[200px]" : "sm:w-[260px]";
 
   return (
     <div className={`grid ${gridClass} gap-4`}>
       {items.map((c) => (
+        // @container: the illustration/content split below reacts to this
+        // card's own rendered width, not the viewport — the same card is
+        // narrower with 3 per row than with 1, on the exact same screen.
+        // Content always wins: the illustration column is a percentage
+        // (shrinks first as the card narrows) with a floor so it never
+        // disappears, never a fixed px width that starves the content
+        // column at higher column counts.
         <div
           key={c.id}
-          className={`bg-brand-surface border border-white/10 rounded-2xl p-4 grid grid-cols-1 ${courtCardColsClass} gap-x-4 gap-y-4 sm:gap-y-0`}
+          className="@container bg-brand-surface border border-white/10 rounded-2xl p-4 grid grid-cols-1 gap-4 @sm:grid-cols-[minmax(84px,28%)_1fr] @sm:gap-x-4 @sm:gap-y-0"
         >
-          {/* Nombre, superficie, % ocupación, barra — mobile: 1º · desktop: columna derecha, fila 1 */}
-          <div className="min-w-0 flex flex-col justify-center sm:col-start-2 sm:row-start-1">
-            <p className="text-base font-semibold text-white uppercase tracking-wide break-words sm:truncate">
+          {/* Nombre, superficie, % ocupación, barra — angosto: 1º · ancho: columna derecha, fila 1 */}
+          <div className="min-w-0 flex flex-col justify-center @sm:col-start-2 @sm:row-start-1">
+            <p className="text-base font-semibold text-white uppercase tracking-wide break-words @sm:truncate">
               {c.name}
             </p>
             <p className="text-xs text-brand-muted/60 mt-0.5">{getSurfaceLabel(c.surface)}</p>
@@ -231,16 +247,14 @@ function CourtOccupancyGrid({
             </div>
           </div>
 
-          {/* Ilustración — mobile: 2º, ancho completo con tope · desktop: columna izquierda, ambas filas */}
-          <div
-            className={`relative w-full max-w-[240px] mx-auto shrink-0 sm:mx-0 sm:max-w-none ${illustrationSmWidthClass} sm:col-start-1 sm:row-start-1 sm:row-span-2 sm:self-center`}
-          >
+          {/* Ilustración — angosto: 2º, ancho completo con tope · ancho: columna izquierda, ambas filas */}
+          <div className="relative w-full max-w-[240px] mx-auto shrink-0 @sm:mx-0 @sm:max-w-none @sm:col-start-1 @sm:row-start-1 @sm:row-span-2 @sm:self-center">
             <div className="absolute top-1 left-1 z-10 flex gap-1.5" />
             <CourtIllustration surface={c.surface} className="w-full" />
           </div>
 
-          {/* Próximo turno — mobile: 3º · desktop: columna derecha, fila 2 */}
-          <div className="min-w-0 pt-3 border-t border-white/[0.06] sm:col-start-2 sm:row-start-2">
+          {/* Próximo turno — angosto: 3º · ancho: columna derecha, fila 2 */}
+          <div className="min-w-0 pt-3 border-t border-white/[0.06] @sm:col-start-2 @sm:row-start-2">
             <p className="text-[11px] text-brand-muted mb-1">Próximo turno:</p>
             {c.nextSlot ? (
               <div className="flex items-start gap-1.5">
@@ -274,6 +288,9 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
   );
   const periodParam =
     typeof resolvedSearchParams.period === "string" ? resolvedSearchParams.period : undefined;
+  const courtsStatusFilter = resolveCourtsStatusFilter(
+    typeof resolvedSearchParams.status === "string" ? resolvedSearchParams.status : undefined
+  );
 
   const supabase = await createClient();
   const {
@@ -485,8 +502,10 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
     const next7FreeMin = Math.max(0, next7CapacityMin - next7ReservedMin);
     const next7OccupancyPct =
       next7CapacityMin > 0 ? Math.min(100, Math.round((next7ReservedMin / next7CapacityMin) * 100)) : 0;
-    const next7OccupancyColor =
-      next7OccupancyPct >= 70 ? "#22C55E" : next7OccupancyPct >= 40 ? "#EAB308" : "#EF4444";
+    // Neutral, not magnitude-colored — projected occupancy is descriptive
+    // information, never an alert or a success on its own (a quiet week
+    // isn't an "error"); see NEUTRAL_METRIC_COLOR below.
+    const next7OccupancyColor = NEUTRAL_METRIC_COLOR;
 
     const nextUpcoming = ((upcomingRes.data ?? []) as unknown as UpcomingRow[])[0] ?? null;
     const nextUpcomingCourtName = nextUpcoming
@@ -521,7 +540,8 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
         name: c.name,
         surface: c.surface,
         pct,
-        color: pct >= 70 ? "#22C55E" : pct >= 40 ? "#EAB308" : "#EF4444",
+        // Neutral — per-court occupancy is descriptive, not an alert/success.
+        color: NEUTRAL_METRIC_COLOR,
         nextSlot: nextSlotByCourtId.get(c.id) ?? null,
       };
     });
@@ -610,7 +630,8 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
             ) : (
               <div className="flex flex-col gap-3">
                 {busiestCourts.map((c) => {
-                  const color = c.pct >= 70 ? "#22C55E" : c.pct >= 40 ? "#EAB308" : "#EF4444";
+                  // Neutral — "busiest" is a ranking, not an alert/success.
+                  const color = NEUTRAL_METRIC_COLOR;
                   return (
                     <div key={c.id}>
                       <div className="flex items-center justify-between gap-3 mb-1.5">
@@ -748,21 +769,28 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
   }
 
   if (!isEmpty && activeTab === "canchas") {
-    const { data: fullCourts } = await supabase
+    // Filtered server-side by the resolved status, never fetched whole and
+    // hidden with CSS — one query, no duplicate fetch.
+    const { data: filteredCourts } = await supabase
       .from("courts")
       .select("*")
       .eq("club_id", club.id)
+      .eq("is_active", courtsStatusFilter === "active")
       .order("name", { ascending: true });
-    const courtList = (fullCourts ?? []) as Court[];
+    const courtList = (filteredCourts ?? []) as Court[];
+    const isActiveFilter = courtsStatusFilter === "active";
 
     canchasContent = (
       <div>
-        <div className="flex items-start justify-between mb-6 gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
           <div>
             <h2 className="text-lg font-semibold text-white">Canchas</h2>
             <p className="text-brand-muted mt-1 text-sm">Gestiona las canchas del club.</p>
           </div>
-          <CreateCourtButton clubSlug={slug} clubId={club.id} />
+          <div className="flex items-center gap-2 shrink-0">
+            <CourtsStatusFilter value={courtsStatusFilter} />
+            <CreateCourtButton clubSlug={slug} clubId={club.id} />
+          </div>
         </div>
 
         {courtList.length === 0 && (
@@ -771,16 +799,20 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
               <Home className="w-6 h-6 text-brand-muted" />
             </div>
             <h3 className="text-base font-semibold text-white mb-1">
-              No hay canchas registradas
+              {isActiveFilter ? "No hay canchas activas" : "No hay canchas inactivas"}
             </h3>
             <p className="text-sm text-brand-muted max-w-sm mb-6">
-              Agrega la primera cancha del club para empezar a gestionar reservaciones.
+              {isActiveFilter
+                ? "Activa una cancha existente o crea una nueva para comenzar a recibir reservas."
+                : "Todas las canchas del club están activas actualmente."}
             </p>
-            <CreateCourtButton
-              clubSlug={slug}
-              clubId={club.id}
-              className="inline-flex items-center gap-2 h-10 px-4 text-sm font-medium rounded-xl bg-brand-primary text-brand-bg hover:brightness-110 active:brightness-95 transition-all duration-200"
-            />
+            {isActiveFilter && (
+              <CreateCourtButton
+                clubSlug={slug}
+                clubId={club.id}
+                className="inline-flex items-center gap-2 h-10 px-4 text-sm font-medium rounded-xl bg-brand-primary text-brand-bg hover:brightness-110 active:brightness-95 transition-all duration-200"
+              />
+            )}
           </div>
         )}
 

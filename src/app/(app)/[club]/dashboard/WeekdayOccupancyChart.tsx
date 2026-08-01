@@ -11,9 +11,13 @@ interface WeekdayOccupancyChartProps {
   points: WeekdayPoint[];
 }
 
-function colorForPct(pct: number): string {
-  return pct >= 70 ? "#22C55E" : pct >= 40 ? "#EAB308" : "#EF4444";
-}
+// Occupancy here is purely descriptive (which days are busier/quieter),
+// never an alert or a result — so it always reads in the platform's neutral
+// brand color, never a magnitude-driven red/amber/green traffic light. A
+// low % is not an error and a high % is not a success; see CLAUDE.md-style
+// semantic color rule (rojo=negativo, amarillo=pendiente, verde=positivo,
+// cyan=informativo neutral).
+const NEUTRAL_COLOR = "var(--club-primary, #00ffff)";
 
 // Horizontal bars, plain HTML/CSS — no SVG, so there's no scaling/distortion
 // concern. Caller controls point order (historical view sorts highest-first;
@@ -22,7 +26,7 @@ export function WeekdayOccupancyChart({ points }: WeekdayOccupancyChartProps) {
   return (
     <div className="flex flex-col gap-2.5">
       {points.map((p) => {
-        const color = colorForPct(p.pct);
+        const color = NEUTRAL_COLOR;
         return (
           <div key={p.id ?? p.label} className="flex items-center gap-3">
             <span className="text-xs text-brand-muted w-8 shrink-0">{p.label}</span>

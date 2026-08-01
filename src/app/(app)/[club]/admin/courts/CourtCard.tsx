@@ -2,11 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, MoreVertical } from "lucide-react";
-import { Switch, ConfirmDialog, Toast } from "@/components/ui";
+import { ChevronDown, Settings, Trash2 } from "lucide-react";
+import { Switch, ConfirmDialog, ContextMenu, Toast, type ContextMenuAction } from "@/components/ui";
 import { CourtIllustration, getSurfaceLabel } from "@/components/courts/CourtIllustration";
 import { CourtForm } from "./CourtForm";
-import { updateCourt, toggleCourtActive } from "./actions";
+import { updateCourt, toggleCourtActive, deleteCourt } from "./actions";
 import type { Court } from "@/types/database";
 
 interface CourtCardProps {
@@ -37,6 +37,17 @@ export function CourtCard({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deletePending, startDelete] = useTransition();
+
+  const typeLine = [
+    getSurfaceLabel(court.surface),
+    court.is_indoor === true ? "Interior" : court.is_indoor === false ? "Exterior" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   function handleConfirmToggle() {
     const turningOn = !court.is_active;
     startToggle(async () => {
@@ -49,6 +60,33 @@ export function CourtCard({
     });
   }
 
+  function handleConfirmDelete() {
+    setDeleteError(null);
+    startDelete(async () => {
+      const result = await deleteCourt(clubId, court.id);
+      if (result.error) {
+        setDeleteError(result.error);
+        return;
+      }
+      setDeleteOpen(false);
+      setToastMessage("Cancha eliminada correctamente");
+      router.refresh();
+    });
+  }
+
+  const menuActions: ContextMenuAction[] = [
+    { label: "Configurar cancha", icon: Settings, onClick: onExpand },
+    {
+      label: "Eliminar cancha",
+      icon: Trash2,
+      variant: "danger",
+      onClick: () => {
+        setDeleteError(null);
+        setDeleteOpen(true);
+      },
+    },
+  ];
+
   const boundUpdate = updateCourt.bind(null, clubId, court.id);
 
   function handleFormSuccess() {
@@ -58,7 +96,7 @@ export function CourtCard({
 
   return (
     <div className="bg-brand-surface border border-white/10 rounded-2xl p-5 transition-colors">
-      {/* Quick actions — status switch + overflow menu (placeholder) */}
+      {/* Quick actions — status switch + overflow menu */}
       <div className="flex items-center justify-end gap-2.5 -mt-1 -mr-1 mb-1" onClick={(e) => e.stopPropagation()}>
         <span className="text-xs font-medium text-brand-muted">
           {court.is_active ? "Activa" : "Inactiva"}
@@ -69,13 +107,7 @@ export function CourtCard({
           disabled={togglePending}
           label={court.is_active ? "Marcar como inactiva" : "Marcar como activa"}
         />
-        <button
-          type="button"
-          title="Más acciones (próximamente)"
-          className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-brand-muted hover:text-white hover:bg-white/5 transition-colors cursor-default"
-        >
-          <MoreVertical className="w-4 h-4" />
-        </button>
+        <ContextMenu actions={menuActions} triggerLabel={`Más acciones de ${court.name}`} />
       </div>
 
       <button
@@ -90,18 +122,7 @@ export function CourtCard({
             {court.name}
           </span>
         </div>
-        <p className="text-xs text-brand-muted mt-0.5">
-          {[
-            getSurfaceLabel(court.surface),
-            court.is_indoor === true
-              ? "Interior"
-              : court.is_indoor === false
-              ? "Exterior"
-              : null,
-          ]
-            .filter(Boolean)
-            .join(" · ")}
-        </p>
+        <p className="text-xs text-brand-muted mt-0.5">{typeLine}</p>
       </button>
 
       {!isExpanded && (
@@ -142,6 +163,26 @@ export function CourtCard({
         loading={togglePending}
         onConfirm={handleConfirmToggle}
         onCancel={() => setConfirmOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Eliminar cancha"
+        message={
+          `${court.name}${typeLine ? ` · ${typeLine}` : ""}\n\n` +
+          "Esta acción eliminará permanentemente la cancha y su configuración. Solo es posible porque no tiene reservas ni actividad registrada.\n\n" +
+          "Esta acción no se puede deshacer." +
+          (deleteError ? `\n\n${deleteError}` : "")
+        }
+        confirmLabel="Eliminar cancha"
+        cancelLabel="Cancelar"
+        confirmVariant="danger"
+        loading={deletePending}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => {
+          setDeleteOpen(false);
+          setDeleteError(null);
+        }}
       />
 
       <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />

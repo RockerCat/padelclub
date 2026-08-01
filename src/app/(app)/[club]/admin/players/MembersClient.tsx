@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { PlayerSportAvatar } from "@/components/players/PlayerSportAvatar";
 import { FilterDropdown } from "@/components/ui";
 import { MemberModal } from "./MemberModal";
 import { Users, Search } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import type { PlayerCategory, SportCategory } from "@/types/database";
+import { PLAYERS_STATUS_OPTIONS, PLAYERS_CATEGORY_ALL, type PlayersStatusFilter } from "./playersFiltersConfig";
 
 export type MemberRow = {
   id: string;
@@ -32,7 +34,10 @@ interface MembersClientProps {
   // ranking de su categoría, ya resueltas en el servidor (page.tsx) vía el
   // mismo RPC get_club_category_ranking_view que usa /[club]/ranking. Nunca
   // se recalcula el ranking ni se consulta nada nuevo aquí — solo lectura.
-  sportStateByMember: Record<string, { category: string; position: number }>;
+  // position es null para un miembro inactivo (get_club_member_sport_state,
+  // resuelto solo cuando el filtro Estado lo requiere — nunca aparece en el
+  // ranking view mismo, que solo lista miembros activos).
+  sportStateByMember: Record<string, { category: string; position: number | null }>;
   // "Partidos" — resuelto una sola vez para todo el club en page.tsx
   // (getClubMatchesPlayedByMember), nunca por jugador. Cuenta reservas
   // type='match' confirmadas y ya finalizadas (ver Sport / Ranking Module
@@ -41,15 +46,13 @@ interface MembersClientProps {
   // profile_id ausente del mapa (pero el mapa no es null) significa cero
   // partidos, nunca "—".
   matchesPlayedByMember: Record<string, number> | null;
+  // Estado/Categoría — resueltos y aplicados server-side en page.tsx (query
+  // filtrada + filtro sobre sportStateByMember respectivamente). `members`
+  // que llega aquí YA está filtrado por ambos; este componente solo aplica
+  // la búsqueda encima, client-side (arquitectura preexistente, sin cambios).
+  statusFilter: PlayersStatusFilter;
+  categoryFilter: string;
 }
-
-type StatusFilter = "all" | "active" | "inactive";
-
-const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
-  { value: "all", label: "Todos" },
-  { value: "active", label: "Activos" },
-  { value: "inactive", label: "Inactivos" },
-];
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("es-MX", {
@@ -66,25 +69,53 @@ export function MembersClient({
   sportCategories,
   sportStateByMember,
   matchesPlayedByMember,
+  statusFilter,
+  categoryFilter,
 }: MembersClientProps) {
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const [search, setSearch] = useState("");
   const [selectedMember, setSelectedMember] = useState<MemberRow | null>(null);
 
-  const filtered = members
-    .filter((m) => {
-      if (statusFilter === "active") return m.is_active;
-      if (statusFilter === "inactive") return !m.is_active;
-      return true;
-    })
-    .filter((m) => {
-      if (!search.trim()) return true;
-      return m.profiles?.full_name?.toLowerCase().includes(search.toLowerCase().trim());
-    });
+  const categoryOptions = [
+    { value: PLAYERS_CATEGORY_ALL, label: "Todas" },
+    ...sportCategories.map((c) => ({ value: c.code, label: c.code })),
+  ];
+
+  function updateParam(key: string, value: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set(key, value);
+    router.push(`${pathname}?${params.toString()}`);
+  }
+
+  const trimmedSearch = search.trim().toLowerCase();
+  const filtered = trimmedSearch
+    ? members.filter((m) => m.profiles?.full_name?.toLowerCase().includes(trimmedSearch))
+    : members;
+
+  // Un solo motivo, en orden de especificidad. `members` ya llega filtrado
+  // por Estado/Categoría desde el servidor — si YA viene vacío, el motivo
+  // es uno de esos dos filtros (categoría, al ser la elección más
+  // deliberada de las dos, gana si ambos aplican); si solo queda vacío
+  // DESPUÉS de aplicar la búsqueda local, el motivo es la búsqueda.
+  const emptyReason: "category" | "activeStatus" | "search" | "generic" | null =
+    filtered.length > 0
+      ? null
+      : members.length === 0
+      ? categoryFilter !== PLAYERS_CATEGORY_ALL
+        ? "category"
+        : statusFilter === "active"
+        ? "activeStatus"
+        : "generic"
+      : "search";
 
   return (
     <div>
-      {/* Search + filters — stacked on mobile, one row on desktop when it fits */}
+      {/* Search + filters — search takes a full row on mobile, filters sit
+          below it side by side; on desktop all three share one row, search
+          taking the remaining width. */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-6">
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted" />
@@ -101,25 +132,45 @@ export function MembersClient({
           <FilterDropdown
             label="Estado"
             value={statusFilter}
-            defaultValue="all"
-            options={STATUS_OPTIONS}
-            onChange={setStatusFilter}
+            defaultValue="active"
+            options={PLAYERS_STATUS_OPTIONS}
+            onChange={(value) => updateParam("status", value)}
+          />
+          <FilterDropdown
+            label="Categoría"
+            value={categoryFilter}
+            defaultValue={PLAYERS_CATEGORY_ALL}
+            options={categoryOptions}
+            onChange={(value) => updateParam("category", value)}
           />
         </div>
       </div>
 
-      {/* Empty state */}
+      {/* Empty state — el mensaje más específico disponible según qué dejó
+          la lista en cero. */}
       {filtered.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-3">
             <Users className="w-5 h-5 text-brand-muted" />
           </div>
-          <p className="text-sm font-medium text-white mb-1">
-            {search ? "Sin resultados" : "No hay miembros en esta categoría"}
-          </p>
-          <p className="text-xs text-brand-muted">
-            {search ? `Ningún miembro coincide con "${search}"` : "Prueba un filtro diferente."}
-          </p>
+          {emptyReason === "category" ? (
+            <>
+              <p className="text-sm font-medium text-white mb-1">No hay jugadores en esta categoría</p>
+              <p className="text-xs text-brand-muted">Selecciona otra categoría o consulta todas.</p>
+            </>
+          ) : emptyReason === "activeStatus" ? (
+            <>
+              <p className="text-sm font-medium text-white mb-1">No hay jugadores activos</p>
+              <p className="text-xs text-brand-muted">
+                Puedes consultar los jugadores inactivos cambiando el filtro de estado.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-medium text-white mb-1">No encontramos jugadores</p>
+              <p className="text-xs text-brand-muted">Ajusta la búsqueda o los filtros para ver otros jugadores.</p>
+            </>
+          )}
         </div>
       )}
 

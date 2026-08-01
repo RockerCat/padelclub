@@ -154,3 +154,39 @@ export async function toggleCourtActive(
 
   return { success: true };
 }
+
+// ─── deleteCourt ─────────────────────────────────────────────────────────────
+
+// Permanent deletion — only ever succeeds for a court that has NEVER had a
+// reservation (any status, any date, past or future; match/class/block
+// alike, since those are all just reservations.type values). Everything
+// else (has history at all) must be deactivated instead — the existing
+// toggleCourtActive flow, which preserves history. The real check is
+// backend-only, inside the delete_court RPC (SECURITY DEFINER, re-derives
+// role from auth.uid() itself and re-validates the court belongs to
+// clubId) — requireAdminRole here is only a fast, friendly early return for
+// the common "not a member" case, never the source of truth.
+export async function deleteCourt(clubId: string, courtId: string): Promise<CourtFormState> {
+  const { supabase, error: authError } = await requireAdminRole(clubId);
+  if (authError || !supabase) return { error: authError! };
+
+  const { error } = await supabase.rpc("delete_court", { p_court_id: courtId });
+
+  if (error) {
+    if (error.code === "23503") {
+      return {
+        error:
+          "No puedes eliminar esta cancha porque tiene actividad registrada. Puedes desactivarla para impedir nuevas reservas sin perder el historial.",
+      };
+    }
+    if (error.code === "42501") {
+      return { error: "No tienes permiso para eliminar esta cancha." };
+    }
+    if (error.code === "P0002") {
+      return { error: "Esta cancha ya no existe." };
+    }
+    return { error: "Error al eliminar la cancha. Intenta de nuevo." };
+  }
+
+  return { success: true };
+}

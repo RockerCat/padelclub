@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeftRight } from "lucide-react";
 import { Button, ContextMenu, Toast } from "@/components/ui";
-import { PlayerSportAvatar } from "@/components/players/PlayerSportAvatar";
+import { PlayerSportAvatarButton } from "@/components/players/PlayerSportAvatarButton";
 import { ReplaceMemberModal } from "./ReplaceMemberModal";
 import { setTournamentEntryPointsAction } from "@/lib/tournamentEntryActions";
 import { computeTournamentClassification, isOwnEntry, type TournamentEntryWithMembers } from "@/lib/tournamentEntries";
@@ -44,6 +44,16 @@ interface ClassificationSectionProps {
   ownClubMemberId: string;
   ownUserId: string;
   revalidatePaths: string[];
+  // "Miembro del club" — mismo modal/estado que Ranking (useMemberModal),
+  // nunca una copia. Independiente de `editable`/`completed`: OWNER/ADMIN
+  // puede abrir el detalle de un jugador tanto en vivo como en una
+  // clasificación final ya congelada — abrir el modal nunca reescribe
+  // resultados del torneo, solo lee/edita el perfil del jugador. PLAYER
+  // conserva avatares no interactivos (el modal no tiene modo de solo
+  // lectura hoy), igual que en Ranking.
+  avatarsClickable: boolean;
+  onSelectMember: (clubMemberId: string) => void;
+  loadingMemberId: string | null;
 }
 
 export function pairLabel(entry: TournamentEntryWithMembers): string {
@@ -98,6 +108,9 @@ export function ClassificationSection({
   ownClubMemberId,
   ownUserId,
   revalidatePaths,
+  avatarsClickable,
+  onSelectMember,
+  loadingMemberId,
 }: ClassificationSectionProps) {
   const router = useRouter();
   const confirmedEntries = useMemo(() => entries.filter((e) => e.status === "confirmed"), [entries]);
@@ -231,10 +244,14 @@ export function ClassificationSection({
 
         <div className="flex items-center gap-1.5 shrink-0">
           {entry.members.map((m) => (
-            <PlayerSportAvatar
+            <PlayerSportAvatarButton
               key={m.club_member_id}
               player={{ id: m.club_member_id, full_name: m.full_name, avatar_url: m.avatar_url }}
               size="sm"
+              clickable={avatarsClickable}
+              isLoading={loadingMemberId === m.club_member_id}
+              onSelect={() => onSelectMember(m.club_member_id)}
+              playerName={m.full_name ?? "jugador"}
             />
           ))}
         </div>

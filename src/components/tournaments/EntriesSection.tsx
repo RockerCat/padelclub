@@ -41,6 +41,11 @@ interface EntriesSectionProps {
   // Rechazadas/"Registrar dupla" siguen intactos (el organizador puede
   // seguir registrando duplas durante in_progress, ver canAdminRegister).
   hideConfirmedList?: boolean;
+  // "Miembro del club" — mismo modal/estado que Ranking/Clasificación
+  // (useMemberModal en TournamentDetailView), nunca una copia.
+  avatarsClickable: boolean;
+  onSelectMember: (clubMemberId: string) => void;
+  loadingMemberId: string | null;
 }
 
 type PendingAction = { type: "confirm" | "withdraw"; entryId: string } | null;
@@ -82,6 +87,9 @@ export function EntriesSection({
   ownCategory,
   revalidatePaths,
   hideConfirmedList = false,
+  avatarsClickable,
+  onSelectMember,
+  loadingMemberId,
 }: EntriesSectionProps) {
   const router = useRouter();
   const isAdmin = role === "OWNER" || role === "ADMIN";
@@ -327,7 +335,14 @@ export function EntriesSection({
       {!isAdmin && ownActiveEntry && ownActiveEntry.status !== "confirmed" && (
         <div>
           <p className="text-xs font-medium text-brand-muted mb-2">Tu inscripción</p>
-          <EntryCard entry={ownActiveEntry} isOwn actions={entryActions(ownActiveEntry)} />
+          <EntryCard
+            entry={ownActiveEntry}
+            isOwn
+            actions={entryActions(ownActiveEntry)}
+            avatarsClickable={avatarsClickable}
+            onSelectMember={onSelectMember}
+            loadingMemberId={loadingMemberId}
+          />
         </div>
       )}
 
@@ -349,11 +364,38 @@ export function EntriesSection({
 
       {isAdmin ? (
         <div className="flex flex-col gap-5">
-          <EntryGroup title="Pendientes" entries={pending} entryActions={entryActions} emptyText={null} highlight />
+          <EntryGroup
+            title="Pendientes"
+            entries={pending}
+            entryActions={entryActions}
+            emptyText={null}
+            highlight
+            avatarsClickable={avatarsClickable}
+            onSelectMember={onSelectMember}
+            loadingMemberId={loadingMemberId}
+          />
           {!hideConfirmedList && (
-            <EntryGroup title="Confirmadas" entries={confirmed} entryActions={entryActions} ownUserId={ownUserId} ownClubMemberId={ownClubMemberId} emptyText={null} />
+            <EntryGroup
+              title="Confirmadas"
+              entries={confirmed}
+              entryActions={entryActions}
+              ownUserId={ownUserId}
+              ownClubMemberId={ownClubMemberId}
+              emptyText={null}
+              avatarsClickable={avatarsClickable}
+              onSelectMember={onSelectMember}
+              loadingMemberId={loadingMemberId}
+            />
           )}
-          <EntryGroup title="Rechazadas" entries={rejected} entryActions={entryActions} emptyText={null} />
+          <EntryGroup
+            title="Rechazadas"
+            entries={rejected}
+            entryActions={entryActions}
+            emptyText={null}
+            avatarsClickable={avatarsClickable}
+            onSelectMember={onSelectMember}
+            loadingMemberId={loadingMemberId}
+          />
           {pending.length === 0 && confirmed.length === 0 && rejected.length === 0 && (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-4">
@@ -381,6 +423,9 @@ export function EntriesSection({
                   entry={entry}
                   isOwn={isOwnEntry(entry, ownUserId, ownClubMemberId)}
                   actions={entryActions(entry)}
+                  avatarsClickable={avatarsClickable}
+                  onSelectMember={onSelectMember}
+                  loadingMemberId={loadingMemberId}
                 />
               ))
             )}
@@ -495,6 +540,9 @@ function EntryGroup({
   // refuerzo puramente tipográfico/color, nunca una condición nueva de
   // negocio: cuando no hay pendientes, no hay nada que reforzar.
   highlight,
+  avatarsClickable,
+  onSelectMember,
+  loadingMemberId,
 }: {
   title: string;
   entries: TournamentEntryWithMembers[];
@@ -503,6 +551,9 @@ function EntryGroup({
   ownClubMemberId?: string;
   emptyText: string | null;
   highlight?: boolean;
+  avatarsClickable: boolean;
+  onSelectMember: (clubMemberId: string) => void;
+  loadingMemberId: string | null;
 }) {
   if (entries.length === 0 && !emptyText) return null;
   const emphasize = highlight && entries.length > 0;
@@ -523,6 +574,9 @@ function EntryGroup({
             entry={entry}
             isOwn={ownUserId && ownClubMemberId ? isOwnEntry(entry, ownUserId, ownClubMemberId) : false}
             actions={entryActions(entry)}
+            avatarsClickable={avatarsClickable}
+            onSelectMember={onSelectMember}
+            loadingMemberId={loadingMemberId}
           />
         ))
       )}
