@@ -12,9 +12,33 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const SITE_URL = "https://mipadel.club";
+const SITE_TITLE = "Mi Pádel Club";
+const SITE_DESCRIPTION =
+  "Reserva canchas, organiza torneos, administra tu club y conecta con tu comunidad de pádel.";
+// Static placeholder — replace public/og-image.jpg (1200x630) directly to
+// update the shared preview image with no code changes required.
+const OG_IMAGE = { url: "/og-image.jpg", width: 1200, height: 630, alt: SITE_TITLE };
+
 export const metadata: Metadata = {
-  title: "MiPadelClub",
-  description: "Tu club. Tu comunidad. Tu juego.",
+  metadataBase: new URL(SITE_URL),
+  title: SITE_TITLE,
+  description: SITE_DESCRIPTION,
+  openGraph: {
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    url: SITE_URL,
+    siteName: SITE_TITLE,
+    locale: "es_CO",
+    type: "website",
+    images: [OG_IMAGE],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    images: [OG_IMAGE.url],
+  },
 };
 
 // Explicit viewport (Next's dedicated API, not the metadata object) — no
