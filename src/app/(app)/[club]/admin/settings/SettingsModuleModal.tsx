@@ -14,12 +14,17 @@ interface SettingsModuleModalProps {
   size?: "md" | "lg" | "xl";
   children: React.ReactNode;
   footer?: React.ReactNode;
+  // Opcional — expone el nodo del panel a un llamador que necesite
+  // implementar su propio focus trap sobre él (ver ChangeClubModal).
+  // Puramente aditivo: ningún otro llamador de este shell lo pasa, así
+  // que su comportamiento no cambia.
+  panelRef?: React.Ref<HTMLDivElement>;
 }
 
 // Same modal shell as MemberModal/CreateCourtModal/ConfirmDialog — blurred
 // backdrop, centered panel on desktop / bottom sheet on mobile. Shared by
 // all 7 settings modules so each one only has to provide its fields.
-export function SettingsModuleModal({ title, onClose, size = "md", children, footer }: SettingsModuleModalProps) {
+export function SettingsModuleModal({ title, onClose, size = "md", children, footer, panelRef }: SettingsModuleModalProps) {
   useEffect(() => {
     document.body.style.overflow = "hidden";
     function onKeyDown(e: KeyboardEvent) {
@@ -42,6 +47,7 @@ export function SettingsModuleModal({ title, onClose, size = "md", children, foo
       />
       <div className="fixed inset-x-0 bottom-0 md:inset-0 md:flex md:items-center md:justify-center z-[401] pointer-events-none">
         <div
+          ref={panelRef}
           className={`pointer-events-auto w-full ${
             size === "xl"
               ? "md:w-[640px] lg:w-[1040px] xl:w-[1200px] 2xl:w-[1320px]"

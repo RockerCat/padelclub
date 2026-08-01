@@ -28,6 +28,8 @@ import { NotificationBell } from "./NotificationBell";
 import { JoinRequestsListener } from "./JoinRequestsListener";
 import { SidebarIdentity } from "./SidebarIdentity";
 import { LeaveClubButton } from "./LeaveClubButton";
+import { ChangeClubModal } from "./ChangeClubModal";
+import { CreateClubModal } from "./CreateClubModal";
 import type { NotificationRow } from "@/lib/notifications";
 import type { SidebarIdentityData } from "@/lib/userIdentity";
 import { clubRoleLabel } from "@/lib/roleLabels";
@@ -277,6 +279,13 @@ interface NavContentProps {
   identity: SidebarIdentityData;
   onLinkClick: () => void;
   onLogout: () => void;
+  // OWNER-only — abre el modal "Cambiar de club" en vez de navegar a
+  // /clubs (ver ChangeClubModal). ADMIN/PLAYER conservan el Link a /clubs
+  // sin cambios, así que este callback nunca se invoca para ellos.
+  onOpenChangeClub: (trigger: HTMLElement) => void;
+  // OWNER-only — abre el modal "Crear otro club" en vez de navegar a
+  // /clubs/create (ver CreateClubModal).
+  onOpenCreateClub: (trigger: HTMLElement) => void;
 }
 
 function NavContent({
@@ -290,6 +299,8 @@ function NavContent({
   identity,
   onLinkClick,
   onLogout,
+  onOpenChangeClub,
+  onOpenCreateClub,
 }: NavContentProps) {
   return (
     <nav className="flex flex-col h-full">
@@ -394,25 +405,41 @@ function NavContent({
           <User className="w-4 h-4 shrink-0" />
           <span>Mi Perfil</span>
         </Link>
-        {membershipCount >= 2 && (
-          <Link
-            href="/clubs"
-            onClick={onLinkClick}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
-          >
-            <ArrowLeftRight className="w-4 h-4 shrink-0" />
-            <span>Cambiar de club</span>
-          </Link>
-        )}
+        {membershipCount >= 2 &&
+          (role === "OWNER" ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                onLinkClick();
+                onOpenChangeClub(e.currentTarget);
+              }}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors w-full text-left"
+            >
+              <ArrowLeftRight className="w-4 h-4 shrink-0" />
+              <span>Cambiar de club</span>
+            </button>
+          ) : (
+            <Link
+              href="/clubs"
+              onClick={onLinkClick}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
+            >
+              <ArrowLeftRight className="w-4 h-4 shrink-0" />
+              <span>Cambiar de club</span>
+            </Link>
+          ))}
         {role === "OWNER" && (
-          <Link
-            href="/clubs/create"
-            onClick={onLinkClick}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
+          <button
+            type="button"
+            onClick={(e) => {
+              onLinkClick();
+              onOpenCreateClub(e.currentTarget);
+            }}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors w-full text-left"
           >
             <PlusCircle className="w-4 h-4 shrink-0" />
             <span>Crear otro club</span>
-          </Link>
+          </button>
         )}
         {role === "PLAYER" && <LeaveClubButton clubId={club.id} />}
         <button
@@ -450,6 +477,40 @@ export function AppNav({
   // drawer) so neither role's state interferes with the other's UI.
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuTriggerRef = useRef<HTMLButtonElement>(null);
+
+  // "Cambiar de club" / "Crear otro club" — ambos OWNER-only (ver CLAUDE.md
+  // → Role Philosophy: OWNER es el único rol que puede pertenecer a varios
+  // clubes como propietario). Un único estado (nunca dos booleanos
+  // independientes) garantiza que jamás queden ambos modales montados a la
+  // vez — incluida la transición interna desde "Cambiar de club" hacia
+  // "Crear otro club" (ver ChangeClubModal → onCreateClub). clubModalTriggerRef
+  // guarda el elemento que originó la secuencia — el botón del sidebar de
+  // escritorio o el del menú de usuario mobile, nunca ambos a la vez — para
+  // devolverle el foco al cerrar; la transición interna change→create
+  // deliberadamente no lo reescribe, así el foco vuelve al disparador
+  // original y no a un botón intermedio que ya no existe.
+  const [activeClubModal, setActiveClubModal] = useState<"change" | "create" | null>(null);
+  const clubModalTriggerRef = useRef<HTMLElement | null>(null);
+
+  function handleOpenChangeClub(trigger: HTMLElement) {
+    clubModalTriggerRef.current = trigger;
+    setActiveClubModal("change");
+  }
+
+  function handleOpenCreateClub(trigger: HTMLElement) {
+    clubModalTriggerRef.current = trigger;
+    setActiveClubModal("create");
+  }
+
+  function handleCreateClubFromChangeModal() {
+    // Transición interna — mismo trigger original, nunca se reescribe.
+    setActiveClubModal("create");
+  }
+
+  function handleCloseClubModal() {
+    setActiveClubModal(null);
+    clubModalTriggerRef.current?.focus();
+  }
 
   async function handleLogout() {
     const supabase = createClient();
@@ -499,6 +560,8 @@ export function AppNav({
           identity={identity}
           onLinkClick={closeMobile}
           onLogout={handleLogout}
+          onOpenChangeClub={handleOpenChangeClub}
+          onOpenCreateClub={handleOpenCreateClub}
         />
       </aside>
 
@@ -567,6 +630,8 @@ export function AppNav({
                   identity={identity}
                   onLinkClick={closeMobile}
                   onLogout={handleLogout}
+                  onOpenChangeClub={handleOpenChangeClub}
+                  onOpenCreateClub={handleOpenCreateClub}
                 />
               </div>
             </div>
@@ -663,27 +728,44 @@ export function AppNav({
                       <User className="w-4 h-4 shrink-0" />
                       <span>Mi Perfil</span>
                     </Link>
-                    {membershipCount >= 2 && (
-                      <Link
-                        href="/clubs"
-                        role="menuitem"
-                        onClick={() => setUserMenuOpen(false)}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
-                      >
-                        <ArrowLeftRight className="w-4 h-4 shrink-0" />
-                        <span>Cambiar de club</span>
-                      </Link>
-                    )}
+                    {membershipCount >= 2 &&
+                      (role === "OWNER" ? (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={(e) => {
+                            setUserMenuOpen(false);
+                            handleOpenChangeClub(e.currentTarget);
+                          }}
+                          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors w-full text-left"
+                        >
+                          <ArrowLeftRight className="w-4 h-4 shrink-0" />
+                          <span>Cambiar de club</span>
+                        </button>
+                      ) : (
+                        <Link
+                          href="/clubs"
+                          role="menuitem"
+                          onClick={() => setUserMenuOpen(false)}
+                          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
+                        >
+                          <ArrowLeftRight className="w-4 h-4 shrink-0" />
+                          <span>Cambiar de club</span>
+                        </Link>
+                      ))}
                     {role === "OWNER" && (
-                      <Link
-                        href="/clubs/create"
+                      <button
+                        type="button"
                         role="menuitem"
-                        onClick={() => setUserMenuOpen(false)}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors"
+                        onClick={(e) => {
+                          setUserMenuOpen(false);
+                          handleOpenCreateClub(e.currentTarget);
+                        }}
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-brand-muted hover:text-white hover:bg-brand-primary/5 transition-colors w-full text-left"
                       >
                         <PlusCircle className="w-4 h-4 shrink-0" />
                         <span>Crear otro club</span>
-                      </Link>
+                      </button>
                     )}
                     <button
                       type="button"
@@ -722,6 +804,20 @@ export function AppNav({
           </nav>
         </>
       )}
+
+      {/* OWNER-only — un único modal montado a la vez (activeClubModal),
+          para ambos triggers (sidebar de escritorio y menú de usuario
+          mobile) y para la transición interna "Cambiar de club" → "Crear
+          otro club". */}
+      {activeClubModal === "change" && (
+        <ChangeClubModal
+          currentClubId={club.id}
+          currentClubSlug={club.slug}
+          onClose={handleCloseClubModal}
+          onCreateClub={handleCreateClubFromChangeModal}
+        />
+      )}
+      {activeClubModal === "create" && <CreateClubModal onClose={handleCloseClubModal} />}
     </>
   );
 }

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
+import { clubHubPath } from "@/lib/clubHubPaths";
 
 /**
  * Returns the canonical entry path for a club based on the user's role.
@@ -77,6 +78,48 @@ export async function resolveClubEntryPath(
   }
 
   return "/clubs";
+}
+
+// Mapea la ruta actual (dentro de un club) a su equivalente en otro club,
+// preservando el módulo (Dashboard/Reservas/Jugadores/Ranking/Torneos/Club)
+// pero nunca un identificador de recurso específico (torneo, noticia,
+// cancha, reserva) que solo tiene sentido en el club de origen — usado
+// únicamente por el modal "Cambiar de club" del OWNER (ChangeClubModal),
+// donde el rol nunca cambia entre clubes: solo se listan clubes donde el
+// usuario ya es OWNER (ver getOwnerClubs), así que a diferencia de
+// getClubEntryPath esto nunca necesita resolver un rol distinto en el
+// destino. Reutiliza getClubEntryPath/clubHubPath como fallback y para las
+// rutas del hub "Club" — nunca construye una ruta a mano por fuera de esos
+// dos helpers ya existentes.
+export function resolveOwnerSwitchPath(currentPathname: string, currentSlug: string, targetSlug: string): string {
+  const fallback = () => getClubEntryPath(targetSlug, "OWNER");
+
+  const prefix = `/${currentSlug}`;
+  if (currentPathname !== prefix && !currentPathname.startsWith(`${prefix}/`)) return fallback();
+
+  const rest = currentPathname.slice(prefix.length);
+  if (rest === "" || rest === "/admin") return fallback();
+
+  if (rest.startsWith("/dashboard")) return `/${targetSlug}/dashboard`;
+  // Recurso específico sin equivalente en el club destino (cancha
+  // puntual, período de estadísticas) → raíz segura del módulo, nunca el
+  // identificador original.
+  if (rest.startsWith("/admin/courts")) return `/${targetSlug}/dashboard?tab=canchas`;
+  if (rest.startsWith("/admin/statistics")) return `/${targetSlug}/dashboard?tab=rendimiento`;
+  // Reserva específica → listado de Reservas, nunca su propio id.
+  if (rest.startsWith("/admin/reservations")) return `/${targetSlug}/admin/reservations`;
+  if (rest.startsWith("/admin/players")) return `/${targetSlug}/admin/players`;
+  if (rest.startsWith("/ranking")) return `/${targetSlug}/ranking`;
+  // Detalle de torneo → listado de Torneos, nunca el slug del torneo
+  // original (pertenece exclusivamente al club de origen).
+  if (rest.startsWith("/admin/tournaments") || rest.startsWith("/tournaments")) return `/${targetSlug}/admin/tournaments`;
+  // Noticia específica → Club → Noticias, nunca el slug de la noticia.
+  if (rest.startsWith("/admin/news")) return clubHubPath(targetSlug, "noticias");
+  if (rest.startsWith("/admin/team")) return clubHubPath(targetSlug, "equipo");
+  if (rest.startsWith("/admin/settings")) return clubHubPath(targetSlug, "configuracion");
+  if (rest.startsWith("/admin/public-page") || rest.startsWith("/admin/club")) return clubHubPath(targetSlug);
+
+  return fallback();
 }
 
 export interface NavActiveMembership {
