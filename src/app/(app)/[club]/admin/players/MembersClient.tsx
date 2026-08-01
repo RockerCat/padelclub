@@ -63,10 +63,11 @@ function formatDate(iso: string) {
   });
 }
 
-// La tarjeta grande — desktop la usa para toda la grilla; mobile la reutiliza
-// tal cual, sin ningún cambio visual, únicamente para el Top 3 (ver
-// MembersClient más abajo). Una sola implementación, nunca dos versiones de
-// "la tarjeta del jugador".
+// La tarjeta grande — exclusiva de desktop/tablet (ver MembersClient más
+// abajo). Mobile ya no la usa en absoluto: se probó como "Top 3" destacado
+// y se retiró por ocupar demasiado espacio sin aportar valor — /[club]/ranking
+// ya cumple ese objetivo. Queda como la única implementación de "la tarjeta
+// del jugador", usada solo en la grilla desktop.
 function MemberCard({
   member,
   sportState,
@@ -216,17 +217,6 @@ export function MembersClient({
         : "generic"
       : "search";
 
-  // Mobile-only "Top 3 del ranking" — las 3 mejores posiciones reales entre
-  // lo que ya está filtrado/visible (`filtered`), nunca una consulta ni un
-  // cálculo de ranking nuevo: `position` ya viene resuelto por
-  // get_club_category_ranking_view (page.tsx). Un miembro sin posición
-  // (sin estado deportivo aprovisionado, o inactivo) nunca puede ser "de
-  // los tres mejores" — se excluye en vez de tratarlo como el peor.
-  const rankedForTop3 = filtered
-    .filter((m) => sportStateByMember[m.id]?.position != null)
-    .sort((a, b) => sportStateByMember[a.id]!.position! - sportStateByMember[b.id]!.position!);
-  const top3 = rankedForTop3.slice(0, 3);
-
   function getMatchesPlayed(member: MemberRow): number | null {
     return matchesPlayedByMember === null ? null : (matchesPlayedByMember[member.profile_id] ?? 0);
   }
@@ -297,8 +287,8 @@ export function MembersClient({
       {filtered.length > 0 && (
         <>
           {/* ── Desktop/tablet: exactamente la grilla de tarjetas de siempre,
-              sin ningún cambio — oculta en mobile, donde las secciones de
-              abajo la reemplazan. ── */}
+              sin ningún cambio — oculta en mobile, donde el listado
+              compacto de abajo la reemplaza. ── */}
           <div className="hidden md:grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filtered.map((member) => (
               <MemberCard
@@ -311,46 +301,20 @@ export function MembersClient({
             ))}
           </div>
 
-          {/* ── Mobile only: Top 3 del ranking + listado compacto. ── */}
-          <div className="md:hidden flex flex-col gap-6">
-            {top3.length > 0 && (
-              <div>
-                <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-3">
-                  Top {top3.length} del ranking
-                </h2>
-                {/* Una tarjeta grande debajo de otra — misma tarjeta exacta
-                    que desktop, sin componente ni implementación nuevos;
-                    apiladas verticalmente en vez de en grilla para no
-                    arriesgar overflow horizontal en pantallas angostas. */}
-                <div className="flex flex-col gap-3">
-                  {top3.map((member) => (
-                    <MemberCard
-                      key={member.id}
-                      member={member}
-                      sportState={sportStateByMember[member.id]}
-                      matchesPlayed={getMatchesPlayed(member)}
-                      onSelect={() => setSelectedMember(member)}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div>
-              <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-2">
-                Todos los jugadores
-              </h2>
-              <div className="flex flex-col divide-y divide-white/5">
-                {filtered.map((member) => (
-                  <CompactMemberRow
-                    key={member.id}
-                    member={member}
-                    sportState={sportStateByMember[member.id]}
-                    onSelect={() => setSelectedMember(member)}
-                  />
-                ))}
-              </div>
-            </div>
+          {/* ── Mobile only: listado compacto, directamente debajo de los
+              filtros — sin Top 3, sin cards grandes, sin encabezado de
+              sección intermedio. /[club]/ranking ya es la pantalla que
+              destaca a los mejores jugadores; esta pantalla es únicamente
+              para encontrar a alguien rápido. ── */}
+          <div className="md:hidden flex flex-col divide-y divide-white/5">
+            {filtered.map((member) => (
+              <CompactMemberRow
+                key={member.id}
+                member={member}
+                sportState={sportStateByMember[member.id]}
+                onSelect={() => setSelectedMember(member)}
+              />
+            ))}
           </div>
         </>
       )}

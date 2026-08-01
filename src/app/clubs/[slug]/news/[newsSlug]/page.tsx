@@ -1,7 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import Link from "next/link";
 import type { Metadata } from "next";
-import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatNewsDate } from "@/components/clubs/PublicNewsCard";
 import { NewsTournamentChampions } from "@/components/clubs/NewsTournamentChampions";
@@ -135,17 +133,12 @@ export default async function ClubNewsDetailPage({ params }: Props) {
 
   return (
     <div className="min-h-screen bg-brand-bg">
-      <div className="border-b border-white/8 bg-brand-bg/90 backdrop-blur-sm sticky top-0 z-20">
-        <div className="max-w-5xl mx-auto px-5 h-14 flex items-center">
-          <Link
-            href={`/clubs/${club.slug}/news`}
-            className="flex items-center gap-1.5 text-sm text-brand-muted hover:text-white transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Noticias de {club.name}
-          </Link>
-        </div>
-      </div>
+      {/* Sin enlace de regreso: una noticia puede abrirse desde demasiados
+          orígenes distintos (landing pública, perfil público del club,
+          dashboards de OWNER/ADMIN/PLAYER, enlaces compartidos, futuras
+          notificaciones) para que exista un único "volver a" correcto — el
+          usuario vuelve con el back del navegador o el gesto nativo. El
+          detalle arranca directamente con la imagen y el contenido. */}
 
       {/* Desktop (lg+): dos columnas — imagen portrait a la izquierda
           (~35%, con un ancho máximo fijo para que nunca crezca
@@ -153,15 +146,18 @@ export default async function ClubNewsDetailPage({ params }: Props) {
           contenido a la derecha (~65%, el elemento principal). `lg:items-start`
           (en vez de stretch) deja que la columna de la imagen conserve
           su propia altura natural — así, con una noticia larga, le
-          queda "recorrido" a `lg:sticky` para pegarse bajo el header
+          queda "recorrido" a `lg:sticky` para pegarse cerca del borde
+          superior del viewport (sin barra superior alguna, ver arriba)
           mientras el texto sigue haciendo scroll a su lado, sin que la
-          imagen empuje el contenido hacia abajo. Mobile/tablet angosta:
-          sin lg:grid, los bloques son simples <div> en flujo normal —
-          el orden real del DOM (imagen, fecha, título, campeones,
-          contenido) ya coincide con el orden pedido, sin necesitar
-          ninguna clase de reordenamiento. */}
+          imagen empuje el contenido hacia abajo. `lg:top-10` coincide con
+          el `py-10` propio del contenedor, para que el margen se sienta
+          igual antes y durante el scroll. Mobile/tablet angosta: sin
+          lg:grid, los bloques son simples <div> en flujo normal — el
+          orden real del DOM (imagen, fecha, título, campeones, contenido)
+          ya coincide con el orden pedido, sin necesitar ninguna clase de
+          reordenamiento. */}
       <div className="max-w-5xl mx-auto px-5 py-10 lg:grid lg:grid-cols-[minmax(0,min(35%,360px))_minmax(0,1fr)] lg:gap-8 lg:items-start">
-        <div className="mb-6 lg:mb-0 lg:sticky lg:top-20">
+        <div className="mb-6 lg:mb-0 lg:sticky lg:top-10">
           <div className="rounded-2xl overflow-hidden bg-white/3 border border-white/8 aspect-[3/4]">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={news.image_url} alt={news.title} className="w-full h-full object-cover" />
