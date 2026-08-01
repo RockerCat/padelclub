@@ -138,10 +138,12 @@ export function SignupForm({ inviteToken, branding, next: rawNext }: SignupFormP
       }
 
       // Session present → email confirmation disabled, user is active immediately.
-      // next (e.g. returning to join a club) always wins over the generic
-      // "Crear mi club" welcome screen.
+      // An invite always wins (its own dedicated destination, /invite/<token>
+      // — never lost here just because email confirmation happens to be off),
+      // then next (e.g. returning to join a club), then the generic "Crear mi
+      // club" welcome screen only when neither applies.
       if (data.session) {
-        router.push(next ?? "/clubs?welcome=1");
+        router.push(inviteToken ? `/invite/${inviteToken}` : next ?? "/clubs?welcome=1");
         return;
       }
 

@@ -31,7 +31,9 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
 
   console.log("[club lookup]", slug);
 
-  // Step 1: resolve slug → club row
+  // A club created via platform_create_pending_club is is_active=true from
+  // birth (Entrega de Club — see 20261005000001), so this plain lookup
+  // already finds it — no special-cased pending-club branch needed.
   const result = await supabase
     .from("clubs")
     .select("id, name, slug, logo_url, archived_at")

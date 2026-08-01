@@ -1,1868 +1,2552 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// Database types for PadelClub
-//
-// IMPORTANT: After applying the Sprint 1 migration and logging in with the
-// correct Supabase account, regenerate this file with:
-//
-//   npx supabase gen types typescript \
-//     --project-id rfzyqmvqmqsjigcvxxnf \
-//     > src/types/database.ts
-//
-// Until then, this file is maintained manually and covers Sprint 1 tables.
-// ─────────────────────────────────────────────────────────────────────────────
-
 export type Json =
   | string
   | number
   | boolean
   | null
   | { [key: string]: Json | undefined }
-  | Json[];
+  | Json[]
 
-export interface Database {
+export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
+  }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
-      clubs: {
+      club_claim_events: {
         Row: {
-          id: string;
-          slug: string;
-          name: string;
-          description: string | null;
-          logo_url: string | null;
-          cover_image_url: string | null;
-          primary_color: string;
-          secondary_color: string;
-          bg_color: string;
-          visibility: string;
-          city: string | null;
-          state: string | null;
-          country: string | null;
-          address: string | null;
-          whatsapp: string | null;
-          facebook: string | null;
-          instagram: string | null;
-          youtube: string | null;
-          latitude: number | null;
-          longitude: number | null;
-          is_active: boolean;
-          archived_at: string | null;
-          allowed_reservation_durations: number[];
-          gallery_image_urls: string[];
-          // Fase 1 módulo deportivo (20260819000001) — nullable until the
-          // OWNER/ADMIN regularizes the club; never defaulted/assumed.
-          default_player_category: string | null;
-          created_at: string;
-          updated_at: string;
-        };
+          actor_id: string | null
+          claim_link_id: string | null
+          club_id: string
+          created_at: string
+          event_type: string
+          id: string
+          ip_address: string | null
+          previous_owner_id: string | null
+        }
         Insert: {
-          id?: string;
-          slug: string;
-          name: string;
-          description?: string | null;
-          logo_url?: string | null;
-          cover_image_url?: string | null;
-          primary_color?: string;
-          secondary_color?: string;
-          bg_color?: string;
-          visibility?: string;
-          city?: string | null;
-          state?: string | null;
-          country?: string | null;
-          address?: string | null;
-          whatsapp?: string | null;
-          facebook?: string | null;
-          instagram?: string | null;
-          youtube?: string | null;
-          latitude?: number | null;
-          longitude?: number | null;
-          is_active?: boolean;
-          archived_at?: string | null;
-          allowed_reservation_durations?: number[];
-          gallery_image_urls?: string[];
-          default_player_category?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
+          actor_id?: string | null
+          claim_link_id?: string | null
+          club_id: string
+          created_at?: string
+          event_type: string
+          id?: string
+          ip_address?: string | null
+          previous_owner_id?: string | null
+        }
         Update: {
-          id?: string;
-          slug?: string;
-          name?: string;
-          description?: string | null;
-          logo_url?: string | null;
-          cover_image_url?: string | null;
-          primary_color?: string;
-          secondary_color?: string;
-          bg_color?: string;
-          visibility?: string;
-          city?: string | null;
-          state?: string | null;
-          country?: string | null;
-          address?: string | null;
-          whatsapp?: string | null;
-          facebook?: string | null;
-          instagram?: string | null;
-          youtube?: string | null;
-          latitude?: number | null;
-          longitude?: number | null;
-          is_active?: boolean;
-          archived_at?: string | null;
-          allowed_reservation_durations?: number[];
-          gallery_image_urls?: string[];
-          default_player_category?: string | null;
-          updated_at?: string;
-        };
+          actor_id?: string | null
+          claim_link_id?: string | null
+          club_id?: string
+          created_at?: string
+          event_type?: string
+          id?: string
+          ip_address?: string | null
+          previous_owner_id?: string | null
+        }
         Relationships: [
           {
-            foreignKeyName: "clubs_default_player_category_fkey";
-            columns: ["default_player_category"];
-            isOneToOne: false;
-            referencedRelation: "sport_categories";
-            referencedColumns: ["code"];
+            foreignKeyName: "club_claim_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
           },
-        ];
-      };
-      profiles: {
+          {
+            foreignKeyName: "club_claim_events_claim_link_id_fkey"
+            columns: ["claim_link_id"]
+            isOneToOne: false
+            referencedRelation: "club_claim_links"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "club_claim_events_club_id_fkey"
+            columns: ["club_id"]
+            isOneToOne: false
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "club_claim_events_previous_owner_id_fkey"
+            columns: ["previous_owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      club_claim_links: {
         Row: {
-          id: string;
-          full_name: string | null;
-          avatar_url: string | null;
-          phone: string | null;
-          last_club_id: string | null;
-          is_platform_admin: boolean;
-          created_at: string;
-          updated_at: string;
-        };
+          claimed_at: string | null
+          claimed_by: string | null
+          club_id: string
+          created_at: string
+          created_by: string
+          id: string
+          revoked_at: string | null
+          revoked_by: string | null
+          status: string
+          token_hash: string
+        }
         Insert: {
-          id: string;
-          full_name?: string | null;
-          avatar_url?: string | null;
-          phone?: string | null;
-          last_club_id?: string | null;
-          is_platform_admin?: boolean;
-          created_at?: string;
-          updated_at?: string;
-        };
+          claimed_at?: string | null
+          claimed_by?: string | null
+          club_id: string
+          created_at?: string
+          created_by: string
+          id?: string
+          revoked_at?: string | null
+          revoked_by?: string | null
+          status?: string
+          token_hash: string
+        }
         Update: {
-          full_name?: string | null;
-          avatar_url?: string | null;
-          phone?: string | null;
-          last_club_id?: string | null;
-          is_platform_admin?: boolean;
-          updated_at?: string;
-        };
+          claimed_at?: string | null
+          claimed_by?: string | null
+          club_id?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          revoked_at?: string | null
+          revoked_by?: string | null
+          status?: string
+          token_hash?: string
+        }
         Relationships: [
           {
-            foreignKeyName: "profiles_id_fkey";
-            columns: ["id"];
-            isOneToOne: true;
-            referencedRelation: "users";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      club_members: {
-        Row: {
-          id: string;
-          club_id: string;
-          profile_id: string;
-          role: "OWNER" | "ADMIN" | "PLAYER";
-          is_active: boolean;
-          joined_at: string;
-          category: "Principiante" | "5ta" | "4ta" | "3ra" | "2da" | "1ra";
-        };
-        Insert: {
-          id?: string;
-          club_id: string;
-          profile_id: string;
-          role: "OWNER" | "ADMIN" | "PLAYER";
-          is_active?: boolean;
-          joined_at?: string;
-          category?: "Principiante" | "5ta" | "4ta" | "3ra" | "2da" | "1ra";
-        };
-        Update: {
-          role?: "OWNER" | "ADMIN" | "PLAYER";
-          is_active?: boolean;
-          category?: "Principiante" | "5ta" | "4ta" | "3ra" | "2da" | "1ra";
-        };
-        Relationships: [
-          {
-            foreignKeyName: "club_members_club_id_fkey";
-            columns: ["club_id"];
-            isOneToOne: false;
-            referencedRelation: "clubs";
-            referencedColumns: ["id"];
+            foreignKeyName: "club_claim_links_claimed_by_fkey"
+            columns: ["claimed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "club_members_profile_id_fkey";
-            columns: ["profile_id"];
-            isOneToOne: false;
-            referencedRelation: "profiles";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      courts: {
-        Row: {
-          id: string;
-          club_id: string;
-          name: string;
-          description: string | null;
-          surface: string | null;
-          is_indoor: boolean | null;
-          is_active: boolean;
-          sort_order: number;
-          streaming_url: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          club_id: string;
-          name: string;
-          description?: string | null;
-          surface?: string | null;
-          is_indoor?: boolean | null;
-          is_active?: boolean;
-          sort_order?: number;
-          streaming_url?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          name?: string;
-          description?: string | null;
-          surface?: string | null;
-          is_indoor?: boolean | null;
-          is_active?: boolean;
-          sort_order?: number;
-          streaming_url?: string | null;
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "courts_club_id_fkey";
-            columns: ["club_id"];
-            isOneToOne: false;
-            referencedRelation: "clubs";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      reservations: {
-        Row: {
-          id: string;
-          club_id: string;
-          court_id: string;
-          created_by: string;
-          date: string;
-          start_time: string;
-          duration_minutes: number;
-          type: "match" | "class" | "block";
-          title: string | null;
-          notes: string | null;
-          status: "confirmed" | "cancelled" | "pending" | "rejected";
-          cancelled_at: string | null;
-          cancelled_by: string | null;
-          // Frozen price fields (20260802000002) — NULL for every
-          // reservation until a future phase wires resolveReservationPrice
-          // into the creation/edit/approval flows. Never backfilled, never
-          // defaulted to 0.
-          price_amount: number | null;
-          price_currency: string | null;
-          pricing_rule_id: string | null;
-          price_calculated_at: string | null;
-          // Rejection traceability (20260804000001) — only set once
-          // status = 'rejected'. Null for every other status, including
-          // historical rows rejected before this migration (old reject flow
-          // reused status = 'cancelled' with no reason captured).
-          rejection_reason_code: string | null;
-          rejection_reason: string | null;
-          rejected_at: string | null;
-          rejected_by: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          club_id: string;
-          court_id: string;
-          created_by: string;
-          date: string;
-          start_time: string;
-          duration_minutes?: number;
-          type?: "match" | "class" | "block";
-          title?: string | null;
-          notes?: string | null;
-          status?: "confirmed" | "cancelled" | "pending" | "rejected";
-          cancelled_at?: string | null;
-          cancelled_by?: string | null;
-          price_amount?: number | null;
-          price_currency?: string | null;
-          pricing_rule_id?: string | null;
-          price_calculated_at?: string | null;
-          rejection_reason_code?: string | null;
-          rejection_reason?: string | null;
-          rejected_at?: string | null;
-          rejected_by?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          court_id?: string;
-          date?: string;
-          start_time?: string;
-          duration_minutes?: number;
-          type?: "match" | "class" | "block";
-          title?: string | null;
-          notes?: string | null;
-          status?: "confirmed" | "cancelled" | "pending" | "rejected";
-          cancelled_at?: string | null;
-          cancelled_by?: string | null;
-          price_amount?: number | null;
-          price_currency?: string | null;
-          pricing_rule_id?: string | null;
-          price_calculated_at?: string | null;
-          rejection_reason_code?: string | null;
-          rejection_reason?: string | null;
-          rejected_at?: string | null;
-          rejected_by?: string | null;
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "reservations_pricing_rule_id_fkey";
-            columns: ["pricing_rule_id"];
-            isOneToOne: false;
-            referencedRelation: "club_pricing_rules";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      club_pricing_rules: {
-        Row: {
-          id: string;
-          club_id: string;
-          court_id: string | null;
-          name: string;
-          days_of_week: number[];
-          start_time: string;
-          end_time: string;
-          // Legacy as of 20260803000002 — DROP NOT NULL applied; new rules
-          // never populate it (see club_pricing_rule_prices, the real
-          // source of truth for price now). Historical rows keep their
-          // value until a later phase removes the column entirely.
-          price_per_hour: number | null;
-          currency: string;
-          display_order: number;
-          is_active: boolean;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          club_id: string;
-          court_id?: string | null;
-          name: string;
-          days_of_week: number[];
-          start_time: string;
-          end_time: string;
-          price_per_hour?: number | null;
-          currency?: string;
-          display_order?: number;
-          is_active?: boolean;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          court_id?: string | null;
-          name?: string;
-          days_of_week?: number[];
-          start_time?: string;
-          end_time?: string;
-          price_per_hour?: number | null;
-          currency?: string;
-          display_order?: number;
-          is_active?: boolean;
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "club_pricing_rules_club_id_fkey";
-            columns: ["club_id"];
-            isOneToOne: false;
-            referencedRelation: "clubs";
-            referencedColumns: ["id"];
+            foreignKeyName: "club_claim_links_club_id_fkey"
+            columns: ["club_id"]
+            isOneToOne: false
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "club_pricing_rules_court_id_fkey";
-            columns: ["court_id"];
-            isOneToOne: false;
-            referencedRelation: "courts";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      club_pricing_rule_prices: {
-        Row: {
-          id: string;
-          pricing_rule_id: string;
-          duration_minutes: number;
-          price_amount: number;
-          currency: string;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          pricing_rule_id: string;
-          duration_minutes: number;
-          price_amount: number;
-          currency?: string;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          duration_minutes?: number;
-          price_amount?: number;
-          currency?: string;
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "club_pricing_rule_prices_pricing_rule_id_fkey";
-            columns: ["pricing_rule_id"];
-            isOneToOne: false;
-            referencedRelation: "club_pricing_rules";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      club_operating_hours: {
-        Row: {
-          id: string;
-          club_id: string;
-          day_of_week: number;
-          is_open: boolean;
-          opens_at: string | null;
-          closes_at: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          club_id: string;
-          day_of_week: number;
-          is_open?: boolean;
-          opens_at?: string | null;
-          closes_at?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          is_open?: boolean;
-          opens_at?: string | null;
-          closes_at?: string | null;
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "club_operating_hours_club_id_fkey";
-            columns: ["club_id"];
-            isOneToOne: false;
-            referencedRelation: "clubs";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      reservation_players: {
-        Row: {
-          id: string;
-          reservation_id: string;
-          profile_id: string;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          reservation_id: string;
-          profile_id: string;
-          created_at?: string;
-        };
-        Update: Record<string, never>;
-        Relationships: [];
-      };
-      invitation_links: {
-        Row: {
-          id: string;
-          club_id: string;
-          token: string;
-          role: "ADMIN" | "PLAYER";
-          created_by: string;
-          expires_at: string;
-          max_uses: number | null;
-          uses: number;
-          is_active: boolean;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          club_id: string;
-          token?: string;
-          role?: "ADMIN" | "PLAYER";
-          created_by: string;
-          expires_at?: string;
-          max_uses?: number | null;
-          uses?: number;
-          is_active?: boolean;
-          created_at?: string;
-        };
-        Update: {
-          role?: "ADMIN" | "PLAYER";
-          expires_at?: string;
-          max_uses?: number | null;
-          uses?: number;
-          is_active?: boolean;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "invitation_links_club_id_fkey";
-            columns: ["club_id"];
-            isOneToOne: false;
-            referencedRelation: "clubs";
-            referencedColumns: ["id"];
+            foreignKeyName: "club_claim_links_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "invitation_links_created_by_fkey";
-            columns: ["created_by"];
-            isOneToOne: false;
-            referencedRelation: "profiles";
-            referencedColumns: ["id"];
+            foreignKeyName: "club_claim_links_revoked_by_fkey"
+            columns: ["revoked_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       club_join_requests: {
         Row: {
-          id: string;
-          club_id: string;
-          profile_id: string;
-          status: "pending" | "approved" | "rejected";
-          approved_at: string | null;
-          approved_by: string | null;
-          rejected_at: string | null;
-          rejected_by: string | null;
-          created_at: string;
-        };
+          approved_at: string | null
+          approved_by: string | null
+          club_id: string
+          created_at: string
+          id: string
+          profile_id: string
+          rejected_at: string | null
+          rejected_by: string | null
+          status: string
+        }
         Insert: {
-          id?: string;
-          club_id: string;
-          profile_id: string;
-          status?: "pending" | "approved" | "rejected";
-          approved_at?: string | null;
-          approved_by?: string | null;
-          rejected_at?: string | null;
-          rejected_by?: string | null;
-          created_at?: string;
-        };
+          approved_at?: string | null
+          approved_by?: string | null
+          club_id: string
+          created_at?: string
+          id?: string
+          profile_id: string
+          rejected_at?: string | null
+          rejected_by?: string | null
+          status?: string
+        }
         Update: {
-          status?: "pending" | "approved" | "rejected";
-          approved_at?: string | null;
-          approved_by?: string | null;
-          rejected_at?: string | null;
-          rejected_by?: string | null;
-        };
+          approved_at?: string | null
+          approved_by?: string | null
+          club_id?: string
+          created_at?: string
+          id?: string
+          profile_id?: string
+          rejected_at?: string | null
+          rejected_by?: string | null
+          status?: string
+        }
         Relationships: [
           {
-            foreignKeyName: "club_join_requests_club_id_fkey";
-            columns: ["club_id"];
-            isOneToOne: false;
-            referencedRelation: "clubs";
-            referencedColumns: ["id"];
+            foreignKeyName: "club_join_requests_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "club_join_requests_profile_id_fkey";
-            columns: ["profile_id"];
-            isOneToOne: false;
-            referencedRelation: "profiles";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      club_news: {
-        Row: {
-          id: string;
-          club_id: string;
-          title: string;
-          // 20261001000001 — URL legible, único por club (UNIQUE
-          // (club_id, slug)). Generado una sola vez al publicar
-          // (create_club_news); nunca se reescribe al editar el título —
-          // la URL compartida debe permanecer estable.
-          slug: string;
-          content: string;
-          image_url: string;
-          created_by: string;
-          // 20260929000001 — cierre editorial del torneo: nullable, noticias
-          // normales nunca lo tocan. Un índice único parcial (WHERE NOT
-          // NULL) garantiza como máximo una noticia por torneo.
-          tournament_id: string | null;
-          published_at: string;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          club_id: string;
-          title: string;
-          slug: string;
-          content: string;
-          image_url: string;
-          created_by: string;
-          tournament_id?: string | null;
-          published_at?: string;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          title?: string;
-          content?: string;
-          image_url?: string;
-          published_at?: string;
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "club_news_club_id_fkey";
-            columns: ["club_id"];
-            isOneToOne: false;
-            referencedRelation: "clubs";
-            referencedColumns: ["id"];
+            foreignKeyName: "club_join_requests_club_id_fkey"
+            columns: ["club_id"]
+            isOneToOne: false
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "club_news_created_by_fkey";
-            columns: ["created_by"];
-            isOneToOne: false;
-            referencedRelation: "profiles";
-            referencedColumns: ["id"];
+            foreignKeyName: "club_join_requests_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "club_news_tournament_id_fkey";
-            columns: ["tournament_id"];
-            isOneToOne: true;
-            referencedRelation: "tournaments";
-            referencedColumns: ["id"];
+            foreignKeyName: "club_join_requests_rejected_by_fkey"
+            columns: ["rejected_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
           },
-        ];
-      };
-      // ─── Fase 1 módulo deportivo (20260818000001 / 20260820000001) ────────
-      // Global, read-only, platform-wide category catalog — no club_id, never
-      // club-configurable. Seeded once with exactly 7 rows.
-      sport_categories: {
-        Row: {
-          code: string;
-          sort_order: number;
-          created_at: string;
-        };
-        Insert: {
-          code: string;
-          sort_order: number;
-          created_at?: string;
-        };
-        Update: {
-          code?: string;
-          sort_order?: number;
-        };
-        Relationships: [];
-      };
-      // One ranking cycle for a (club, category) combination. ended_at IS
-      // NULL means active; at most one active row per club+category
-      // (partial unique index, not expressible here).
-      club_ranking_cycles: {
-        Row: {
-          id: string;
-          club_id: string;
-          category: string;
-          started_at: string;
-          ended_at: string | null;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          club_id: string;
-          category: string;
-          started_at?: string;
-          ended_at?: string | null;
-          created_at?: string;
-        };
-        Update: {
-          ended_at?: string | null;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "club_ranking_cycles_club_id_fkey";
-            columns: ["club_id"];
-            isOneToOne: false;
-            referencedRelation: "clubs";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "club_ranking_cycles_category_fkey";
-            columns: ["category"];
-            isOneToOne: false;
-            referencedRelation: "sport_categories";
-            referencedColumns: ["code"];
-          },
-        ];
-      };
-      // Strict 1:1 extension of club_members (club_member_id doubles as PK
-      // and FK, same shape as profiles.id extending auth.users). category is
-      // deliberately never stored here — always derived via cycle_id. No
-      // direct client write path exists (RLS has zero policies for
-      // anon/authenticated — see 20260820000001/20260821000001).
+        ]
+      }
       club_member_sport_state: {
         Row: {
-          club_member_id: string;
-          club_id: string;
-          cycle_id: string;
-          current_points: number;
-          points_reached_at: string;
-          created_at: string;
-        };
+          club_id: string
+          club_member_id: string
+          created_at: string
+          current_points: number
+          cycle_id: string
+          points_reached_at: string
+        }
         Insert: {
-          club_member_id: string;
-          club_id: string;
-          cycle_id: string;
-          current_points?: number;
-          points_reached_at?: string;
-          created_at?: string;
-        };
-        Update: Record<string, never>;
+          club_id: string
+          club_member_id: string
+          created_at?: string
+          current_points?: number
+          cycle_id: string
+          points_reached_at?: string
+        }
+        Update: {
+          club_id?: string
+          club_member_id?: string
+          created_at?: string
+          current_points?: number
+          cycle_id?: string
+          points_reached_at?: string
+        }
         Relationships: [
           {
-            foreignKeyName: "club_member_sport_state_member_club_fk";
-            columns: ["club_member_id", "club_id"];
-            isOneToOne: true;
-            referencedRelation: "club_members";
-            referencedColumns: ["id", "club_id"];
+            foreignKeyName: "club_member_sport_state_cycle_club_fk"
+            columns: ["cycle_id", "club_id"]
+            isOneToOne: false
+            referencedRelation: "club_ranking_cycles"
+            referencedColumns: ["id", "club_id"]
           },
           {
-            foreignKeyName: "club_member_sport_state_cycle_club_fk";
-            columns: ["cycle_id", "club_id"];
-            isOneToOne: false;
-            referencedRelation: "club_ranking_cycles";
-            referencedColumns: ["id", "club_id"];
+            foreignKeyName: "club_member_sport_state_member_club_fk"
+            columns: ["club_member_id", "club_id"]
+            isOneToOne: false
+            referencedRelation: "club_members"
+            referencedColumns: ["id", "club_id"]
           },
-        ];
-      };
-      // Immutable, private history of category changes. No row is ever
-      // inserted by this Fase 1 provisioning block — reserved for the
-      // future category-change transactional block.
+        ]
+      }
+      club_members: {
+        Row: {
+          category: string
+          club_id: string
+          id: string
+          is_active: boolean
+          joined_at: string
+          profile_id: string
+          role: string
+        }
+        Insert: {
+          category?: string
+          club_id: string
+          id?: string
+          is_active?: boolean
+          joined_at?: string
+          profile_id: string
+          role: string
+        }
+        Update: {
+          category?: string
+          club_id?: string
+          id?: string
+          is_active?: boolean
+          joined_at?: string
+          profile_id?: string
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "club_members_club_id_fkey"
+            columns: ["club_id"]
+            isOneToOne: false
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "club_members_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      club_news: {
+        Row: {
+          club_id: string
+          content: string
+          created_at: string
+          created_by: string
+          id: string
+          image_url: string
+          published_at: string
+          slug: string
+          title: string
+          tournament_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          club_id: string
+          content: string
+          created_at?: string
+          created_by: string
+          id?: string
+          image_url: string
+          published_at?: string
+          slug: string
+          title: string
+          tournament_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          club_id?: string
+          content?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          image_url?: string
+          published_at?: string
+          slug?: string
+          title?: string
+          tournament_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "club_news_club_id_fkey"
+            columns: ["club_id"]
+            isOneToOne: false
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "club_news_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "club_news_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      club_operating_hours: {
+        Row: {
+          closes_at: string | null
+          club_id: string
+          created_at: string
+          day_of_week: number
+          id: string
+          is_open: boolean
+          opens_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          closes_at?: string | null
+          club_id: string
+          created_at?: string
+          day_of_week: number
+          id?: string
+          is_open?: boolean
+          opens_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          closes_at?: string | null
+          club_id?: string
+          created_at?: string
+          day_of_week?: number
+          id?: string
+          is_open?: boolean
+          opens_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "club_operating_hours_club_id_fkey"
+            columns: ["club_id"]
+            isOneToOne: false
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       club_player_category_changes: {
         Row: {
-          id: string;
-          club_id: string;
-          club_member_id: string;
-          previous_cycle_id: string;
-          new_cycle_id: string;
-          previous_category: string;
-          new_category: string;
-          previous_points: number;
-          previous_position: number | null;
-          change_type: "promotion" | "demotion" | "correction";
-          comment: string;
-          created_by: string;
-          created_at: string;
-        };
+          change_type: string
+          club_id: string
+          club_member_id: string
+          comment: string
+          created_at: string
+          created_by: string
+          id: string
+          new_category: string
+          new_cycle_id: string
+          previous_category: string
+          previous_cycle_id: string
+          previous_points: number
+          previous_position: number | null
+        }
         Insert: {
-          id?: string;
-          club_id: string;
-          club_member_id: string;
-          previous_cycle_id: string;
-          new_cycle_id: string;
-          previous_category: string;
-          new_category: string;
-          previous_points: number;
-          previous_position?: number | null;
-          change_type: "promotion" | "demotion" | "correction";
-          comment: string;
-          created_by: string;
-          created_at?: string;
-        };
-        Update: Record<string, never>;
+          change_type: string
+          club_id: string
+          club_member_id: string
+          comment: string
+          created_at?: string
+          created_by: string
+          id?: string
+          new_category: string
+          new_cycle_id: string
+          previous_category: string
+          previous_cycle_id: string
+          previous_points: number
+          previous_position?: number | null
+        }
+        Update: {
+          change_type?: string
+          club_id?: string
+          club_member_id?: string
+          comment?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          new_category?: string
+          new_cycle_id?: string
+          previous_category?: string
+          previous_cycle_id?: string
+          previous_points?: number
+          previous_position?: number | null
+        }
         Relationships: [
           {
-            foreignKeyName: "club_player_category_changes_member_club_fk";
-            columns: ["club_member_id", "club_id"];
-            isOneToOne: false;
-            referencedRelation: "club_members";
-            referencedColumns: ["id", "club_id"];
+            foreignKeyName: "club_player_category_changes_club_id_fkey"
+            columns: ["club_id"]
+            isOneToOne: false
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
           },
-        ];
-      };
-      // Immutable, append-only points ledger. No row is ever inserted by
-      // this Fase 1 provisioning block — reserved for the future manual
-      // point-adjustment / category-change-technical-movement block.
+          {
+            foreignKeyName: "club_player_category_changes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "club_player_category_changes_member_club_fk"
+            columns: ["club_member_id", "club_id"]
+            isOneToOne: false
+            referencedRelation: "club_members"
+            referencedColumns: ["id", "club_id"]
+          },
+          {
+            foreignKeyName: "club_player_category_changes_new_category_fkey"
+            columns: ["new_category"]
+            isOneToOne: false
+            referencedRelation: "sport_categories"
+            referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "club_player_category_changes_new_cycle_club_fk"
+            columns: ["new_cycle_id", "club_id"]
+            isOneToOne: false
+            referencedRelation: "club_ranking_cycles"
+            referencedColumns: ["id", "club_id"]
+          },
+          {
+            foreignKeyName: "club_player_category_changes_prev_cycle_club_fk"
+            columns: ["previous_cycle_id", "club_id"]
+            isOneToOne: false
+            referencedRelation: "club_ranking_cycles"
+            referencedColumns: ["id", "club_id"]
+          },
+          {
+            foreignKeyName: "club_player_category_changes_previous_category_fkey"
+            columns: ["previous_category"]
+            isOneToOne: false
+            referencedRelation: "sport_categories"
+            referencedColumns: ["code"]
+          },
+        ]
+      }
       club_player_point_movements: {
         Row: {
-          id: string;
-          club_id: string;
-          club_member_id: string;
-          cycle_id: string;
-          category: string;
-          previous_total: number;
-          new_total: number;
-          delta: number;
-          adjustment_mode: "delta" | "set";
-          origin: "manual" | "system";
-          system_event_code: "category_change" | null;
-          reason_code:
-            | "internal_league"
-            | "coach_clinic"
-            | "no_show_penalty"
-            | "club_representation_bonus"
-            | "special_event"
-            | "other"
-            | null;
-          comment: string;
-          category_change_id: string | null;
-          created_by: string;
-          created_at: string;
-        };
+          adjustment_mode: string
+          category: string
+          category_change_id: string | null
+          club_id: string
+          club_member_id: string
+          comment: string
+          created_at: string
+          created_by: string
+          cycle_id: string
+          delta: number
+          id: string
+          new_total: number
+          origin: string
+          previous_total: number
+          reason_code: string | null
+          system_event_code: string | null
+          tournament_id: string | null
+        }
         Insert: {
-          id?: string;
-          club_id: string;
-          club_member_id: string;
-          cycle_id: string;
-          category: string;
-          previous_total: number;
-          new_total: number;
-          delta: number;
-          adjustment_mode: "delta" | "set";
-          origin: "manual" | "system";
-          system_event_code?: "category_change" | null;
-          reason_code?:
-            | "internal_league"
-            | "coach_clinic"
-            | "no_show_penalty"
-            | "club_representation_bonus"
-            | "special_event"
-            | "other"
-            | null;
-          comment: string;
-          category_change_id?: string | null;
-          created_by: string;
-          created_at?: string;
-        };
-        Update: Record<string, never>;
+          adjustment_mode: string
+          category: string
+          category_change_id?: string | null
+          club_id: string
+          club_member_id: string
+          comment: string
+          created_at?: string
+          created_by: string
+          cycle_id: string
+          delta: number
+          id?: string
+          new_total: number
+          origin: string
+          previous_total: number
+          reason_code?: string | null
+          system_event_code?: string | null
+          tournament_id?: string | null
+        }
+        Update: {
+          adjustment_mode?: string
+          category?: string
+          category_change_id?: string | null
+          club_id?: string
+          club_member_id?: string
+          comment?: string
+          created_at?: string
+          created_by?: string
+          cycle_id?: string
+          delta?: number
+          id?: string
+          new_total?: number
+          origin?: string
+          previous_total?: number
+          reason_code?: string | null
+          system_event_code?: string | null
+          tournament_id?: string | null
+        }
         Relationships: [
           {
-            foreignKeyName: "club_player_point_movements_member_club_fk";
-            columns: ["club_member_id", "club_id"];
-            isOneToOne: false;
-            referencedRelation: "club_members";
-            referencedColumns: ["id", "club_id"];
+            foreignKeyName: "club_player_point_movements_category_change_id_fkey"
+            columns: ["category_change_id"]
+            isOneToOne: false
+            referencedRelation: "club_player_category_changes"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "club_player_point_movements_category_change_id_fkey";
-            columns: ["category_change_id"];
-            isOneToOne: false;
-            referencedRelation: "club_player_category_changes";
-            referencedColumns: ["id"];
+            foreignKeyName: "club_player_point_movements_category_fkey"
+            columns: ["category"]
+            isOneToOne: false
+            referencedRelation: "sport_categories"
+            referencedColumns: ["code"]
           },
-        ];
-      };
+          {
+            foreignKeyName: "club_player_point_movements_club_id_fkey"
+            columns: ["club_id"]
+            isOneToOne: false
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "club_player_point_movements_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "club_player_point_movements_cycle_club_fk"
+            columns: ["cycle_id", "club_id"]
+            isOneToOne: false
+            referencedRelation: "club_ranking_cycles"
+            referencedColumns: ["id", "club_id"]
+          },
+          {
+            foreignKeyName: "club_player_point_movements_member_club_fk"
+            columns: ["club_member_id", "club_id"]
+            isOneToOne: false
+            referencedRelation: "club_members"
+            referencedColumns: ["id", "club_id"]
+          },
+          {
+            foreignKeyName: "club_player_point_movements_tournament_club_fk"
+            columns: ["tournament_id", "club_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id", "club_id"]
+          },
+        ]
+      }
+      club_pricing_rule_prices: {
+        Row: {
+          created_at: string
+          currency: string
+          duration_minutes: number
+          id: string
+          price_amount: number
+          pricing_rule_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string
+          duration_minutes: number
+          id?: string
+          price_amount: number
+          pricing_rule_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          duration_minutes?: number
+          id?: string
+          price_amount?: number
+          pricing_rule_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "club_pricing_rule_prices_pricing_rule_id_fkey"
+            columns: ["pricing_rule_id"]
+            isOneToOne: false
+            referencedRelation: "club_pricing_rules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      club_pricing_rules: {
+        Row: {
+          club_id: string
+          court_id: string | null
+          created_at: string
+          currency: string
+          days_of_week: number[]
+          display_order: number
+          end_time: string
+          id: string
+          is_active: boolean
+          name: string
+          price_per_hour: number | null
+          start_time: string
+          updated_at: string
+        }
+        Insert: {
+          club_id: string
+          court_id?: string | null
+          created_at?: string
+          currency?: string
+          days_of_week: number[]
+          display_order?: number
+          end_time: string
+          id?: string
+          is_active?: boolean
+          name: string
+          price_per_hour?: number | null
+          start_time: string
+          updated_at?: string
+        }
+        Update: {
+          club_id?: string
+          court_id?: string | null
+          created_at?: string
+          currency?: string
+          days_of_week?: number[]
+          display_order?: number
+          end_time?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          price_per_hour?: number | null
+          start_time?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "club_pricing_rules_club_id_fkey"
+            columns: ["club_id"]
+            isOneToOne: false
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "club_pricing_rules_court_id_fkey"
+            columns: ["court_id"]
+            isOneToOne: false
+            referencedRelation: "courts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      club_ranking_cycles: {
+        Row: {
+          category: string
+          club_id: string
+          created_at: string
+          ended_at: string | null
+          id: string
+          started_at: string
+        }
+        Insert: {
+          category: string
+          club_id: string
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          started_at?: string
+        }
+        Update: {
+          category?: string
+          club_id?: string
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          started_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "club_ranking_cycles_category_fkey"
+            columns: ["category"]
+            isOneToOne: false
+            referencedRelation: "sport_categories"
+            referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "club_ranking_cycles_club_id_fkey"
+            columns: ["club_id"]
+            isOneToOne: false
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clubs: {
+        Row: {
+          address: string | null
+          allowed_reservation_durations: number[]
+          archived_at: string | null
+          bg_color: string
+          city: string | null
+          country: string | null
+          cover_image_url: string | null
+          created_at: string
+          default_player_category: string | null
+          description: string | null
+          facebook: string | null
+          gallery_image_urls: string[]
+          id: string
+          instagram: string | null
+          is_active: boolean
+          latitude: number | null
+          logo_url: string | null
+          longitude: number | null
+          name: string
+          pending_claim: boolean
+          primary_color: string
+          secondary_color: string
+          slug: string
+          state: string | null
+          updated_at: string
+          visibility: string
+          whatsapp: string | null
+          youtube: string | null
+        }
+        Insert: {
+          address?: string | null
+          allowed_reservation_durations?: number[]
+          archived_at?: string | null
+          bg_color?: string
+          city?: string | null
+          country?: string | null
+          cover_image_url?: string | null
+          created_at?: string
+          default_player_category?: string | null
+          description?: string | null
+          facebook?: string | null
+          gallery_image_urls?: string[]
+          id?: string
+          instagram?: string | null
+          is_active?: boolean
+          latitude?: number | null
+          logo_url?: string | null
+          longitude?: number | null
+          name: string
+          pending_claim?: boolean
+          primary_color?: string
+          secondary_color?: string
+          slug: string
+          state?: string | null
+          updated_at?: string
+          visibility?: string
+          whatsapp?: string | null
+          youtube?: string | null
+        }
+        Update: {
+          address?: string | null
+          allowed_reservation_durations?: number[]
+          archived_at?: string | null
+          bg_color?: string
+          city?: string | null
+          country?: string | null
+          cover_image_url?: string | null
+          created_at?: string
+          default_player_category?: string | null
+          description?: string | null
+          facebook?: string | null
+          gallery_image_urls?: string[]
+          id?: string
+          instagram?: string | null
+          is_active?: boolean
+          latitude?: number | null
+          logo_url?: string | null
+          longitude?: number | null
+          name?: string
+          pending_claim?: boolean
+          primary_color?: string
+          secondary_color?: string
+          slug?: string
+          state?: string | null
+          updated_at?: string
+          visibility?: string
+          whatsapp?: string | null
+          youtube?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clubs_default_player_category_fkey"
+            columns: ["default_player_category"]
+            isOneToOne: false
+            referencedRelation: "sport_categories"
+            referencedColumns: ["code"]
+          },
+        ]
+      }
+      courts: {
+        Row: {
+          club_id: string
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          is_indoor: boolean | null
+          name: string
+          sort_order: number
+          streaming_url: string | null
+          surface: string | null
+          updated_at: string
+        }
+        Insert: {
+          club_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_indoor?: boolean | null
+          name: string
+          sort_order?: number
+          streaming_url?: string | null
+          surface?: string | null
+          updated_at?: string
+        }
+        Update: {
+          club_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_indoor?: boolean | null
+          name?: string
+          sort_order?: number
+          streaming_url?: string | null
+          surface?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "courts_club_id_fkey"
+            columns: ["club_id"]
+            isOneToOne: false
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invitation_links: {
+        Row: {
+          club_id: string
+          created_at: string
+          created_by: string
+          expires_at: string
+          id: string
+          is_active: boolean
+          max_uses: number | null
+          role: string
+          token: string
+          uses: number
+        }
+        Insert: {
+          club_id: string
+          created_at?: string
+          created_by: string
+          expires_at?: string
+          id?: string
+          is_active?: boolean
+          max_uses?: number | null
+          role?: string
+          token?: string
+          uses?: number
+        }
+        Update: {
+          club_id?: string
+          created_at?: string
+          created_by?: string
+          expires_at?: string
+          id?: string
+          is_active?: boolean
+          max_uses?: number | null
+          role?: string
+          token?: string
+          uses?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invitation_links_club_id_fkey"
+            columns: ["club_id"]
+            isOneToOne: false
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invitation_links_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
-          id: string;
-          profile_id: string;
-          club_id: string | null;
-          type: string;
-          title: string;
-          message: string;
-          metadata: Json;
-          read_at: string | null;
-          // Shared across every notification pointing at the same
-          // join_request_id/reservation_id — never the per-user read
-          // state. See 20260803000001_shared_notification_resolution.sql.
-          resolved_status: "approved" | "rejected" | null;
-          resolved_at: string | null;
-          created_at: string;
-        };
+          club_id: string | null
+          created_at: string
+          id: string
+          message: string
+          metadata: Json
+          profile_id: string
+          read_at: string | null
+          resolved_at: string | null
+          resolved_status: string | null
+          title: string
+          type: string
+        }
         Insert: {
-          id?: string;
-          profile_id: string;
-          club_id?: string | null;
-          type: string;
-          title: string;
-          message: string;
-          metadata?: Json;
-          read_at?: string | null;
-          resolved_status?: "approved" | "rejected" | null;
-          resolved_at?: string | null;
-          created_at?: string;
-        };
+          club_id?: string | null
+          created_at?: string
+          id?: string
+          message: string
+          metadata?: Json
+          profile_id: string
+          read_at?: string | null
+          resolved_at?: string | null
+          resolved_status?: string | null
+          title: string
+          type: string
+        }
         Update: {
-          read_at?: string | null;
-          resolved_status?: "approved" | "rejected" | null;
-          resolved_at?: string | null;
-        };
+          club_id?: string | null
+          created_at?: string
+          id?: string
+          message?: string
+          metadata?: Json
+          profile_id?: string
+          read_at?: string | null
+          resolved_at?: string | null
+          resolved_status?: string | null
+          title?: string
+          type?: string
+        }
         Relationships: [
           {
-            foreignKeyName: "notifications_profile_id_fkey";
-            columns: ["profile_id"];
-            isOneToOne: false;
-            referencedRelation: "profiles";
-            referencedColumns: ["id"];
+            foreignKeyName: "notifications_club_id_fkey"
+            columns: ["club_id"]
+            isOneToOne: false
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "notifications_club_id_fkey";
-            columns: ["club_id"];
-            isOneToOne: false;
-            referencedRelation: "clubs";
-            referencedColumns: ["id"];
+            foreignKeyName: "notifications_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
           },
-        ];
-      };
-      // Torneos — reconstrucción del núcleo (Bloque 1, nueva especificación
-      // funcional): el torneo es únicamente un evento de club. Sin
-      // partidos/rondas/llaves/canchas — tournament_matches y
-      // tournament_court_allocations fueron retiradas del esquema.
-      tournaments: {
+        ]
+      }
+      profiles: {
         Row: {
-          id: string;
-          club_id: string;
-          name: string;
-          slug: string;
-          description: string | null;
-          category: string;
-          secondary_category: string | null;
-          max_pairs: number;
-          status: string;
-          visibility: string;
-          registration_opens_at: string | null;
-          registration_closes_at: string | null;
-          starts_at: string | null;
-          estimated_duration_minutes: number | null;
-          started_at: string | null;
-          started_by: string | null;
-          completed_at: string | null;
-          completed_by: string | null;
-          cancelled_at: string | null;
-          cancelled_by: string | null;
-          prize_description: string | null;
-          cover_image_url: string | null;
-          created_by: string;
-          created_at: string;
-          updated_at: string;
-        };
+          account_type: string | null
+          avatar_url: string | null
+          created_at: string
+          full_name: string | null
+          id: string
+          is_platform_admin: boolean
+          last_club_id: string | null
+          phone: string | null
+          updated_at: string
+        }
         Insert: {
-          id?: string;
-          club_id: string;
-          name: string;
-          slug: string;
-          description?: string | null;
-          category: string;
-          secondary_category?: string | null;
-          max_pairs: number;
-          status?: string;
-          visibility?: string;
-          registration_opens_at?: string | null;
-          registration_closes_at?: string | null;
-          starts_at?: string | null;
-          estimated_duration_minutes?: number | null;
-          started_at?: string | null;
-          started_by?: string | null;
-          completed_at?: string | null;
-          completed_by?: string | null;
-          cancelled_at?: string | null;
-          cancelled_by?: string | null;
-          prize_description?: string | null;
-          cover_image_url?: string | null;
-          created_by: string;
-          created_at?: string;
-          updated_at?: string;
-        };
+          account_type?: string | null
+          avatar_url?: string | null
+          created_at?: string
+          full_name?: string | null
+          id: string
+          is_platform_admin?: boolean
+          last_club_id?: string | null
+          phone?: string | null
+          updated_at?: string
+        }
         Update: {
-          name?: string;
-          slug?: string;
-          description?: string | null;
-          category?: string;
-          secondary_category?: string | null;
-          max_pairs?: number;
-          status?: string;
-          visibility?: string;
-          registration_opens_at?: string | null;
-          registration_closes_at?: string | null;
-          starts_at?: string | null;
-          estimated_duration_minutes?: number | null;
-          started_at?: string | null;
-          started_by?: string | null;
-          completed_at?: string | null;
-          completed_by?: string | null;
-          cancelled_at?: string | null;
-          cancelled_by?: string | null;
-          prize_description?: string | null;
-          cover_image_url?: string | null;
-          updated_at?: string;
-        };
+          account_type?: string | null
+          avatar_url?: string | null
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          is_platform_admin?: boolean
+          last_club_id?: string | null
+          phone?: string | null
+          updated_at?: string
+        }
         Relationships: [
           {
-            foreignKeyName: "tournaments_club_id_fkey";
-            columns: ["club_id"];
-            isOneToOne: false;
-            referencedRelation: "clubs";
-            referencedColumns: ["id"];
+            foreignKeyName: "profiles_last_club_id_fkey"
+            columns: ["last_club_id"]
+            isOneToOne: false
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reservation_players: {
+        Row: {
+          created_at: string | null
+          id: string
+          profile_id: string
+          reservation_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          profile_id: string
+          reservation_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          profile_id?: string
+          reservation_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reservation_players_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "tournaments_category_fkey";
-            columns: ["category"];
-            isOneToOne: false;
-            referencedRelation: "sport_categories";
-            referencedColumns: ["code"];
+            foreignKeyName: "reservation_players_reservation_id_fkey"
+            columns: ["reservation_id"]
+            isOneToOne: false
+            referencedRelation: "reservations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reservations: {
+        Row: {
+          cancelled_at: string | null
+          cancelled_by: string | null
+          club_id: string
+          court_id: string
+          created_at: string | null
+          created_by: string
+          date: string
+          duration_minutes: number
+          id: string
+          notes: string | null
+          price_amount: number | null
+          price_calculated_at: string | null
+          price_currency: string | null
+          pricing_rule_id: string | null
+          rejected_at: string | null
+          rejected_by: string | null
+          rejection_reason: string | null
+          rejection_reason_code: string | null
+          start_time: string
+          status: string
+          title: string | null
+          type: string
+          updated_at: string | null
+        }
+        Insert: {
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          club_id: string
+          court_id: string
+          created_at?: string | null
+          created_by: string
+          date: string
+          duration_minutes?: number
+          id?: string
+          notes?: string | null
+          price_amount?: number | null
+          price_calculated_at?: string | null
+          price_currency?: string | null
+          pricing_rule_id?: string | null
+          rejected_at?: string | null
+          rejected_by?: string | null
+          rejection_reason?: string | null
+          rejection_reason_code?: string | null
+          start_time: string
+          status?: string
+          title?: string | null
+          type?: string
+          updated_at?: string | null
+        }
+        Update: {
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          club_id?: string
+          court_id?: string
+          created_at?: string | null
+          created_by?: string
+          date?: string
+          duration_minutes?: number
+          id?: string
+          notes?: string | null
+          price_amount?: number | null
+          price_calculated_at?: string | null
+          price_currency?: string | null
+          pricing_rule_id?: string | null
+          rejected_at?: string | null
+          rejected_by?: string | null
+          rejection_reason?: string | null
+          rejection_reason_code?: string | null
+          start_time?: string
+          status?: string
+          title?: string | null
+          type?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reservations_cancelled_by_fkey"
+            columns: ["cancelled_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "tournaments_secondary_category_fkey";
-            columns: ["secondary_category"];
-            isOneToOne: false;
-            referencedRelation: "sport_categories";
-            referencedColumns: ["code"];
+            foreignKeyName: "reservations_club_id_fkey"
+            columns: ["club_id"]
+            isOneToOne: false
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
           },
-        ];
-      };
-      // Torneos — inscripciones (duplas). points es la clasificación en
-      // vivo de la dupla — misma fuente que finalize_tournament aplica al
-      // ranking, nunca una tabla paralela.
+          {
+            foreignKeyName: "reservations_court_id_fkey"
+            columns: ["court_id"]
+            isOneToOne: false
+            referencedRelation: "courts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservations_pricing_rule_id_fkey"
+            columns: ["pricing_rule_id"]
+            isOneToOne: false
+            referencedRelation: "club_pricing_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservations_rejected_by_fkey"
+            columns: ["rejected_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sport_categories: {
+        Row: {
+          code: string
+          created_at: string
+          sort_order: number
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          sort_order: number
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
       tournament_entries: {
         Row: {
-          id: string;
-          tournament_id: string;
-          club_id: string;
-          category: string;
-          secondary_category: string | null;
-          status: string;
-          points: number;
-          confirmed_at: string | null;
-          confirmed_by: string | null;
-          withdrawn_at: string | null;
-          withdrawn_by: string | null;
-          rejected_at: string | null;
-          rejected_by: string | null;
-          rejection_reason: string | null;
-          created_by: string;
-          created_at: string;
-          updated_at: string;
-        };
+          category: string
+          club_id: string
+          confirmed_at: string | null
+          confirmed_by: string | null
+          created_at: string
+          created_by: string
+          id: string
+          points: number
+          rejected_at: string | null
+          rejected_by: string | null
+          rejection_reason: string | null
+          secondary_category: string | null
+          status: string
+          tournament_id: string
+          updated_at: string
+          withdrawn_at: string | null
+          withdrawn_by: string | null
+        }
         Insert: {
-          id?: string;
-          tournament_id: string;
-          club_id: string;
-          category: string;
-          secondary_category?: string | null;
-          status?: string;
-          points?: number;
-          confirmed_at?: string | null;
-          confirmed_by?: string | null;
-          withdrawn_at?: string | null;
-          withdrawn_by?: string | null;
-          rejected_at?: string | null;
-          rejected_by?: string | null;
-          rejection_reason?: string | null;
-          created_by: string;
-          created_at?: string;
-          updated_at?: string;
-        };
+          category: string
+          club_id: string
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          created_at?: string
+          created_by: string
+          id?: string
+          points?: number
+          rejected_at?: string | null
+          rejected_by?: string | null
+          rejection_reason?: string | null
+          secondary_category?: string | null
+          status?: string
+          tournament_id: string
+          updated_at?: string
+          withdrawn_at?: string | null
+          withdrawn_by?: string | null
+        }
         Update: {
-          status?: string;
-          points?: number;
-          confirmed_at?: string | null;
-          confirmed_by?: string | null;
-          withdrawn_at?: string | null;
-          withdrawn_by?: string | null;
-          rejected_at?: string | null;
-          rejected_by?: string | null;
-          rejection_reason?: string | null;
-          updated_at?: string;
-        };
+          category?: string
+          club_id?: string
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          created_at?: string
+          created_by?: string
+          id?: string
+          points?: number
+          rejected_at?: string | null
+          rejected_by?: string | null
+          rejection_reason?: string | null
+          secondary_category?: string | null
+          status?: string
+          tournament_id?: string
+          updated_at?: string
+          withdrawn_at?: string | null
+          withdrawn_by?: string | null
+        }
         Relationships: [
           {
-            foreignKeyName: "tournament_entries_tournament_club_fk";
-            columns: ["tournament_id", "club_id"];
-            isOneToOne: false;
-            referencedRelation: "tournaments";
-            referencedColumns: ["id", "club_id"];
+            foreignKeyName: "tournament_entries_category_fkey"
+            columns: ["category"]
+            isOneToOne: false
+            referencedRelation: "sport_categories"
+            referencedColumns: ["code"]
           },
           {
-            foreignKeyName: "tournament_entries_secondary_category_fkey";
-            columns: ["secondary_category"];
-            isOneToOne: false;
-            referencedRelation: "sport_categories";
-            referencedColumns: ["code"];
+            foreignKeyName: "tournament_entries_confirmed_by_fkey"
+            columns: ["confirmed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
           },
-        ];
-      };
-      // Torneos — jugadores de una dupla. is_active distingue al integrante
-      // final (participa en clasificación/finalización) de uno ya
-      // reemplazado (conservado como historial, nunca borrado).
+          {
+            foreignKeyName: "tournament_entries_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_entries_rejected_by_fkey"
+            columns: ["rejected_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_entries_secondary_category_fkey"
+            columns: ["secondary_category"]
+            isOneToOne: false
+            referencedRelation: "sport_categories"
+            referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "tournament_entries_tournament_club_fk"
+            columns: ["tournament_id", "club_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id", "club_id"]
+          },
+          {
+            foreignKeyName: "tournament_entries_withdrawn_by_fkey"
+            columns: ["withdrawn_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tournament_entry_members: {
         Row: {
-          id: string;
-          tournament_entry_id: string;
-          tournament_id: string;
-          club_id: string;
-          club_member_id: string;
-          is_active: boolean;
-          replaced_at: string | null;
-          replaced_by: string | null;
-          created_at: string;
-        };
+          club_id: string
+          club_member_id: string
+          created_at: string
+          id: string
+          is_active: boolean
+          replaced_at: string | null
+          replaced_by: string | null
+          tournament_entry_id: string
+          tournament_id: string
+        }
         Insert: {
-          id?: string;
-          tournament_entry_id: string;
-          tournament_id: string;
-          club_id: string;
-          club_member_id: string;
-          is_active?: boolean;
-          replaced_at?: string | null;
-          replaced_by?: string | null;
-          created_at?: string;
-        };
-        Update: never;
+          club_id: string
+          club_member_id: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          replaced_at?: string | null
+          replaced_by?: string | null
+          tournament_entry_id: string
+          tournament_id: string
+        }
+        Update: {
+          club_id?: string
+          club_member_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          replaced_at?: string | null
+          replaced_by?: string | null
+          tournament_entry_id?: string
+          tournament_id?: string
+        }
         Relationships: [
           {
-            foreignKeyName: "tournament_entry_members_entry_tournament_fk";
-            columns: ["tournament_entry_id", "tournament_id"];
-            isOneToOne: false;
-            referencedRelation: "tournament_entries";
-            referencedColumns: ["id", "tournament_id"];
+            foreignKeyName: "tournament_entry_members_entry_club_fk"
+            columns: ["tournament_entry_id", "club_id"]
+            isOneToOne: false
+            referencedRelation: "tournament_entries"
+            referencedColumns: ["id", "club_id"]
           },
           {
-            foreignKeyName: "tournament_entry_members_member_club_fk";
-            columns: ["club_member_id", "club_id"];
-            isOneToOne: false;
-            referencedRelation: "club_members";
-            referencedColumns: ["id", "club_id"];
+            foreignKeyName: "tournament_entry_members_entry_tournament_fk"
+            columns: ["tournament_entry_id", "tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournament_entries"
+            referencedColumns: ["id", "tournament_id"]
           },
-        ];
-      };
-    };
-    Views: Record<string, never>;
+          {
+            foreignKeyName: "tournament_entry_members_member_club_fk"
+            columns: ["club_member_id", "club_id"]
+            isOneToOne: false
+            referencedRelation: "club_members"
+            referencedColumns: ["id", "club_id"]
+          },
+          {
+            foreignKeyName: "tournament_entry_members_replaced_by_fkey"
+            columns: ["replaced_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tournaments: {
+        Row: {
+          cancelled_at: string | null
+          cancelled_by: string | null
+          category: string
+          club_id: string
+          completed_at: string | null
+          completed_by: string | null
+          cover_image_url: string | null
+          created_at: string
+          created_by: string
+          description: string | null
+          estimated_duration_minutes: number | null
+          id: string
+          max_pairs: number
+          name: string
+          prize_description: string | null
+          registration_closes_at: string | null
+          registration_opens_at: string | null
+          secondary_category: string | null
+          slug: string
+          started_at: string | null
+          started_by: string | null
+          starts_at: string | null
+          status: string
+          updated_at: string
+          visibility: string
+        }
+        Insert: {
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          category: string
+          club_id: string
+          completed_at?: string | null
+          completed_by?: string | null
+          cover_image_url?: string | null
+          created_at?: string
+          created_by: string
+          description?: string | null
+          estimated_duration_minutes?: number | null
+          id?: string
+          max_pairs: number
+          name: string
+          prize_description?: string | null
+          registration_closes_at?: string | null
+          registration_opens_at?: string | null
+          secondary_category?: string | null
+          slug: string
+          started_at?: string | null
+          started_by?: string | null
+          starts_at?: string | null
+          status?: string
+          updated_at?: string
+          visibility?: string
+        }
+        Update: {
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          category?: string
+          club_id?: string
+          completed_at?: string | null
+          completed_by?: string | null
+          cover_image_url?: string | null
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          estimated_duration_minutes?: number | null
+          id?: string
+          max_pairs?: number
+          name?: string
+          prize_description?: string | null
+          registration_closes_at?: string | null
+          registration_opens_at?: string | null
+          secondary_category?: string | null
+          slug?: string
+          started_at?: string | null
+          started_by?: string | null
+          starts_at?: string | null
+          status?: string
+          updated_at?: string
+          visibility?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tournaments_cancelled_by_fkey"
+            columns: ["cancelled_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournaments_category_fkey"
+            columns: ["category"]
+            isOneToOne: false
+            referencedRelation: "sport_categories"
+            referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "tournaments_club_id_fkey"
+            columns: ["club_id"]
+            isOneToOne: false
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournaments_completed_by_fkey"
+            columns: ["completed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournaments_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournaments_secondary_category_fkey"
+            columns: ["secondary_category"]
+            isOneToOne: false
+            referencedRelation: "sport_categories"
+            referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "tournaments_started_by_fkey"
+            columns: ["started_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
     Functions: {
-      // public.club_role — returns the caller's role in a given club, or null
-      club_role: {
-        Args: { p_club_id: string };
-        Returns: string | null;
-      };
-      // public.is_club_member — returns true if the caller is an active member
-      is_club_member: {
-        Args: { p_club_id: string };
-        Returns: boolean;
-      };
-      // 20261001000002 — publica una noticia con slug único generado y
-      // reintentado de forma segura ante concurrencia (mismo patrón que
-      // create_tournament). tournament_id opcional revalida pertenencia
-      // al club, estado completed y unicidad por torneo.
-      create_club_news: {
+      _check_operating_hours: {
         Args: {
-          p_club_id: string;
-          p_title: string;
-          p_content: string;
-          p_image_url: string;
-          p_tournament_id: string | null;
-        };
-        Returns: Array<Database["public"]["Tables"]["club_news"]["Row"]>;
-      };
-      // public.create_club_with_owner — atomic club creation + owner bootstrap
-      create_club_with_owner: {
-        Args: { p_name: string; p_slug: string; p_visibility?: string };
-        Returns: Array<{ id: string; slug: string }>;
-      };
-      // public.get_public_clubs — public clubs the caller is not a member of
-      get_public_clubs: {
-        Args: Record<string, never>;
-        Returns: Array<{
-          id: string;
-          name: string;
-          slug: string;
-          description: string | null;
-          logo_url: string | null;
-          primary_color: string;
-          secondary_color: string;
-          member_count: number;
-          court_count: number;
-        }>;
-      };
-      // public.join_public_club — self-join a public club as PLAYER
-      join_public_club: {
-        Args: { p_club_id: string };
-        Returns: void;
-      };
-      // public.get_invitation_preview — anon-accessible invite info
-      get_invitation_preview: {
-        Args: { p_token: string };
-        Returns: Json;
-      };
-      // public.claim_invitation — join a club via invite token
-      claim_invitation: {
-        Args: { p_token: string };
-        Returns: Json;
-      };
-      // public.count_active_players — anon-accessible aggregate player count
-      count_active_players: {
-        Args: { p_club_id: string };
-        Returns: number;
-      };
-      // public.create_join_request — self-service join request + notifies
-      // every OWNER/ADMIN of the club
-      create_join_request: {
-        Args: { p_club_id: string };
-        Returns: void;
-      };
-      // public.approve_join_request — atomic approve: inserts club_members,
-      // marks the request approved, notifies the requester
-      approve_join_request: {
-        Args: { p_request_id: string };
-        Returns: void;
-      };
-      // public.reject_join_request — atomic reject: marks the request
-      // rejected, notifies the requester, no membership created
-      reject_join_request: {
-        Args: { p_request_id: string };
-        Returns: void;
-      };
-      // public.get_club_join_requests — admin list view (name + email) for
-      // one club, gated on the caller's role in that specific club
-      get_club_join_requests: {
-        Args: { p_club_id: string };
-        Returns: Array<{
-          id: string;
-          profile_id: string;
-          full_name: string | null;
-          email: string | null;
-          status: "pending" | "approved" | "rejected";
-          created_at: string;
-        }>;
-      };
-      // public.get_platform_clubs_overview — platform-admin-gated global
-      // clubs listing (all clubs, any owner, bypasses RLS internally)
-      get_platform_clubs_overview: {
-        Args: Record<string, never>;
-        Returns: Array<{
-          id: string;
-          name: string;
-          slug: string;
-          logo_url: string | null;
-          visibility: string;
-          is_active: boolean;
-          created_at: string;
-          owner_name: string | null;
-          owner_email: string | null;
-          player_count: number;
-          court_count: number;
-        }>;
-      };
-      // public.get_platform_club_detail — single-club stats for the
-      // platform-admin club detail screen
-      get_platform_club_detail: {
-        Args: { p_club_id: string };
-        Returns: Array<{
-          id: string;
-          name: string;
-          slug: string;
-          logo_url: string | null;
-          visibility: string;
-          is_active: boolean;
-          created_at: string;
-          owner_name: string | null;
-          owner_email: string | null;
-          admin_count: number;
-          player_count: number;
-          reservation_count: number;
-          news_count: number;
-          court_count: number;
-        }>;
-      };
-      // public.get_platform_users_overview — platform-admin-gated global
-      // users listing with their club memberships/roles
-      get_platform_users_overview: {
-        Args: Record<string, never>;
-        Returns: Array<{
-          id: string;
-          full_name: string | null;
-          email: string | null;
-          is_platform_admin: boolean;
-          created_at: string;
-          memberships: Array<{ club_name: string; club_slug: string; role: string }>;
-        }>;
-      };
-      // public.get_platform_user_detail — single-user detail for
-      // /platform/users/[userId], including auth-derived read-only fields
-      get_platform_user_detail: {
-        Args: { p_user_id: string };
-        Returns: Array<{
-          id: string;
-          full_name: string | null;
-          email: string | null;
-          is_platform_admin: boolean;
-          created_at: string;
-          last_sign_in_at: string | null;
-          is_banned: boolean;
-          memberships: Array<{ club_name: string; club_slug: string; role: string }>;
-        }>;
-      };
-      // public.update_platform_user_name — platform-admin-gated rename,
-      // touches profiles.full_name only
-      update_platform_user_name: {
-        Args: { p_user_id: string; p_full_name: string };
-        Returns: void;
-      };
-      // public.notify_reservation_request_created — notifies every
-      // OWNER/ADMIN of the club about a new pending reservation request
-      notify_reservation_request_created: {
-        Args: { p_reservation_id: string };
-        Returns: void;
-      };
-      // public.resolve_reservation_request_notifications — marks every
-      // reservation_request_created notification for this reservation as
-      // resolved (shared across all OWNER/ADMIN recipients), called right
-      // after approvePendingReservation/rejectPendingReservation succeed
-      resolve_reservation_request_notifications: {
-        Args: { p_reservation_id: string; p_status: string };
-        Returns: void;
-      };
-      // public.notify_reservation_rejected — inserts the player-facing
-      // reservation_request_rejected notification and resolves every
-      // OWNER/ADMIN's own reservation_request_created notification for
-      // this reservation, called right after rejectPendingReservation's
-      // conditional UPDATE succeeds
-      notify_reservation_rejected: {
-        Args: { p_reservation_id: string };
-        Returns: void;
-      };
-      // public.notify_reservation_created_for_players — notifies every
-      // player linked via reservation_players about a CONFIRMED reservation
-      // OWNER/ADMIN created directly (no prior request from them), called
-      // right after createReservation's players insert succeeds
-      notify_reservation_created_for_players: {
-        Args: { p_reservation_id: string };
-        Returns: void;
-      };
-      // public.cancel_reservation — Phase 4: single centralized RPC for both
-      // PLAYER self-cancellation (creator/participant, 2+ hours out) and
-      // OWNER/ADMIN operational cancellation (no time restriction); every
-      // authorization check is re-derived server-side from auth.uid(), only
-      // the reservation id is ever passed in
-      cancel_reservation: {
-        Args: { p_reservation_id: string };
-        Returns: void;
-      };
-      // public.notify_reservation_cancelled — best-effort, called right
-      // after cancel_reservation succeeds; notifies affected players when
-      // OWNER/ADMIN cancelled, or every OWNER/ADMIN of the club when a
-      // PLAYER cancelled their own reservation
-      notify_reservation_cancelled: {
-        Args: { p_reservation_id: string };
-        Returns: void;
-      };
-      // public.leave_club — Phase 5: PLAYER-only voluntary leave. Cancels
-      // every related pending/confirmed reservation via cancel_reservation,
-      // deactivates the membership, and notifies OWNER/ADMIN — all
-      // server-derived from auth.uid(), only the club id is ever passed in
-      leave_club: {
-        Args: { p_club_id: string };
-        Returns: void;
-      };
-      // public.deactivate_player — Phase 6: OWNER/ADMIN-only deactivation
-      // of a PLAYER's membership in their own club. Cancels the target's
-      // own future reservations, removes their participation in others'
-      // future reservations, deactivates the membership, and notifies —
-      // all server-derived from auth.uid(); only club_id and the target
-      // profile id are ever passed in
-      deactivate_player: {
-        Args: { p_club_id: string; p_player_id: string };
-        Returns: void;
-      };
-      // public.archive_club — Phase 8: OWNER-only. Sets clubs.archived_at,
-      // notifies every active member (any role). No other row is touched —
-      // membership, reservations, pricing, branding all stay exactly as
-      // they were. Authorization fully server-derived from auth.uid()
-      archive_club: {
-        Args: { p_club_id: string };
-        Returns: void;
-      };
-      // public.delete_court — 20261002000001: OWNER/ADMIN-only, permanent
-      // deletion allowed ONLY if the court has never had any reservation
-      // (any status/date). club_pricing_rules scoped to this court cascade
-      // automatically (FK ON DELETE CASCADE); any reservation reference
-      // blocks the delete (23503), backend-checked and race-safe
-      delete_court: {
-        Args: { p_court_id: string };
-        Returns: void;
-      };
-      // public.get_club_statistics — Phase 9: OWNER/ADMIN-only, read-only
-      // aggregated statistics (period/summary/previousSummary/timeline/
-      // statuses/courts/weekdays/hourlySlots as one jsonb object). Excludes
-      // type='block' from every metric; no monetary field. Works for an
-      // archived club's still-active OWNER/ADMIN (read-only history)
-      get_club_statistics: {
-        Args: { p_club_id: string; p_start_date: string; p_end_date: string };
-        Returns: Json;
-      };
-      // public.get_my_profile_activity — Phase 10: self-only, no
-      // parameters (never a profile/user id). Aggregates the caller's own
-      // reservation activity across every club (including left/deactivated/
-      // archived ones) as one jsonb object (summary/typeDistribution/
-      // monthlyActivity/recentReservations/activeMemberships)
-      get_my_profile_activity: {
-        Args: Record<string, never>;
-        Returns: Json;
-      };
-      // public.create_reservation_player — Phase 7 concurrency fix:
-      // replaces requestReservation's own inline validate-then-insert.
-      // Same rules as before (any active club member, conflict-checks
-      // pending+confirmed, always type='match'/status='pending', prices
-      // the request), now inside the same advisory-lock-protected
-      // transaction update_reservation/create_reservation_admin use
-      create_reservation_player: {
+          p_club_id: string
+          p_date: string
+          p_duration_minutes: number
+          p_start_time: string
+        }
+        Returns: string
+      }
+      _check_reservation_conflict: {
         Args: {
-          p_club_id: string;
-          p_court_id: string;
-          p_date: string;
-          p_start_time: string;
-          p_duration_minutes: number;
-        };
-        Returns: string;
-      };
-      // public.create_reservation_admin — Phase 7 concurrency fix:
-      // replaces createReservation's own inline validate-then-insert.
-      // Same rules as before (OWNER/ADMIN only, conflict-checks confirmed
-      // only, price never touched), now inside the same
-      // advisory-lock-protected transaction
-      create_reservation_admin: {
+          p_court_id: string
+          p_date: string
+          p_duration_minutes: number
+          p_exclude_id: string
+          p_start_time: string
+          p_statuses: string[]
+        }
+        Returns: boolean
+      }
+      _close_tournament_registration_for_capacity: {
+        Args: { p_actor: string; p_max_pairs: number; p_tournament_id: string }
+        Returns: undefined
+      }
+      _club_stats_summary: {
+        Args: { p_club_id: string; p_end: string; p_start: string }
+        Returns: Json
+      }
+      _lock_court_date: {
+        Args: { p_court_id: string; p_date: string }
+        Returns: undefined
+      }
+      _my_reservations: {
+        Args: { p_account_type: string }
+        Returns: {
+          club_id: string
+          court_id: string
+          date: string
+          duration_minutes: number
+          id: string
+          start_time: string
+          status: string
+          type: string
+        }[]
+      }
+      _require_club_admin: { Args: { p_club_id: string }; Returns: undefined }
+      _require_club_not_archived: {
+        Args: { p_club_id: string }
+        Returns: undefined
+      }
+      _require_player_phone: {
+        Args: { p_profile_id: string }
+        Returns: undefined
+      }
+      _resolve_reservation_price: {
         Args: {
-          p_club_id: string;
-          p_court_id: string;
-          p_date: string;
-          p_start_time: string;
-          p_duration_minutes: number;
-          p_type: string;
-          p_title: string | null;
-          p_notes: string | null;
-        };
-        Returns: string;
-      };
-      // public.update_reservation — Phase 7: single centralized RPC for
-      // editing a reservation's court/date/start_time/duration_minutes.
-      // PLAYER (creator only, 2+ hours out) and OWNER/ADMIN (any club
-      // reservation, no time window) share this one entry point; every
-      // authorization/availability/pricing check is re-derived
-      // server-side from auth.uid(), only the new field values and the
-      // reservation id are ever passed in
-      update_reservation: {
-        Args: {
-          p_reservation_id: string;
-          p_court_id: string;
-          p_date: string;
-          p_start_time: string;
-          p_duration_minutes: number;
-        };
-        Returns: void;
-      };
-      // public.approve_pending_reservation — Phase 7 concurrency fix:
-      // replaces approvePendingReservation's own inline
-      // check-then-UPDATE. Same rules as before (OWNER/ADMIN of this
-      // reservation's club, pending→confirmed only, court still active,
-      // duration/operating hours re-validated, confirmed-only conflict
-      // check excluding itself), now inside the same
-      // advisory-lock-protected transaction the create/edit paths use
-      approve_pending_reservation: {
-        Args: { p_reservation_id: string };
-        Returns: void;
-      };
-      // public.notify_reservation_updated — best-effort, called right
-      // after update_reservation succeeds; notifies OWNER/ADMIN +
-      // participants when a PLAYER edited, or the creator + participants
-      // when OWNER/ADMIN edited
-      notify_reservation_updated: {
-        Args: { p_reservation_id: string };
-        Returns: void;
-      };
-      // public.upsert_pricing_rule_with_prices — atomic create/edit of a
-      // pricing rule together with its per-duration prices (child rows).
-      // p_rule_id NULL creates; otherwise updates. p_prices is a jsonb
-      // array of {duration_minutes, price_amount, currency}.
-      upsert_pricing_rule_with_prices: {
-        Args: {
-          p_rule_id: string | null;
-          p_club_id: string;
-          p_court_id: string | null;
-          p_name: string;
-          p_days_of_week: number[];
-          p_start_time: string;
-          p_end_time: string;
-          p_display_order: number;
-          p_prices: Json;
-        };
-        Returns: string;
-      };
-      // public.get_or_create_active_ranking_cycle — Fase 1 módulo deportivo,
-      // internal only (no GRANT to authenticated) — not callable from the
-      // client, listed here only for schema completeness
-      get_or_create_active_ranking_cycle: {
-        Args: { p_club_id: string; p_category: string };
-        Returns: string;
-      };
-      // public.provision_club_member_sport_state — internal only
-      provision_club_member_sport_state: {
-        Args: { p_club_member_id: string };
-        Returns: string | null;
-      };
-      // public.provision_club_sport_members — internal only; also the
-      // explicit backfill entry point, run manually from the SQL Editor
-      provision_club_sport_members: {
-        Args: { p_club_id: string };
-        Returns: Array<{ cycle_id: string; provisioned_count: number; skipped_count: number }>;
-      };
-      // public.configure_club_default_player_category — the one
-      // authenticated-facing RPC of this block; OWNER/ADMIN only,
-      // re-derived server-side; updates clubs.default_player_category and
-      // provisions every PLAYER still missing a sport state, atomically
-      configure_club_default_player_category: {
-        Args: { p_club_id: string; p_category: string };
-        Returns: Array<{ category: string; cycle_id: string; provisioned_count: number }>;
-      };
-      // public.adjust_club_player_points — Fase 1 módulo deportivo, bloque 5
-      // (20260822000001). OWNER/ADMIN only; manual delta-mode adjustment,
-      // floors at zero, always creates exactly one club_player_point_movements
-      // row.
+          p_club_id: string
+          p_court_id: string
+          p_date: string
+          p_duration_minutes: number
+          p_start_time: string
+        }
+        Returns: Record<string, unknown>
+      }
+      _slugify_tournament_name: { Args: { p_name: string }; Returns: string }
       adjust_club_player_points: {
         Args: {
-          p_club_id: string;
-          p_club_member_id: string;
-          p_delta_points: number;
-          p_reason_code: string;
-          p_note: string;
-        };
-        Returns: Array<{
-          club_member_id: string;
-          category: string;
-          previous_total: number;
-          delta: number;
-          new_total: number;
-          movement_id: string;
-        }>;
-      };
-      // public.get_club_category_ranking — Fase 1 módulo deportivo, bloque 6
-      // (20260824000001); autorización ampliada en Bloque 3.2–3.3
-      // (20260920000001_public_club_ranking_read.sql). Read-only base
-      // ranking query for one club+category. Authorization: any active
-      // member of p_club_id (any role) always allowed, regardless of
-      // visibility/archival — OR, when the club is visibility='public'
-      // and not archived, ANY caller (anon included, no auth required) —
-      // otherwise 42501 (not authenticated / not authorized). Original
-      // RETURNS TABLE shape preserved exactly (no avatar_url) —
-      // change_club_player_category (20260822000001/20260823000001) already
-      // consumes this exact shape internally; see get_club_category_ranking_view
-      // below for the UI-facing variant that adds avatar_url.
-      get_club_category_ranking: {
-        Args: { p_club_id: string; p_category: string };
-        Returns: Array<{
-          ranking_position: number;
-          club_member_id: string;
-          profile_id: string;
-          full_name: string | null;
-          category: string;
-          current_points: number;
-          points_reached_at: string;
-        }>;
-      };
-      // public.get_club_category_ranking_view — Fase 1 módulo deportivo,
-      // bloque 6 (20260824000001); GRANT a anon agregado en Bloque 3.2–3.3
-      // (20260920000001). UI-facing wrapper: composes
-      // get_club_category_ranking (inherits its widened authorization —
-      // see above) and adds avatar_url. This is the RPC the ranking
-      // page/UI calls — never the one above directly.
-      get_club_category_ranking_view: {
-        Args: { p_club_id: string; p_category: string };
-        Returns: Array<{
-          ranking_position: number;
-          club_member_id: string;
-          profile_id: string;
-          full_name: string | null;
-          avatar_url: string | null;
-          category: string;
-          current_points: number;
-          points_reached_at: string;
-        }>;
-      };
-      // public.change_club_player_category — OWNER/ADMIN only; validates
-      // promotion/demotion direction against sport_categories.sort_order,
-      // resets points to 0, inserts exactly one club_player_category_changes
-      // row, never a point movement
+          p_club_id: string
+          p_club_member_id: string
+          p_delta_points: number
+          p_note: string
+          p_reason_code: string
+        }
+        Returns: {
+          category: string
+          club_member_id: string
+          delta: number
+          movement_id: string
+          new_total: number
+          previous_total: number
+        }[]
+      }
+      approve_join_request: {
+        Args: { p_request_id: string }
+        Returns: undefined
+      }
+      approve_pending_reservation: {
+        Args: { p_reservation_id: string }
+        Returns: undefined
+      }
+      archive_club: { Args: { p_club_id: string }; Returns: undefined }
+      cancel_reservation: {
+        Args: { p_reservation_id: string }
+        Returns: undefined
+      }
+      cancel_tournament: {
+        Args: { p_tournament_id: string }
+        Returns: {
+          cancelled_at: string
+          cancelled_by: string
+          category: string
+          club_id: string
+          completed_at: string
+          completed_by: string
+          cover_image_url: string
+          created_at: string
+          created_by: string
+          description: string
+          estimated_duration_minutes: number
+          id: string
+          max_pairs: number
+          name: string
+          prize_description: string
+          registration_closes_at: string
+          registration_opens_at: string
+          secondary_category: string
+          slug: string
+          started_at: string
+          started_by: string
+          starts_at: string
+          status: string
+          updated_at: string
+          visibility: string
+        }[]
+      }
       change_club_player_category: {
         Args: {
-          p_club_id: string;
-          p_club_member_id: string;
-          p_target_category: string;
-          p_change_type: string;
-          p_note: string;
-        };
-        Returns: Array<{
-          club_member_id: string;
-          previous_category: string;
-          new_category: string;
-          previous_points: number;
-          new_points: number;
-          previous_cycle_id: string;
-          new_cycle_id: string;
-          category_change_id: string;
-        }>;
-      };
-      // public.get_club_member_sport_state — OWNER/ADMIN only; the read
-      // companion the admin UI needs since club_member_sport_state/
-      // club_ranking_cycles have zero RLS policies and no client GRANT
-      get_club_member_sport_state: {
-        Args: { p_club_id: string; p_club_member_id: string };
-        Returns: Array<{
-          club_member_id: string;
-          category: string;
-          current_points: number;
-          points_reached_at: string;
-        }>;
-      };
-      // public.get_my_club_sport_profile — Dashboard deportivo del PLAYER
-      // (20261002000002); self-only, deriva club_member_id de auth.uid() +
-      // p_club_id, nunca lo recibe como parámetro. category/currentPoints/
-      // rankingPosition/rankingTotal reflejan siempre exactamente lo que
-      // /ranking mostraría; evolution es la reconstrucción honesta desde
-      // club_player_point_movements (ver comentario de la migración).
-      get_my_club_sport_profile: {
-        Args: { p_club_id: string };
+          p_change_type: string
+          p_club_id: string
+          p_club_member_id: string
+          p_note: string
+          p_target_category: string
+        }
         Returns: {
-          category: string | null;
-          currentPoints: number;
-          rankingPosition: number | null;
-          rankingTotal: number;
-          recentCategoryChange: {
-            previousCategory: string;
-            newCategory: string;
-            changeType: string;
-            createdAt: string;
-          } | null;
-          everPromoted: boolean;
-          evolution: Array<{ snapshotAt: string; points: number; rankingPosition: number }>;
-        };
-      };
-      // public.get_club_member_email — OWNER/ADMIN only; profiles has no
-      // email column, the real value lives in auth.users only reachable
-      // via a SECURITY DEFINER join (20260828000001)
-      get_club_member_email: {
-        Args: { p_club_id: string; p_club_member_id: string };
-        Returns: string | null;
-      };
-      // Torneos — núcleo reconstruido (Bloque 1, nueva especificación
-      // funcional). Ciclo de vida del torneo: create/update/open/close/
-      // reopen/cancel/start/finalize. Las 8 de ciclo de vida (salvo
-      // finalize) comparten el RETURNS TABLE exacto de tournaments.Row.
+          category_change_id: string
+          club_member_id: string
+          new_category: string
+          new_cycle_id: string
+          new_points: number
+          previous_category: string
+          previous_cycle_id: string
+          previous_points: number
+        }[]
+      }
+      claim_club: {
+        Args: { p_ip?: string; p_token_hash: string }
+        Returns: Json
+      }
+      claim_invitation: { Args: { p_token: string }; Returns: Json }
+      close_tournament_registration: {
+        Args: { p_tournament_id: string }
+        Returns: {
+          cancelled_at: string
+          cancelled_by: string
+          category: string
+          club_id: string
+          completed_at: string
+          completed_by: string
+          cover_image_url: string
+          created_at: string
+          created_by: string
+          description: string
+          estimated_duration_minutes: number
+          id: string
+          max_pairs: number
+          name: string
+          prize_description: string
+          registration_closes_at: string
+          registration_opens_at: string
+          secondary_category: string
+          slug: string
+          started_at: string
+          started_by: string
+          starts_at: string
+          status: string
+          updated_at: string
+          visibility: string
+        }[]
+      }
+      club_role: { Args: { p_club_id: string }; Returns: string }
+      configure_club_default_player_category: {
+        Args: { p_category: string; p_club_id: string }
+        Returns: {
+          category: string
+          cycle_id: string
+          provisioned_count: number
+        }[]
+      }
+      confirm_tournament_entry: {
+        Args: { p_tournament_entry_id: string }
+        Returns: {
+          category: string
+          club_id: string
+          confirmed_at: string
+          confirmed_by: string
+          created_at: string
+          created_by: string
+          id: string
+          points: number
+          rejected_at: string
+          rejected_by: string
+          rejection_reason: string
+          secondary_category: string
+          status: string
+          tournament_id: string
+          updated_at: string
+          withdrawn_at: string
+          withdrawn_by: string
+        }[]
+      }
+      count_active_players: { Args: { p_club_id: string }; Returns: number }
+      create_club_news: {
+        Args: {
+          p_club_id: string
+          p_content: string
+          p_image_url: string
+          p_title: string
+          p_tournament_id: string
+        }
+        Returns: {
+          club_id: string
+          content: string
+          created_at: string
+          created_by: string
+          id: string
+          image_url: string
+          published_at: string
+          slug: string
+          title: string
+          tournament_id: string
+          updated_at: string
+        }[]
+      }
+      create_club_with_owner: {
+        Args: { p_name: string; p_slug: string; p_visibility?: string }
+        Returns: {
+          id: string
+          slug: string
+        }[]
+      }
+      create_join_request: { Args: { p_club_id: string }; Returns: undefined }
+      create_reservation_admin: {
+        Args: {
+          p_club_id: string
+          p_court_id: string
+          p_date: string
+          p_duration_minutes: number
+          p_notes: string
+          p_start_time: string
+          p_title: string
+          p_type: string
+        }
+        Returns: string
+      }
+      create_reservation_player: {
+        Args: {
+          p_club_id: string
+          p_court_id: string
+          p_date: string
+          p_duration_minutes: number
+          p_start_time: string
+        }
+        Returns: string
+      }
       create_tournament: {
         Args: {
-          p_club_id: string;
-          p_name: string;
-          p_category: string;
-          p_max_pairs: number;
-          p_description?: string | null;
-          p_visibility?: string;
-          p_registration_opens_at?: string | null;
-          p_registration_closes_at?: string | null;
-          p_starts_at?: string | null;
-          p_estimated_duration_minutes?: number | null;
-          p_secondary_category?: string | null;
-          p_prize_description?: string | null;
-          p_cover_image_url?: string | null;
-        };
-        Returns: Array<Database["public"]["Tables"]["tournaments"]["Row"]>;
-      };
-      update_tournament: {
-        Args: {
-          p_tournament_id: string;
-          p_name: string;
-          p_description: string | null;
-          p_category: string;
-          p_max_pairs: number;
-          p_visibility: string;
-          p_registration_opens_at: string | null;
-          p_registration_closes_at: string | null;
-          p_starts_at: string | null;
-          p_estimated_duration_minutes: number | null;
-          p_secondary_category: string | null;
-          p_prize_description: string | null;
-          p_cover_image_url: string | null;
-        };
-        Returns: Array<Database["public"]["Tables"]["tournaments"]["Row"]>;
-      };
-      // 20260930000001 — única propiedad editable en cualquier estado del
-      // torneo (a diferencia de update_tournament, que sigue bloqueado
-      // fuera de draft/registration_open/registration_closed).
-      update_tournament_cover_image: {
-        Args: {
-          p_tournament_id: string;
-          p_cover_image_url: string | null;
-        };
-        Returns: Array<Database["public"]["Tables"]["tournaments"]["Row"]>;
-      };
+          p_category: string
+          p_club_id: string
+          p_cover_image_url?: string
+          p_description?: string
+          p_estimated_duration_minutes?: number
+          p_max_pairs: number
+          p_name: string
+          p_prize_description?: string
+          p_registration_closes_at?: string
+          p_registration_opens_at?: string
+          p_secondary_category?: string
+          p_starts_at?: string
+          p_visibility?: string
+        }
+        Returns: {
+          cancelled_at: string
+          cancelled_by: string
+          category: string
+          club_id: string
+          completed_at: string
+          completed_by: string
+          cover_image_url: string
+          created_at: string
+          created_by: string
+          description: string
+          estimated_duration_minutes: number
+          id: string
+          max_pairs: number
+          name: string
+          prize_description: string
+          registration_closes_at: string
+          registration_opens_at: string
+          secondary_category: string
+          slug: string
+          started_at: string
+          started_by: string
+          starts_at: string
+          status: string
+          updated_at: string
+          visibility: string
+        }[]
+      }
+      deactivate_player: {
+        Args: { p_club_id: string; p_player_id: string }
+        Returns: undefined
+      }
+      delete_court: { Args: { p_court_id: string }; Returns: undefined }
+      finalize_tournament: {
+        Args: { p_tournament_id: string }
+        Returns: {
+          already_finalized: boolean
+          entries_awarded: number
+          movements_created: number
+          tournament_id: string
+        }[]
+      }
+      get_club_category_ranking: {
+        Args: { p_category: string; p_club_id: string }
+        Returns: {
+          category: string
+          club_member_id: string
+          current_points: number
+          full_name: string
+          points_reached_at: string
+          profile_id: string
+          ranking_position: number
+        }[]
+      }
+      get_club_category_ranking_view: {
+        Args: { p_category: string; p_club_id: string }
+        Returns: {
+          avatar_url: string
+          category: string
+          club_member_id: string
+          current_points: number
+          full_name: string
+          points_reached_at: string
+          profile_id: string
+          ranking_position: number
+        }[]
+      }
+      get_club_claim_preview: { Args: { p_token_hash: string }; Returns: Json }
+      get_club_claim_status: {
+        Args: { p_club_id: string }
+        Returns: {
+          claimed_at: string
+          claimed_by_email: string
+          claimed_by_name: string
+          created_at: string
+          status: string
+        }[]
+      }
+      get_club_join_requests: {
+        Args: { p_club_id: string }
+        Returns: {
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          profile_id: string
+          status: string
+        }[]
+      }
+      get_club_member_email: {
+        Args: { p_club_id: string; p_club_member_id: string }
+        Returns: string
+      }
+      get_club_member_sport_state: {
+        Args: { p_club_id: string; p_club_member_id: string }
+        Returns: {
+          category: string
+          club_member_id: string
+          current_points: number
+          points_reached_at: string
+        }[]
+      }
+      get_club_statistics: {
+        Args: { p_club_id: string; p_end_date: string; p_start_date: string }
+        Returns: Json
+      }
+      get_invitation_preview: { Args: { p_token: string }; Returns: Json }
+      get_my_club_sport_profile: { Args: { p_club_id: string }; Returns: Json }
+      get_my_profile_activity: { Args: never; Returns: Json }
+      get_or_create_active_ranking_cycle: {
+        Args: { p_category: string; p_club_id: string }
+        Returns: string
+      }
+      get_platform_club_detail: {
+        Args: { p_club_id: string }
+        Returns: {
+          admin_count: number
+          court_count: number
+          created_at: string
+          id: string
+          is_active: boolean
+          logo_url: string
+          name: string
+          news_count: number
+          owner_email: string
+          owner_name: string
+          player_count: number
+          reservation_count: number
+          slug: string
+          visibility: string
+        }[]
+      }
+      get_platform_clubs_overview: {
+        Args: never
+        Returns: {
+          court_count: number
+          created_at: string
+          id: string
+          is_active: boolean
+          logo_url: string
+          name: string
+          owner_email: string
+          owner_name: string
+          player_count: number
+          slug: string
+          visibility: string
+        }[]
+      }
+      get_platform_user_detail: {
+        Args: { p_user_id: string }
+        Returns: {
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          is_banned: boolean
+          is_platform_admin: boolean
+          last_sign_in_at: string
+          memberships: Json
+        }[]
+      }
+      get_platform_users_overview: {
+        Args: never
+        Returns: {
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          is_platform_admin: boolean
+          memberships: Json
+        }[]
+      }
+      get_public_clubs: {
+        Args: never
+        Returns: {
+          court_count: number
+          description: string
+          id: string
+          logo_url: string
+          member_count: number
+          name: string
+          primary_color: string
+          secondary_color: string
+          slug: string
+        }[]
+      }
+      is_club_member: { Args: { p_club_id: string }; Returns: boolean }
+      is_current_user_tournament_entry_member: {
+        Args: { p_tournament_entry_id: string }
+        Returns: boolean
+      }
+      join_public_club: { Args: { p_club_id: string }; Returns: undefined }
+      leave_club: { Args: { p_club_id: string }; Returns: undefined }
+      notify_reservation_cancelled: {
+        Args: { p_reservation_id: string }
+        Returns: undefined
+      }
+      notify_reservation_created_for_players: {
+        Args: { p_reservation_id: string }
+        Returns: undefined
+      }
+      notify_reservation_rejected: {
+        Args: { p_reservation_id: string }
+        Returns: undefined
+      }
+      notify_reservation_request_created: {
+        Args: { p_reservation_id: string }
+        Returns: undefined
+      }
+      notify_reservation_updated: {
+        Args: { p_reservation_id: string }
+        Returns: undefined
+      }
       open_tournament_registration: {
-        Args: { p_tournament_id: string };
-        Returns: Array<Database["public"]["Tables"]["tournaments"]["Row"]>;
-      };
-      close_tournament_registration: {
-        Args: { p_tournament_id: string };
-        Returns: Array<Database["public"]["Tables"]["tournaments"]["Row"]>;
-      };
-      reopen_tournament_registration: {
-        Args: { p_tournament_id: string };
-        Returns: Array<Database["public"]["Tables"]["tournaments"]["Row"]>;
-      };
-      cancel_tournament: {
-        Args: { p_tournament_id: string };
-        Returns: Array<Database["public"]["Tables"]["tournaments"]["Row"]>;
-      };
-      start_tournament: {
-        Args: { p_tournament_id: string };
-        Returns: Array<Database["public"]["Tables"]["tournaments"]["Row"]>;
-      };
-      // Torneos — inscripciones. Las 5 comparten el RETURNS TABLE exacto de
-      // tournament_entries.Row.
+        Args: { p_tournament_id: string }
+        Returns: {
+          cancelled_at: string
+          cancelled_by: string
+          category: string
+          club_id: string
+          completed_at: string
+          completed_by: string
+          cover_image_url: string
+          created_at: string
+          created_by: string
+          description: string
+          estimated_duration_minutes: number
+          id: string
+          max_pairs: number
+          name: string
+          prize_description: string
+          registration_closes_at: string
+          registration_opens_at: string
+          secondary_category: string
+          slug: string
+          started_at: string
+          started_by: string
+          starts_at: string
+          status: string
+          updated_at: string
+          visibility: string
+        }[]
+      }
+      platform_create_pending_club: {
+        Args: { p_name: string; p_slug: string; p_visibility?: string }
+        Returns: {
+          id: string
+          slug: string
+        }[]
+      }
+      platform_generate_club_claim_link: {
+        Args: { p_club_id: string; p_token_hash: string }
+        Returns: string
+      }
+      platform_revoke_club_claim_link: {
+        Args: { p_club_id: string }
+        Returns: boolean
+      }
+      provision_club_member_sport_state: {
+        Args: { p_club_member_id: string }
+        Returns: string
+      }
+      provision_club_sport_members: {
+        Args: { p_club_id: string }
+        Returns: {
+          cycle_id: string
+          provisioned_count: number
+          skipped_count: number
+        }[]
+      }
       register_tournament_entry: {
         Args: {
-          p_tournament_id: string;
-          p_club_member_one_id: string;
-          p_club_member_two_id: string;
-        };
-        Returns: Array<Database["public"]["Tables"]["tournament_entries"]["Row"]>;
-      };
-      confirm_tournament_entry: {
-        Args: { p_tournament_entry_id: string };
-        Returns: Array<Database["public"]["Tables"]["tournament_entries"]["Row"]>;
-      };
+          p_club_member_one_id: string
+          p_club_member_two_id: string
+          p_tournament_id: string
+        }
+        Returns: {
+          category: string
+          club_id: string
+          confirmed_at: string
+          confirmed_by: string
+          created_at: string
+          created_by: string
+          id: string
+          points: number
+          rejected_at: string
+          rejected_by: string
+          rejection_reason: string
+          secondary_category: string
+          status: string
+          tournament_id: string
+          updated_at: string
+          withdrawn_at: string
+          withdrawn_by: string
+        }[]
+      }
+      reject_join_request: {
+        Args: { p_request_id: string }
+        Returns: undefined
+      }
       reject_tournament_entry: {
-        Args: { p_tournament_entry_id: string; p_reason: string };
-        Returns: Array<Database["public"]["Tables"]["tournament_entries"]["Row"]>;
-      };
-      withdraw_tournament_entry: {
-        Args: { p_tournament_entry_id: string };
-        Returns: Array<Database["public"]["Tables"]["tournament_entries"]["Row"]>;
-      };
-      set_tournament_entry_points: {
-        Args: {
-          p_tournament_id: string;
-          p_entry_ids: string[];
-          p_points: number[];
-        };
-        Returns: Array<Database["public"]["Tables"]["tournament_entries"]["Row"]>;
-      };
-      // Torneos — reemplazo/corrección de integrante de una dupla ya
-      // confirmada, solo mientras el torneo está in_progress. Retorna la
-      // fila nueva y activa del integrante entrante.
+        Args: { p_reason: string; p_tournament_entry_id: string }
+        Returns: {
+          category: string
+          club_id: string
+          confirmed_at: string
+          confirmed_by: string
+          created_at: string
+          created_by: string
+          id: string
+          points: number
+          rejected_at: string
+          rejected_by: string
+          rejection_reason: string
+          secondary_category: string
+          status: string
+          tournament_id: string
+          updated_at: string
+          withdrawn_at: string
+          withdrawn_by: string
+        }[]
+      }
+      reopen_tournament_registration: {
+        Args: { p_tournament_id: string }
+        Returns: {
+          cancelled_at: string
+          cancelled_by: string
+          category: string
+          club_id: string
+          completed_at: string
+          completed_by: string
+          cover_image_url: string
+          created_at: string
+          created_by: string
+          description: string
+          estimated_duration_minutes: number
+          id: string
+          max_pairs: number
+          name: string
+          prize_description: string
+          registration_closes_at: string
+          registration_opens_at: string
+          secondary_category: string
+          slug: string
+          started_at: string
+          started_by: string
+          starts_at: string
+          status: string
+          updated_at: string
+          visibility: string
+        }[]
+      }
       replace_tournament_entry_member: {
         Args: {
-          p_tournament_entry_id: string;
-          p_old_club_member_id: string;
-          p_new_club_member_id: string;
-        };
-        Returns: Array<Database["public"]["Tables"]["tournament_entry_members"]["Row"]>;
-      };
-      // Torneos — finalización idempotente: congela la clasificación y
-      // aplica los puntos de cada dupla confirmada, en partes iguales, a
-      // sus dos integrantes finales del ranking existente.
-      finalize_tournament: {
-        Args: { p_tournament_id: string };
-        Returns: Array<{
-          tournament_id: string;
-          entries_awarded: number;
-          movements_created: number;
-          already_finalized: boolean;
-        }>;
-      };
-    };
-    Enums: Record<string, never>;
-    CompositeTypes: Record<string, never>;
-  };
+          p_new_club_member_id: string
+          p_old_club_member_id: string
+          p_tournament_entry_id: string
+        }
+        Returns: {
+          club_id: string
+          club_member_id: string
+          created_at: string
+          id: string
+          is_active: boolean
+          replaced_at: string
+          replaced_by: string
+          tournament_entry_id: string
+          tournament_id: string
+        }[]
+      }
+      resolve_reservation_request_notifications: {
+        Args: { p_reservation_id: string; p_status: string }
+        Returns: undefined
+      }
+      set_tournament_entry_points: {
+        Args: {
+          p_entry_ids: string[]
+          p_points: number[]
+          p_tournament_id: string
+        }
+        Returns: {
+          category: string
+          club_id: string
+          confirmed_at: string
+          confirmed_by: string
+          created_at: string
+          created_by: string
+          id: string
+          points: number
+          rejected_at: string
+          rejected_by: string
+          rejection_reason: string
+          secondary_category: string
+          status: string
+          tournament_id: string
+          updated_at: string
+          withdrawn_at: string
+          withdrawn_by: string
+        }[]
+      }
+      start_tournament: {
+        Args: { p_tournament_id: string }
+        Returns: {
+          cancelled_at: string
+          cancelled_by: string
+          category: string
+          club_id: string
+          completed_at: string
+          completed_by: string
+          cover_image_url: string
+          created_at: string
+          created_by: string
+          description: string
+          estimated_duration_minutes: number
+          id: string
+          max_pairs: number
+          name: string
+          prize_description: string
+          registration_closes_at: string
+          registration_opens_at: string
+          secondary_category: string
+          slug: string
+          started_at: string
+          started_by: string
+          starts_at: string
+          status: string
+          updated_at: string
+          visibility: string
+        }[]
+      }
+      update_platform_user_name: {
+        Args: { p_full_name: string; p_user_id: string }
+        Returns: undefined
+      }
+      update_reservation: {
+        Args: {
+          p_court_id: string
+          p_date: string
+          p_duration_minutes: number
+          p_reservation_id: string
+          p_start_time: string
+        }
+        Returns: undefined
+      }
+      update_tournament: {
+        Args: {
+          p_category: string
+          p_cover_image_url: string
+          p_description: string
+          p_estimated_duration_minutes: number
+          p_max_pairs: number
+          p_name: string
+          p_prize_description: string
+          p_registration_closes_at: string
+          p_registration_opens_at: string
+          p_secondary_category: string
+          p_starts_at: string
+          p_tournament_id: string
+          p_visibility: string
+        }
+        Returns: {
+          cancelled_at: string
+          cancelled_by: string
+          category: string
+          club_id: string
+          completed_at: string
+          completed_by: string
+          cover_image_url: string
+          created_at: string
+          created_by: string
+          description: string
+          estimated_duration_minutes: number
+          id: string
+          max_pairs: number
+          name: string
+          prize_description: string
+          registration_closes_at: string
+          registration_opens_at: string
+          secondary_category: string
+          slug: string
+          started_at: string
+          started_by: string
+          starts_at: string
+          status: string
+          updated_at: string
+          visibility: string
+        }[]
+      }
+      update_tournament_cover_image: {
+        Args: { p_cover_image_url: string; p_tournament_id: string }
+        Returns: {
+          cancelled_at: string
+          cancelled_by: string
+          category: string
+          club_id: string
+          completed_at: string
+          completed_by: string
+          cover_image_url: string
+          created_at: string
+          created_by: string
+          description: string
+          estimated_duration_minutes: number
+          id: string
+          max_pairs: number
+          name: string
+          prize_description: string
+          registration_closes_at: string
+          registration_opens_at: string
+          secondary_category: string
+          slug: string
+          started_at: string
+          started_by: string
+          starts_at: string
+          status: string
+          updated_at: string
+          visibility: string
+        }[]
+      }
+      upsert_pricing_rule_with_prices: {
+        Args: {
+          p_club_id: string
+          p_court_id: string
+          p_days_of_week: number[]
+          p_display_order: number
+          p_end_time: string
+          p_name: string
+          p_prices: Json
+          p_rule_id: string
+          p_start_time: string
+        }
+        Returns: string
+      }
+      withdraw_tournament_entry: {
+        Args: { p_tournament_entry_id: string }
+        Returns: {
+          category: string
+          club_id: string
+          confirmed_at: string
+          confirmed_by: string
+          created_at: string
+          created_by: string
+          id: string
+          points: number
+          rejected_at: string
+          rejected_by: string
+          rejection_reason: string
+          secondary_category: string
+          status: string
+          tournament_id: string
+          updated_at: string
+          withdrawn_at: string
+          withdrawn_by: string
+        }[]
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
 }
 
-// ─── Convenience type helpers ──────────────────────────────────────────────
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
 
-export type Tables<T extends keyof Database["public"]["Tables"]> =
-  Database["public"]["Tables"][T]["Row"];
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 
-export type TablesInsert<T extends keyof Database["public"]["Tables"]> =
-  Database["public"]["Tables"][T]["Insert"];
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
 
-export type TablesUpdate<T extends keyof Database["public"]["Tables"]> =
-  Database["public"]["Tables"][T]["Update"];
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
 
-export type Enums<T extends keyof Database["public"]["Enums"]> =
-  Database["public"]["Enums"][T];
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
 
-// ─── Domain types (derived from database rows) ─────────────────────────────
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
 
-export type Club = Tables<"clubs">;
-export type Profile = Tables<"profiles">;
-export type ClubMember = Tables<"club_members">;
-export type InvitationLink = Tables<"invitation_links">;
-export type PricingRule = Tables<"club_pricing_rules">;
-export type PricingRulePrice = Tables<"club_pricing_rule_prices">;
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
 
-export type ClubRole = ClubMember["role"];
-export type InvitationRole = InvitationLink["role"];
-export type PlayerCategory = ClubMember["category"];
+export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
+  public: {
+    Enums: {},
+  },
+} as const
 
-// MVP skill-level categories, weakest to strongest — manually assigned by
-// admins for now. Order matters for any future ranking/sort UI.
-export const PLAYER_CATEGORIES: PlayerCategory[] = [
-  "Principiante",
-  "5ta",
-  "4ta",
-  "3ra",
-  "2da",
-  "1ra",
-];
-
-// ClubMember with profile joined — used in players list and nav
-export type ClubMemberWithProfile = ClubMember & {
-  profiles: Profile;
-};
-
-// ClubMember with club joined — used in [club]/layout.tsx
-export type ClubMemberWithClub = ClubMember & {
-  clubs: Club;
-};
-
-export type Court = Tables<"courts">;
-
-export type Reservation = Tables<"reservations">;
-export type ReservationPlayer = Tables<"reservation_players">;
-export type ReservationType = Reservation["type"];
-export type ReservationStatus = Reservation["status"];
-
-export type ClubOperatingHour = Tables<"club_operating_hours">;
-
-// Fase 1 módulo deportivo — global, ordered category catalog (7 fixed
-// rows). Only this table's convenience type is exported here: nothing in
-// this provisioning block reads club_ranking_cycles/club_member_sport_state/
-// club_player_category_changes/club_player_point_movements directly from
-// client code yet.
-export type SportCategory = Tables<"sport_categories">;
-
-export type ClubNews = Tables<"club_news">;
-
-// ClubNews with the author's profile joined — used in the admin Noticias list
-export type ClubNewsWithAuthor = ClubNews & {
-  created_by_profile: Pick<Profile, "full_name"> | null;
-};
-
-// Torneos — el torneo es únicamente un evento de club (Bloque 1, nueva
-// especificación funcional). Sin partidos/rondas/llaves/canchas.
-export type Tournament = Tables<"tournaments">;
-export type TournamentStatus = Tournament["status"];
-export type TournamentVisibility = Tournament["visibility"];
-
-// Torneos — inscripciones (duplas) y sus integrantes.
-export type TournamentEntryRow = Tables<"tournament_entries">;
-export type TournamentEntryStatus = TournamentEntryRow["status"];
-export type TournamentEntryMemberRow = Tables<"tournament_entry_members">;
+// AUTO-APPENDED — do not edit above this line by hand, and do not add
+// anything below it by hand either. Everything above is raw `supabase gen
+// types` output; this link is re-added automatically every time by
+// scripts/generate-types.sh (npm run types:generate). The actual
+// hand-written types (Club, Tournament, ClubRole, PricingRule, etc.) live
+// in ./domain.ts, which this file never contains directly — that's what
+// lets database.ts be regenerated/overwritten safely at any time.
+export * from "./domain";

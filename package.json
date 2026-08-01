@@ -10,7 +10,8 @@
     "seed:reservations": "npx --yes tsx scripts/seed-reservations.ts",
     "seed:future-demo": "npx --yes tsx scripts/seed-future-demo-reservations.ts",
     "test:pricing": "npx --yes tsx scripts/test-reservation-pricing.ts",
-    "backfill:local-phones": "npx --yes tsx scripts/backfillLocalPlayerPhones.ts"
+    "backfill:local-phones": "npx --yes tsx scripts/backfillLocalPlayerPhones.ts",
+    "types:generate": "bash scripts/generate-types.sh"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

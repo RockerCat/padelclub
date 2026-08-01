@@ -103,8 +103,9 @@ export async function updateClubName(
     .eq("is_active", true)
     .single();
 
-  if (!membership || !["OWNER", "ADMIN"].includes(membership.role))
+  if (!membership || !["OWNER", "ADMIN"].includes(membership.role)) {
     return { error: "No tienes permiso para editar este club." };
+  }
 
   const trimmed = name.trim();
   if (!trimmed || trimmed.length < 2)
@@ -444,8 +445,9 @@ export async function addGalleryImage(
     .eq("is_active", true)
     .single();
 
-  if (!membership || !["OWNER", "ADMIN"].includes(membership.role))
+  if (!membership || !["OWNER", "ADMIN"].includes(membership.role)) {
     return { error: "No tienes permiso para editar este club." };
+  }
 
   const { data: club } = await supabase
     .from("clubs")
@@ -509,8 +511,9 @@ export async function removeGalleryImage(
     .eq("is_active", true)
     .single();
 
-  if (!membership || !["OWNER", "ADMIN"].includes(membership.role))
+  if (!membership || !["OWNER", "ADMIN"].includes(membership.role)) {
     return { error: "No tienes permiso para editar este club." };
+  }
 
   const { data: club } = await supabase
     .from("clubs")

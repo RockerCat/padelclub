@@ -3,23 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getClubEntryPath } from "@/lib/utils/navigation";
-
-const SLUG_REGEX = /^[a-z0-9][a-z0-9-]*[a-z0-9]$/;
-
-// Top-level static routes — a club with one of these slugs would be
-// permanently unreachable at /[slug] (Next.js always resolves the static
-// route first), so it's blocked at creation time rather than silently
-// producing a dead club.
-const RESERVED_SLUGS = new Set([
-  "auth",
-  "clubs",
-  "platform",
-  "onboarding",
-  "unauthorized",
-  "invite",
-  "api",
-  "notifications",
-]);
+import { SLUG_REGEX, RESERVED_SLUGS } from "@/lib/clubSlugs";
 
 export async function checkSlugAvailability(
   slug: string

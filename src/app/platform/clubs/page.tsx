@@ -1,4 +1,7 @@
+import Link from "next/link";
+import { Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { Button } from "@/components/ui";
 import { PlatformClubsTable, type PlatformClubRow } from "./PlatformClubsTable";
 
 export default async function PlatformClubsPage() {
@@ -9,9 +12,17 @@ export default async function PlatformClubsPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 md:py-12">
-      <h1 className="text-2xl font-bold text-white mb-1">Clubes</h1>
+      <div className="flex items-start justify-between gap-4 mb-1">
+        <h1 className="text-2xl font-bold text-white">Clubes</h1>
+        <Link href="/platform/clubs/create">
+          <Button size="sm">
+            <Plus className="w-4 h-4" />
+            Crear club
+          </Button>
+        </Link>
+      </div>
       <p className="text-sm text-brand-muted mb-8">
-        Todos los clubes registrados en MiPadelClub. Solo consulta.
+        Todos los clubes registrados en MiPadelClub. Consulta, o prepara un club nuevo para su entrega.
       </p>
 
       {error && (

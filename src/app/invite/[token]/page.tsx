@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, Button } from "@/components/ui";
 import { AcceptInviteCard } from "./AcceptInviteCard";
 import { CLUB_PRIMARY_COLOR, CLUB_SECONDARY_COLOR } from "@/lib/constants/clubTheme";
+import { getClubEntryPath } from "@/lib/utils/navigation";
 
 interface InvitePageProps {
   params: Promise<{ token: string }>;
@@ -262,7 +263,7 @@ export default async function InvitePage({ params, searchParams }: InvitePagePro
                     Eres {existingRoleLabel}.
                   </p>
                 </div>
-                <Link href={`/${clubSlug}`} className="w-full">
+                <Link href={getClubEntryPath(clubSlug, existing.role)} className="w-full">
                   <Button size="lg" className="w-full">
                     Ir al club
                   </Button>
@@ -280,6 +281,7 @@ export default async function InvitePage({ params, searchParams }: InvitePagePro
         <AcceptInviteCard
           token={token}
           clubName={clubName}
+          role={info.role ?? "PLAYER"}
           roleLabel={roleLabel}
           clubSlug={clubSlug}
         />

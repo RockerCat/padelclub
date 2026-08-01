@@ -25,8 +25,9 @@ async function requireOwner(clubId: string) {
     .eq("is_active", true)
     .single();
 
-  if (!membership || !["OWNER", "ADMIN"].includes(membership.role))
+  if (!membership || !["OWNER", "ADMIN"].includes(membership.role)) {
     return { supabase: null, error: "No tienes permiso para editar este club." };
+  }
 
   return { supabase, error: null };
 }

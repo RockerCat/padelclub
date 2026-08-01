@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Badge, Button } from "@/components/ui";
+import { ClubClaimSection, type ClubClaimStatus } from "./ClubClaimSection";
 
 interface PageProps {
   params: Promise<{ clubId: string }>;
@@ -87,6 +88,9 @@ export default async function PlatformClubDetailPage({ params }: PageProps) {
 
   if (!club && !error) notFound();
 
+  const { data: claimStatusRows } = await supabase.rpc("get_club_claim_status", { p_club_id: clubId });
+  const claimStatus: ClubClaimStatus = claimStatusRows?.[0] ?? null;
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 md:py-12">
       <Link
@@ -142,6 +146,9 @@ export default async function PlatformClubDetailPage({ params }: PageProps) {
             <p className="text-sm font-medium text-white">{club.owner_name ?? "—"}</p>
             <p className="text-sm text-brand-muted">{club.owner_email ?? "—"}</p>
           </div>
+
+          {/* ── Entrega del club ─────────────────────────────────────── */}
+          <ClubClaimSection clubId={club.id} clubSlug={club.slug} initialStatus={claimStatus} />
 
           {/* ── Estadísticas ─────────────────────────────────────────── */}
           <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-3">
