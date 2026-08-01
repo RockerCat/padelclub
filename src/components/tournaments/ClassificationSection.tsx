@@ -310,9 +310,20 @@ export function ClassificationSection({
           ) : (
             // Mismo entry.points de siempre — completed solo cambia la
             // redacción para dejar explícito que cada integrante recibe
-            // el monto completo (nunca dividido entre los dos).
+            // el monto completo (nunca dividido entre los dos). En mobile
+            // "por jugador" le robaba ancho horizontal al nombre de la
+            // dupla (line-clamp-2 truncaba antes de tiempo) — el texto
+            // largo queda solo para lg+, mismo umbral que ya usa
+            // TournamentPodium para su propio par de etiquetas corta/larga.
             <span className="text-sm font-semibold text-white tabular-nums text-right">
-              {completed ? `${entry.points} pts por jugador` : `${entry.points} pts`}
+              {completed ? (
+                <>
+                  <span className="lg:hidden">{entry.points} pts</span>
+                  <span className="hidden lg:inline">{entry.points} pts por jugador</span>
+                </>
+              ) : (
+                `${entry.points} pts`
+              )}
             </span>
           )}
         </div>

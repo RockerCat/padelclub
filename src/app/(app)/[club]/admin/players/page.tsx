@@ -1,9 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { Card, CardHeader, CardContent } from "@/components/ui";
-import { Share2 } from "lucide-react";
 import { MembersClient } from "./MembersClient";
-import { ShareClubSection } from "./ShareClubSection";
 import { JoinRequestsSection } from "./JoinRequestsSection";
 import type { JoinRequestRow } from "./JoinRequestsSection";
 import { getClubMatchesPlayedByMember, getClubMemberSportState } from "./actions";
@@ -174,37 +171,16 @@ export default async function PlayersPage({ params, searchParams }: PlayersPageP
         categoryFilter={categoryFilter}
       />
 
-      {/* Solicitudes de ingreso — van por encima de "Compartir club" por
-          prioridad operativa. Público y privado usan el mismo flujo de
-          solicitud+aprobación. Incluye historial (aprobadas/rechazadas), no
-          solo pendientes — JoinRequestsSection decide qué acciones mostrar
-          según el status de cada fila. */}
+      {/* Solicitudes de ingreso — historial completo (aprobadas/rechazadas
+          agrupadas en un acordeón cerrado por defecto, pendientes siempre
+          visibles) — JoinRequestsSection decide qué acciones mostrar según
+          el status de cada fila. "Compartir club" vive ahora en Club →
+          Perfil público (ver PublicPreviewCard), no aquí. */}
       {requests.length > 0 && (
         <div className="mt-10">
           <JoinRequestsSection clubId={club.id} clubSlug={slug} requests={requests} />
         </div>
       )}
-
-      {/* Incorporación de jugadores — no existen invitaciones para
-          jugadores (ver CLAUDE.md → Club Sharing Principles): la única vía
-          es compartir el enlace público del club, igual para clubes
-          públicos (unión directa) y privados (solicitud de ingreso). */}
-      <div className="mt-10">
-        <Card variant="default">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Share2 className="w-4 h-4 text-brand-muted" />
-              <h2 className="text-base font-semibold text-white">Compartir club</h2>
-            </div>
-            <p className="text-xs text-brand-muted mt-1">
-              Comparte este club con otros jugadores. Podrán ver el perfil del club y unirse o solicitar ingreso.
-            </p>
-          </CardHeader>
-          <CardContent>
-            <ShareClubSection clubName={club.name} clubSlug={slug} />
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 }

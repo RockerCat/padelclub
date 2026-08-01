@@ -167,7 +167,7 @@ export function PublicPageSections({ club, courts, schedule, playerCount, news, 
           </ModuleCard>
         </div>
 
-        <PublicPreviewCard clubSlug={club.slug} />
+        <PublicPreviewCard clubSlug={club.slug} clubName={club.name} />
 
         {openModal === "profile" && (
           <PublicProfileModal club={club} onClose={() => setOpenModal(null)} />

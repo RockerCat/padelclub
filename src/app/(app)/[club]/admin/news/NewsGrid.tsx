@@ -71,7 +71,12 @@ export function NewsGrid({ news, clubSlug, clubId }: NewsGridProps) {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        /* justify-items-center: cada tarjeta trae su propio max-w-sm (ver
+           NewsCard) para que las portraits no queden gigantes en desktop
+           ancho — sin este centrado, "stretch" (el default de grid) las
+           dejaría pegadas al borde izquierdo de su celda en vez de
+           centradas dentro del espacio sobrante. */
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 justify-items-center">
           {news.map((item) => (
             <NewsCard
               key={item.id}

@@ -2,12 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { Copy, Check, ExternalLink, Eye } from "lucide-react";
+import { ShareClubSection } from "@/app/(app)/[club]/admin/players/ShareClubSection";
 
 interface PublicPreviewCardProps {
   clubSlug: string;
+  // "Compartir club" — antes su propia tarjeta grande en Jugadores, ahora
+  // este mismo botón compacto vive junto a "Abrir página pública"/"Copiar
+  // enlace" (ver CLAUDE.md → Club Sharing Principles). Mismo componente,
+  // misma lógica de enlace/WhatsApp, solo reubicado.
+  clubName: string;
 }
 
-export function PublicPreviewCard({ clubSlug }: PublicPreviewCardProps) {
+export function PublicPreviewCard({ clubSlug, clubName }: PublicPreviewCardProps) {
   const [copied, setCopied] = useState(false);
   // Starts as the relative path (matches the server-rendered HTML) and is
   // upgraded to an absolute URL once mounted — avoids a hydration mismatch
@@ -76,6 +82,8 @@ export function PublicPreviewCard({ clubSlug }: PublicPreviewCardProps) {
               </>
             )}
           </button>
+
+          <ShareClubSection clubName={clubName} clubSlug={clubSlug} />
         </div>
       </div>
     </div>

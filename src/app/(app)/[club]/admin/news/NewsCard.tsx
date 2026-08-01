@@ -41,20 +41,28 @@ export function NewsCard({ news, clubSlug, clubId, onEdit }: NewsCardProps) {
   }
 
   return (
-    <div className="bg-brand-surface border border-white/10 rounded-2xl overflow-hidden flex flex-col">
-      <div className="aspect-video w-full overflow-hidden">
+    <div className="w-full max-w-sm bg-brand-surface border border-white/10 rounded-2xl overflow-hidden flex flex-col">
+      {/* Portrait — misma proporción ya usada por el modal de creación/
+          edición (NewsImageUpload), el detalle público de la noticia y la
+          portada de torneo (aspect-[3/4] en los tres), nunca un recorte
+          horizontal. `overflow-hidden` en el contenedor padre ya redondea
+          la esquina superior; la relación fija evita cualquier layout
+          shift mientras la imagen carga. */}
+      <div className="aspect-[3/4] w-full overflow-hidden">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={news.image_url} alt={news.title} className="w-full h-full object-cover" />
       </div>
 
       <div className="p-4 flex flex-col gap-2 flex-1">
-        <h3 className="text-sm font-semibold text-white line-clamp-2">{news.title}</h3>
+        <h3 title={news.title} className="text-sm font-semibold text-white line-clamp-2">
+          {news.title}
+        </h3>
         <p className="text-xs text-brand-muted">
           {formatDate(news.published_at)}
           {news.created_by_profile?.full_name && ` · ${news.created_by_profile.full_name}`}
         </p>
 
-        <div className="flex items-center gap-2 mt-auto pt-3 border-t border-white/[0.06]">
+        <div className="flex items-center flex-wrap gap-2 mt-auto pt-3 border-t border-white/[0.06]">
           <button
             type="button"
             onClick={onEdit}
