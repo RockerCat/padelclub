@@ -22,6 +22,7 @@ function formatComparison(current: number, previous: number): string | null {
 // this is a distinct page, not a dashboard refactor.
 function StatKpiCard({
   label,
+  mobileLabel,
   value,
   unit,
   sub,
@@ -31,35 +32,49 @@ function StatKpiCard({
   color,
 }: {
   label: string;
+  /** Shorter label shown only below `sm` (3-col mobile grid) — the full
+   *  `label` is unchanged on tablet/desktop. Defaults to `label` for cards
+   *  whose text is already short enough. */
+  mobileLabel?: string;
   value: string;
   unit?: string;
   sub?: string;
   /** Second, independent caption line — kept visually distinct from `sub` so
    *  two unrelated facts (e.g. a type breakdown and a derived average)
-   *  never read as if one were the definition of the other. */
+   *  never read as if one were the definition of the other. Hidden below
+   *  `sm` — the 3-col mobile grid has no room for it; the value it derives
+   *  from is untouched, only its visibility. */
   sub2?: string;
   comparison?: string | null;
   Icon: LucideIcon;
   color: string;
 }) {
   return (
-    <div className="relative bg-brand-surface border border-white/10 rounded-2xl p-5 xl:p-4 overflow-hidden">
+    <div className="relative bg-brand-surface border border-white/10 rounded-2xl p-3 sm:p-5 xl:p-4 overflow-hidden">
       <div className="absolute inset-x-0 top-0 h-[3px]" style={{ backgroundColor: color, opacity: 0.8 }} />
-      <Icon className="absolute right-4 bottom-4 w-14 h-14 xl:w-10 xl:h-10 text-white opacity-[0.04]" />
+      <Icon className="hidden sm:block absolute right-4 bottom-4 w-14 h-14 xl:w-10 xl:h-10 text-white opacity-[0.04]" />
       <div
-        className="w-9 h-9 rounded-xl flex items-center justify-center mb-4 xl:mb-3"
+        className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl flex items-center justify-center mb-2 sm:mb-4 xl:mb-3"
         style={{ backgroundColor: `color-mix(in srgb, ${color} 15%, transparent)`, color }}
       >
-        <Icon className="w-4 h-4" />
+        <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
       </div>
-      <p className="text-xs text-brand-muted mb-1 leading-tight">{label}</p>
-      <p className="leading-none mb-1" style={{ color }}>
-        <span className="text-3xl font-bold tabular-nums">{value}</span>
-        {unit && <span className="text-xl font-semibold ml-0.5">{unit}</span>}
+      <p className="text-[10px] sm:text-xs text-brand-muted mb-0.5 sm:mb-1 leading-tight line-clamp-2">
+        <span className="sm:hidden">{mobileLabel ?? label}</span>
+        <span className="hidden sm:inline">{label}</span>
       </p>
-      {sub && <p className="text-[11px] text-brand-muted/70">{sub}</p>}
-      {sub2 && <p className="text-[11px] text-brand-muted/70">{sub2}</p>}
-      {comparison && <p className="text-[11px] text-brand-muted/70 mt-1">{comparison} vs. periodo anterior</p>}
+      <p className="leading-none mb-1" style={{ color }}>
+        <span className="text-xl sm:text-3xl font-bold tabular-nums">{value}</span>
+        {unit && <span className="text-sm sm:text-xl font-semibold ml-0.5">{unit}</span>}
+      </p>
+      {sub && <p className="hidden sm:block text-[11px] text-brand-muted/70">{sub}</p>}
+      {sub2 && <p className="hidden sm:block text-[11px] text-brand-muted/70">{sub2}</p>}
+      {comparison && (
+        <p className="text-[9px] sm:text-[11px] text-brand-muted/70 mt-0.5 sm:mt-1 truncate">
+          {comparison}
+          <span className="hidden sm:inline"> vs. periodo anterior</span>
+        </p>
+      )}
     </div>
   );
 }
@@ -77,9 +92,10 @@ export function StatsKpiGrid({
       : Math.round((previousSummary.confirmed / previousSummary.totalReservations) * 1000) / 10;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+    <div className="grid grid-cols-3 gap-2 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-6">
       <StatKpiCard
         label="Reservas del periodo (todos los estados)"
+        mobileLabel="Reservas"
         value={String(summary.totalReservations)}
         sub={`${summary.matchReservations} partidos · ${summary.classReservations} clases`}
         sub2={`Promedio diario: ${summary.dailyAverage}`}
@@ -103,6 +119,7 @@ export function StatsKpiGrid({
       />
       <StatKpiCard
         label="Canceladas o rechazadas"
+        mobileLabel="Canceladas"
         value={String(summary.cancelledOrRejected)}
         comparison={formatComparison(summary.cancelledOrRejected, previousSummary.cancelledOrRejected)}
         Icon={XCircle}
