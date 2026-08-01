@@ -5,10 +5,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { resolveClubEntryPath } from "@/lib/utils/navigation";
 import { checkProfileIsPlatformAdmin } from "@/lib/platformAdminQuery";
 import { getSafeInternalPath } from "@/lib/utils/safeRedirect";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Button, Card, CardHeader, CardContent, Input } from "@/components/ui";
 import { BrandLogo } from "@/components/layout/BrandLogo";
+import { RegisterMenu } from "@/components/features/marketing/RegisterMenu";
 
 export function LoginForm() {
   const router = useRouter();
@@ -131,15 +131,13 @@ export function LoginForm() {
             </Button>
           </form>
 
-          <p className="text-center text-sm text-brand-muted mt-6">
-            ¿No tienes cuenta?{" "}
-            <Link
-              href="/auth/signup"
-              className="text-brand-primary hover:underline font-medium"
-            >
-              Regístrate
-            </Link>
-          </p>
+          <div className="text-center text-sm text-brand-muted mt-6">
+            <span>¿No tienes cuenta? </span>
+            <RegisterMenu
+              triggerContent="Registrarme"
+              triggerClassName="text-brand-primary hover:underline font-medium"
+            />
+          </div>
         </CardContent>
       </Card>
     </div>
