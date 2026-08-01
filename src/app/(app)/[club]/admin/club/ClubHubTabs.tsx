@@ -17,6 +17,10 @@ export function ClubHubTabs({ active, role }: ClubHubTabsProps) {
   const searchParams = useSearchParams();
 
   const tabs = clubHubTabsForRole(role);
+  // 4 tabs (OWNER) → 2x2; exactly 3 → single row of 3; 2 (ADMIN, since
+  // Configuración became OWNER-only) → single row of 2. Never a fixed
+  // column count that could leave a mobile row half-empty.
+  const gridColsClass = tabs.length === 3 ? "grid-cols-3" : "grid-cols-2";
 
   function selectTab(key: ClubHubTabKey) {
     const params = new URLSearchParams(searchParams.toString());
@@ -28,7 +32,7 @@ export function ClubHubTabs({ active, role }: ClubHubTabsProps) {
   return (
     <div
       role="tablist"
-      className={`grid ${tabs.length >= 4 ? "grid-cols-2" : "grid-cols-3"} gap-1 p-1 rounded-2xl bg-brand-surface border border-white/10 mb-4 sm:mb-6 sm:flex sm:w-auto`}
+      className={`grid ${gridColsClass} gap-1 p-1 rounded-2xl bg-brand-surface border border-white/10 mb-4 sm:mb-6 sm:flex sm:w-auto`}
     >
       {tabs.map(({ key, label, mobileLabel, Icon }) => {
         const isActive = active === key;

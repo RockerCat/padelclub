@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { useState } from "react";
 import { Menu, X, ChevronDown } from "lucide-react";
 import { RegisterMenu } from "@/components/features/marketing/RegisterMenu";
+import { BrandLogo } from "./BrandLogo";
 
 const navLinks = [
   { label: "Características", href: "#features" },
@@ -12,26 +12,6 @@ const navLinks = [
   { label: "Explorar clubes", href: "/clubs" },
   { label: "Contacto", href: "#contacto" },
 ];
-
-function Brand() {
-  return (
-    <Link href="/" className="flex items-center gap-2.5 lg:gap-3 shrink-0">
-      <Image
-        src="/branding/logo-icon2.png"
-        alt="MiPadelClub"
-        width={48}
-        height={48}
-        className="h-9 w-9 sm:h-10 sm:w-10 lg:h-12 lg:w-12 object-contain"
-        priority
-      />
-      <span className="text-xl sm:text-2xl lg:text-3xl font-extrabold tracking-tight leading-none select-none">
-        <span className="text-brand-primary" style={{ fontSize: "0.78em", letterSpacing: "-0.04em" }}>Mi</span>
-        <span className="text-white">Padel</span>
-        <span className="text-brand-primary">Club</span>
-      </span>
-    </Link>
-  );
-}
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -41,7 +21,7 @@ export default function Navbar() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 lg:h-20 items-center justify-between">
 
-          <Brand />
+          <BrandLogo size="lg" priority />
 
           <nav className="hidden md:flex items-center gap-8">
             {navLinks.map((link) => (

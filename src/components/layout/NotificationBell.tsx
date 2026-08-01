@@ -266,7 +266,21 @@ export function NotificationBell({ initialCount, initialItems }: NotificationBel
     });
   }
 
-  function handleToggle() {
+  // Below the same md breakpoint AppNav's own layout already switches on
+  // (DESKTOP_BREAKPOINT_PX = 768), the bell never opens the dropdown at
+  // all — it navigates straight to /notifications instead. That page
+  // already renders the full list correctly at any width; the inline
+  // panel below was only ever sized/anchored for a desktop-width bell
+  // (w-80 anchored `right-0` inside a full-width mobile bar), which is
+  // exactly what clipped and overflowed the screen. Read fresh at click
+  // time (never a cached/effect-derived boolean) so it's always accurate
+  // for the viewport the tap actually happened on.
+  function handleBellClick() {
+    if (typeof window !== "undefined" && window.innerWidth < DESKTOP_BREAKPOINT_PX) {
+      router.push("/notifications");
+      return;
+    }
+
     const next = !open;
     setOpen(next);
     if (next) {
@@ -276,10 +290,17 @@ export function NotificationBell({ initialCount, initialItems }: NotificationBel
   }
 
   // Keep the panel correctly anchored if the window is resized while open
-  // (e.g. rotating a tablet, resizing a desktop browser).
+  // (e.g. rotating a tablet, resizing a desktop browser) — and close it
+  // outright if the resize crosses below the mobile breakpoint, so an
+  // already-open desktop panel can never linger (or silently vanish while
+  // `open` stays stuck true) once the viewport is no longer desktop-sized.
   useEffect(() => {
     if (!open) return;
     function onResize() {
+      if (window.innerWidth < DESKTOP_BREAKPOINT_PX) {
+        setOpen(false);
+        return;
+      }
       measureDesktopPanelPos();
     }
     window.addEventListener("resize", onResize);
@@ -405,7 +426,7 @@ export function NotificationBell({ initialCount, initialItems }: NotificationBel
       <button
         ref={buttonRef}
         type="button"
-        onClick={handleToggle}
+        onClick={handleBellClick}
         aria-label="Notificaciones"
         className="relative p-2 rounded-xl text-brand-muted hover:text-white hover:bg-white/5 transition-colors"
       >
@@ -420,44 +441,36 @@ export function NotificationBell({ initialCount, initialItems }: NotificationBel
         )}
       </button>
 
-      {open && (desktopPanelPos ? (
-        // Desktop: portaled to document.body — the sidebar (and everything
-        // between it and <body>) never gets a chance to clip, dim or
-        // out-stack the panel via its own transform/opacity/stacking
-        // context, no matter what causes it. A very high z-index on both
-        // layers keeps them above anything else in the app, including
-        // avatars/cards that might otherwise sit in a higher local context.
-        createPortal(
-          <>
-            <div className="fixed inset-0 z-[999]" onClick={() => setOpen(false)} />
-            <div
-              className={`fixed w-[380px] max-w-[calc(100vw-2rem)] z-[1000] border border-white/15 ${PANEL_SURFACE_CLASSES}`}
-              style={{
-                top: desktopPanelPos.top,
-                left: desktopPanelPos.left,
-                ...(desktopThemeVars
-                  ? {
-                      "--color-brand-primary": desktopThemeVars.primary,
-                      "--color-brand-secondary": desktopThemeVars.secondary,
-                    }
-                  : {}),
-              } as React.CSSProperties}
-            >
-              {panelChildren}
-            </div>
-          </>,
-          document.body
-        )
-      ) : (
-        // Mobile: unchanged from before this story — inline, absolute,
-        // anchored to the bell's own right edge inside a full-width bar.
+      {/* Only ever reachable on desktop-width viewports now: handleBellClick
+          navigates away instead of opening this on mobile, and the resize
+          handler above closes it if the window crosses back below the
+          breakpoint — so there is no more "mobile inline panel" branch to
+          keep, and nothing is ever mounted-but-hidden on mobile. Portaled
+          to document.body so the sidebar (and everything between it and
+          <body>) never gets a chance to clip, dim or out-stack the panel
+          via its own transform/opacity/stacking context. A very high
+          z-index on both layers keeps them above anything else in the app. */}
+      {open && desktopPanelPos && createPortal(
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className={`absolute right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] z-50 border border-white/10 ${PANEL_SURFACE_CLASSES}`}>
+          <div className="fixed inset-0 z-[999]" onClick={() => setOpen(false)} />
+          <div
+            className={`fixed w-[380px] max-w-[calc(100vw-2rem)] z-[1000] border border-white/15 ${PANEL_SURFACE_CLASSES}`}
+            style={{
+              top: desktopPanelPos.top,
+              left: desktopPanelPos.left,
+              ...(desktopThemeVars
+                ? {
+                    "--color-brand-primary": desktopThemeVars.primary,
+                    "--color-brand-secondary": desktopThemeVars.secondary,
+                  }
+                : {}),
+            } as React.CSSProperties}
+          >
             {panelChildren}
           </div>
-        </>
-      ))}
+        </>,
+        document.body
+      )}
     </div>
   );
 }

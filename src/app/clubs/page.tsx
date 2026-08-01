@@ -8,6 +8,7 @@ import { LogOut, Plus, Compass, CheckCircle2, ShieldCheck } from "lucide-react";
 import { ExploreSection } from "./ExploreSection";
 import type { DirectoryClub, MemberInfo } from "./ExploreSection";
 import { NotificationBell } from "@/components/layout/NotificationBell";
+import { BrandLogo } from "@/components/layout/BrandLogo";
 import { getUnreadNotificationCount, getRecentNotifications } from "@/lib/notifications";
 import { CLUB_PRIMARY_COLOR } from "@/lib/constants/clubTheme";
 
@@ -102,11 +103,7 @@ export default async function ClubsPage({
       {/* ── Top bar ─────────────────────────────────────────────────────────── */}
       <div className="border-b border-white/10 bg-brand-bg/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
-          <Link href="/" className="shrink-0">
-            <span className="text-lg font-black tracking-tight text-white whitespace-nowrap">
-              <span className="text-brand-primary" style={{ fontSize: "0.78em", letterSpacing: "-0.04em" }}>Mi</span>Padel<span className="text-brand-primary">Club</span>
-            </span>
-          </Link>
+          <BrandLogo size="sm" />
 
           {user ? (
             <div className="flex items-center gap-3 sm:gap-4 min-w-0 shrink-0">

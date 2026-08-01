@@ -8,6 +8,7 @@ import { getSafeInternalPath } from "@/lib/utils/safeRedirect";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Button, Card, CardHeader, CardContent, Input } from "@/components/ui";
+import { BrandLogo } from "@/components/layout/BrandLogo";
 
 export function LoginForm() {
   const router = useRouter();
@@ -85,11 +86,7 @@ export function LoginForm() {
     <div className="w-full max-w-sm">
       {/* Logo */}
       <div className="text-center mb-8">
-        <Link href="/" className="inline-block">
-          <span className="text-3xl font-black tracking-tight text-white">
-            <span className="text-brand-primary" style={{ fontSize: "0.78em", letterSpacing: "-0.04em" }}>Mi</span>Padel<span className="text-brand-primary">Club</span>
-          </span>
-        </Link>
+        <BrandLogo size="md" className="justify-center" />
         <p className="text-brand-muted text-sm mt-2">Accede a tu club</p>
       </div>
 

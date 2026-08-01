@@ -14,13 +14,16 @@ export const CLUB_HUB_TABS: Array<{
   Icon: LucideIcon;
   // Equipo has zero real access for ADMIN today (team/page.tsx redirects
   // ADMIN away entirely) — never widen that just to fill a tab; hide it
-  // outright instead of showing a tab that always 403s.
+  // outright instead of showing a tab that always 403s. Configuración is
+  // OWNER-only for the same reason: an ADMIN operates the club day to day
+  // but never owns its configuration (hours, pricing, location, sport
+  // defaults) — see CLAUDE.md → Role Philosophy.
   ownerOnly?: boolean;
 }> = [
   { key: "perfil_publico", label: "Perfil público", mobileLabel: "Perfil", Icon: Globe },
   { key: "noticias", label: "Noticias", mobileLabel: "Noticias", Icon: Megaphone },
   { key: "equipo", label: "Equipo", mobileLabel: "Equipo", Icon: ShieldCheck, ownerOnly: true },
-  { key: "configuracion", label: "Configuración", mobileLabel: "Config", Icon: Settings },
+  { key: "configuracion", label: "Configuración", mobileLabel: "Config", Icon: Settings, ownerOnly: true },
 ];
 
 export function clubHubTabsForRole(role: "OWNER" | "ADMIN") {
@@ -28,11 +31,14 @@ export function clubHubTabsForRole(role: "OWNER" | "ADMIN") {
 }
 
 // Server-side clamp — never trusts a client-supplied tab for a capability
-// the role doesn't actually have (Equipo, OWNER-only). An ADMIN requesting
-// ?tab=equipo falls back to the default view instead of a 403 page, same
-// spirit as the historical-route redirect rule below.
+// the role doesn't actually have (Equipo/Configuración, both OWNER-only).
+// An ADMIN requesting ?tab=equipo or ?tab=configuracion directly (typed
+// URL, stale bookmark, etc.) falls back to the default view instead of
+// rendering that content — the same rule the tab bar's own filtering
+// already implies, just enforced again here so it can never be bypassed
+// by skipping the UI.
 export function resolveClubHubTab(raw: string | undefined, role: "OWNER" | "ADMIN"): ClubHubTabKey {
-  if (raw === "equipo") return role === "OWNER" ? "equipo" : "perfil_publico";
-  if (raw === "noticias" || raw === "configuracion") return raw;
+  if (raw === "equipo" || raw === "configuracion") return role === "OWNER" ? raw : "perfil_publico";
+  if (raw === "noticias") return raw;
   return "perfil_publico";
 }

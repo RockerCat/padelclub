@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { OnboardingForm } from "@/app/onboarding/OnboardingForm";
 import { ArrowLeft } from "lucide-react";
+import { BrandLogo } from "@/components/layout/BrandLogo";
 
 export default async function CreateClubPage() {
   const supabase = await createClient();
@@ -18,11 +19,7 @@ export default async function CreateClubPage() {
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
-          <Link href="/">
-            <span className="text-3xl font-black tracking-tight text-white">
-              <span className="text-brand-primary" style={{ fontSize: "0.78em", letterSpacing: "-0.04em" }}>Mi</span>Padel<span className="text-brand-primary">Club</span>
-            </span>
-          </Link>
+          <BrandLogo size="md" className="justify-center" />
           <p className="text-brand-muted text-sm mt-2">Nuevo club</p>
         </div>
 

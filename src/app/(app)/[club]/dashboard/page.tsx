@@ -437,7 +437,12 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
               { label: "Jugadores",     Icon: Users,        href: `/${slug}/admin/players`,       color: "var(--club-primary)" },
               { label: "Reservaciones", Icon: CalendarDays, href: `/${slug}/admin/reservations`,  color: "var(--club-secondary)" },
             ]
-        ).map(({ label, Icon, href, color }) => (
+        )
+          // Configuración es exclusiva de OWNER (ver clubHubTabsConfig.ts)
+          // — este acceso rápido nunca debe ofrecerle a un ADMIN un atajo
+          // hacia una vista a la que ya no puede entrar.
+          .filter((item) => item.label !== "Configuración" || membership.role === "OWNER")
+          .map(({ label, Icon, href, color }) => (
           <Link
             key={label}
             href={href}

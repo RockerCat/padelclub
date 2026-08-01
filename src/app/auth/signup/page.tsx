@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { SignupForm, type InviteBranding } from "./SignupForm";
 import { CLUB_PRIMARY_COLOR, CLUB_SECONDARY_COLOR } from "@/lib/constants/clubTheme";
+import { BrandLogo } from "@/components/layout/BrandLogo";
 
 interface SignupPageProps {
   searchParams: Promise<{ invite?: string; next?: string }>;
@@ -100,11 +100,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
           </div>
         ) : (
           <div className="text-center mb-8">
-            <Link href="/" className="inline-block">
-              <span className="text-3xl font-black tracking-tight text-white">
-                <span className="text-brand-primary" style={{ fontSize: "0.78em", letterSpacing: "-0.04em" }}>Mi</span>Padel<span className="text-brand-primary">Club</span>
-              </span>
-            </Link>
+            <BrandLogo size="md" className="justify-center" />
             <p className="text-brand-muted text-sm mt-2">Crea tu cuenta</p>
           </div>
         )}
