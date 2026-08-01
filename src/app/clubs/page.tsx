@@ -4,11 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 import { isPlatformAdmin } from "@/lib/platformAdmin";
 import { Badge } from "@/components/ui";
 import { getClubEntryPath } from "@/lib/utils/navigation";
-import { LogOut, Plus, Compass, CheckCircle2, ShieldCheck } from "lucide-react";
+import { LogOut, Plus, Compass, CheckCircle2, ShieldCheck, ChevronDown } from "lucide-react";
 import { ExploreSection } from "./ExploreSection";
 import type { DirectoryClub, MemberInfo } from "./ExploreSection";
 import { NotificationBell } from "@/components/layout/NotificationBell";
 import { BrandLogo } from "@/components/layout/BrandLogo";
+import { RegisterMenu } from "@/components/features/marketing/RegisterMenu";
 import { getUnreadNotificationCount, getRecentNotifications } from "@/lib/notifications";
 import { CLUB_PRIMARY_COLOR } from "@/lib/constants/clubTheme";
 
@@ -78,13 +79,25 @@ export default async function ClubsPage({
   const isWelcomeMode = showWelcome && !!user && !hasClubs;
 
   // Skip directory fetch when in welcome mode — not needed
-  const directoryClubs: DirectoryClub[] = isWelcomeMode ? [] : await supabase
-    .from("clubs")
-    .select("id, name, slug, visibility, description, logo_url, whatsapp, city, state")
-    .eq("is_active", true)
-    .is("archived_at", null)
-    .order("name", { ascending: true })
-    .then(({ data }) => (data ?? []) as unknown as DirectoryClub[]);
+  const [directoryClubs, pendingRequestClubIds] = await Promise.all([
+    isWelcomeMode
+      ? Promise.resolve([] as DirectoryClub[])
+      : supabase
+          .from("clubs")
+          .select("id, name, slug, visibility, description, logo_url, whatsapp, city, state, latitude, longitude")
+          .eq("is_active", true)
+          .is("archived_at", null)
+          .order("name", { ascending: true })
+          .then(({ data }) => (data ?? []) as unknown as DirectoryClub[]),
+    isWelcomeMode || !user
+      ? Promise.resolve([] as string[])
+      : supabase
+          .from("club_join_requests")
+          .select("club_id")
+          .eq("profile_id", user.id)
+          .eq("status", "pending")
+          .then(({ data }) => (data ?? []).map((row) => row.club_id as string)),
+  ]);
 
   const sorted = [...memberships].sort((a, b) => {
     if (a.clubs.id === lastClubId) return -1;
@@ -144,12 +157,16 @@ export default async function ClubsPage({
               >
                 Iniciar sesión
               </Link>
-              <Link
-                href="/auth/signup"
-                className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-brand-primary text-brand-bg hover:bg-brand-primary/90 transition-colors"
-              >
-                Registrarse
-              </Link>
+              <RegisterMenu
+                align="right"
+                triggerClassName="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-brand-primary text-brand-bg hover:bg-brand-primary/90 transition-colors"
+                triggerContent={
+                  <>
+                    Registrarme
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </>
+                }
+              />
             </div>
           )}
         </div>
@@ -181,12 +198,11 @@ export default async function ClubsPage({
       ) : (
 
         /* ── Normal mode ────────────────────────────────────────────────────── */
-        <div className="max-w-3xl mx-auto px-4 py-8 md:py-12">
-          <div className="flex flex-col gap-10">
+        <div className="py-8 md:py-12">
 
             {/* ── Mis clubes (authenticated only) ─────────────────────────── */}
             {user && (
-              <section>
+              <section className="max-w-3xl mx-auto px-4 mb-10">
                 <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-3">
                   Mis clubes
                 </h2>
@@ -294,15 +310,15 @@ export default async function ClubsPage({
             )}
 
             {/* ── Explorar clubes ────────────────────────────────────────────── */}
-            <div id="explorar">
+            <div id="explorar" className="max-w-3xl lg:max-w-6xl mx-auto px-4">
               <ExploreSection
                 clubs={directoryClubs}
                 memberMap={memberMap}
+                pendingRequestClubIds={pendingRequestClubIds}
                 isAuthenticated={!!user}
               />
             </div>
 
-          </div>
         </div>
       )}
 
