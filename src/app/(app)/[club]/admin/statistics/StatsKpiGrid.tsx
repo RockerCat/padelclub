@@ -43,11 +43,11 @@ function StatKpiCard({
   color: string;
 }) {
   return (
-    <div className="relative bg-brand-surface border border-white/10 rounded-2xl p-5 overflow-hidden">
+    <div className="relative bg-brand-surface border border-white/10 rounded-2xl p-5 xl:p-4 overflow-hidden">
       <div className="absolute inset-x-0 top-0 h-[3px]" style={{ backgroundColor: color, opacity: 0.8 }} />
-      <Icon className="absolute right-4 bottom-4 w-14 h-14 text-white opacity-[0.04]" />
+      <Icon className="absolute right-4 bottom-4 w-14 h-14 xl:w-10 xl:h-10 text-white opacity-[0.04]" />
       <div
-        className="w-9 h-9 rounded-xl flex items-center justify-center mb-4"
+        className="w-9 h-9 rounded-xl flex items-center justify-center mb-4 xl:mb-3"
         style={{ backgroundColor: `color-mix(in srgb, ${color} 15%, transparent)`, color }}
       >
         <Icon className="w-4 h-4" />
@@ -77,7 +77,7 @@ export function StatsKpiGrid({
       : Math.round((previousSummary.confirmed / previousSummary.totalReservations) * 1000) / 10;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
       <StatKpiCard
         label="Reservas del periodo (todos los estados)"
         value={String(summary.totalReservations)}
