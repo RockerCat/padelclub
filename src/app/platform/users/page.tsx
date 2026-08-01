@@ -1,13 +1,16 @@
 import { createClient } from "@/lib/supabase/server";
-import { PlatformUsersTable, type PlatformUserRow } from "./PlatformUsersTable";
+import { PlatformUsersTable, type PlatformUserRow, type PlatformUserMembership } from "./PlatformUsersTable";
 
 export default async function PlatformUsersPage() {
   const supabase = await createClient();
 
   const { data, error } = await supabase.rpc("get_platform_users_overview");
+  // get_platform_users_overview's `memberships` column is jsonb — see the
+  // matching comment in [userId]/page.tsx for why `Json` is genuinely
+  // correct here and this cast reflects the RPC's real, guaranteed shape.
   const users: PlatformUserRow[] = (data ?? []).map((u) => ({
     ...u,
-    memberships: u.memberships ?? [],
+    memberships: (u.memberships ?? []) as unknown as PlatformUserMembership[],
   }));
 
   return (

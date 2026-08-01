@@ -32,6 +32,16 @@ export type ClubRole = ClubMember["role"];
 export type InvitationRole = InvitationLink["role"];
 export type PlayerCategory = ClubMember["category"];
 
+// club_members.role is DB-enforced to exactly these three values
+// (club_members_role_check, see 20260610000001_sprint1_core_schema.sql),
+// a CHECK constraint the Supabase generator doesn't expose — so ClubRole
+// above resolves to a plain `string`, and `as ClubRole` narrows nothing.
+// Share this one real guard everywhere a fetched role needs to become the
+// literal union component props expect ([club]/layout.tsx, profile/layout.tsx).
+export function isClubRole(role: string): role is "OWNER" | "ADMIN" | "PLAYER" {
+  return role === "OWNER" || role === "ADMIN" || role === "PLAYER";
+}
+
 // MVP skill-level categories, weakest to strongest — manually assigned by
 // admins for now. Order matters for any future ranking/sort UI.
 export const PLAYER_CATEGORIES: PlayerCategory[] = [

@@ -9,7 +9,7 @@ import { getPendingJoinRequestsCount } from "@/lib/joinRequests";
 import { getUnreadNotificationCount, getRecentNotifications } from "@/lib/notifications";
 import { getSidebarIdentity } from "@/lib/userIdentity";
 import { resolveActiveMembership } from "@/lib/utils/navigation";
-import type { ClubRole } from "@/types/database";
+import { isClubRole } from "@/types/domain";
 
 // /profile stays a global, account-level route (URL unchanged — this is a
 // Next.js route group, which adds no path segment) but now sits inside
@@ -41,8 +41,10 @@ export default async function ProfileLayout({ children }: { children: React.Reac
   // minimal top bar (same convention already used standalone by /clubs and
   // /notifications, neither of which sits under a club-scoped shell
   // either) instead of the club-scoped AppNav, which has no real club to
-  // point to.
-  if (!active) {
+  // point to. The isClubRole check is the same defensive narrowing as
+  // [club]/layout.tsx — active.role is DB-guaranteed to be one of the
+  // three roles, just not visible to NavActiveMembership's `string` type.
+  if (!active || !isClubRole(active.role)) {
     return (
       <div className="min-h-screen flex flex-col bg-brand-bg">
         <div className="border-b border-white/10 bg-brand-bg/80 backdrop-blur-sm sticky top-0 z-10">
@@ -86,7 +88,7 @@ export default async function ProfileLayout({ children }: { children: React.Reac
       <div className="flex flex-col md:flex-row flex-1">
         <AppNav
           club={active.club}
-          role={active.role as ClubRole}
+          role={active.role}
           membershipCount={count ?? 1}
           pendingJoinRequests={pendingJoinRequests}
           notificationCount={notificationCount}

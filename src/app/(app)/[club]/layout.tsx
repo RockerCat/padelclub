@@ -7,7 +7,7 @@ import Footer from "@/components/layout/Footer";
 import { getPendingJoinRequestsCount } from "@/lib/joinRequests";
 import { getUnreadNotificationCount, getRecentNotifications } from "@/lib/notifications";
 import { getSidebarIdentity } from "@/lib/userIdentity";
-import type { ClubRole } from "@/types/database";
+import { isClubRole } from "@/types/domain";
 
 interface ClubLayoutProps {
   children: React.ReactNode;
@@ -66,7 +66,14 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
     redirect("/unauthorized");
   }
 
-  const role = membership.role as ClubRole;
+  // club_members.role is DB-enforced to exactly these three values (see
+  // isClubRole) but that isn't visible to the generated Row type — narrow
+  // explicitly instead of an `as` cast that wouldn't actually narrow anything.
+  const { role: membershipRole } = membership;
+  if (!isClubRole(membershipRole)) {
+    redirect("/unauthorized");
+  }
+  const role = membershipRole;
 
   // Count total active memberships (for "Cambiar de club") and pending join
   // requests (for the Jugadores nav badge, OWNER/ADMIN only) side by side —

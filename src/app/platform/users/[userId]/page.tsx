@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui";
 import { UserActionsPanel } from "./UserActionsPanel";
+import type { PlatformUserMembership } from "../PlatformUsersTable";
 
 interface PageProps {
   params: Promise<{ userId: string }>;
@@ -45,6 +46,14 @@ export default async function PlatformUserDetailPage({ params }: PageProps) {
   const user = rows?.[0];
 
   if (!user && !error) notFound();
+
+  // get_platform_user_detail's `memberships` column is jsonb — Postgres
+  // has no static element type for it, so the generated Args type is
+  // (correctly) `Json`. The RPC's own SQL always builds it as
+  // jsonb_agg(jsonb_build_object('club_name', ..., 'club_slug', ...,
+  // 'role', ...)), defaulting to '[]'::jsonb — never null — so this is
+  // the one real shape it can ever have.
+  const memberships = (user?.memberships ?? []) as unknown as PlatformUserMembership[];
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8 md:py-12">
@@ -102,11 +111,11 @@ export default async function PlatformUserDetailPage({ params }: PageProps) {
             <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-3">
               Clubes y roles
             </h2>
-            {(user.memberships ?? []).length === 0 ? (
+            {memberships.length === 0 ? (
               <p className="text-sm text-brand-muted">No pertenece a ningún club.</p>
             ) : (
               <ul className="flex flex-col gap-2">
-                {(user.memberships ?? []).map((m) => (
+                {memberships.map((m) => (
                   <li
                     key={`${m.club_slug}-${m.role}`}
                     className="flex items-center justify-between text-sm px-3 py-2 rounded-xl bg-white/5 border border-white/10"

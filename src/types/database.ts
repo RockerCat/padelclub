@@ -1717,7 +1717,11 @@ export type Database = {
         }[]
       }
       claim_club: {
-        Args: { p_ip?: string; p_token_hash: string }
+        // p_ip: nullable — `DEFAULT NULL` in SQL, best-effort audit value
+        // (club_claim_events.ip_address is itself `string | null`). Same
+        // generator gap as create_club_news.p_tournament_id above;
+        // re-apply after regenerating.
+        Args: { p_ip?: string | null; p_token_hash: string }
         Returns: Json
       }
       claim_invitation: { Args: { p_token: string }; Returns: Json }
@@ -1789,7 +1793,13 @@ export type Database = {
           p_content: string
           p_image_url: string
           p_title: string
-          p_tournament_id: string
+          // Nullable at runtime (see 20261001000002_create_club_news_function.sql
+          // — the function branches on `p_tournament_id IS NOT NULL` and is
+          // not STRICT). `supabase gen types` has no way to express scalar
+          // RPC-argument nullability (unlike table columns, function params
+          // carry no NOT NULL metadata in the Postgres catalogs), so it always
+          // emits `string` here. Hand-corrected; re-apply after regenerating.
+          p_tournament_id: string | null
         }
         Returns: {
           club_id: string
@@ -1819,9 +1829,14 @@ export type Database = {
           p_court_id: string
           p_date: string
           p_duration_minutes: number
-          p_notes: string
+          // p_notes/p_title: nullable at runtime — reservations.title/notes
+          // are nullable columns and the function only rejects a missing
+          // title when p_type = 'block' (checked in-function, not via NOT
+          // NULL). Same generator gap as create_club_news.p_tournament_id
+          // above; re-apply after regenerating.
+          p_notes: string | null
           p_start_time: string
-          p_title: string
+          p_title: string | null
           p_type: string
         }
         Returns: string
@@ -1837,19 +1852,25 @@ export type Database = {
         Returns: string
       }
       create_tournament: {
+        // p_cover_image_url/p_description/p_prize_description/
+        // p_registration_*_at/p_starts_at/p_secondary_category: nullable —
+        // all `DEFAULT NULL` in SQL and the matching `tournaments` columns
+        // carry no NOT NULL. Same generator gap as
+        // create_club_news.p_tournament_id above; re-apply after
+        // regenerating.
         Args: {
           p_category: string
           p_club_id: string
-          p_cover_image_url?: string
-          p_description?: string
+          p_cover_image_url?: string | null
+          p_description?: string | null
           p_estimated_duration_minutes?: number
           p_max_pairs: number
           p_name: string
-          p_prize_description?: string
-          p_registration_closes_at?: string
-          p_registration_opens_at?: string
-          p_secondary_category?: string
-          p_starts_at?: string
+          p_prize_description?: string | null
+          p_registration_closes_at?: string | null
+          p_registration_opens_at?: string | null
+          p_secondary_category?: string | null
+          p_starts_at?: string | null
           p_visibility?: string
         }
         Returns: {
@@ -1922,12 +1943,17 @@ export type Database = {
       get_club_claim_preview: { Args: { p_token_hash: string }; Returns: Json }
       get_club_claim_status: {
         Args: { p_club_id: string }
+        // status: DB-enforced to exactly these three values
+        // (club_claim_links_status_check, see 20261003000001_club_claim_flow.sql)
+        // — a CHECK constraint the generator doesn't expose as a return-type
+        // literal union. Same class of gap as the nullable-arg cases above,
+        // but on a return column; re-apply after regenerating.
         Returns: {
           claimed_at: string
           claimed_by_email: string
           claimed_by_name: string
           created_at: string
-          status: string
+          status: "pending" | "claimed" | "revoked"
         }[]
       }
       get_club_join_requests: {
@@ -2297,18 +2323,24 @@ export type Database = {
         Returns: undefined
       }
       update_tournament: {
+        // p_cover_image_url/p_description/p_prize_description/
+        // p_registration_*_at/p_starts_at/p_secondary_category: nullable,
+        // same real columns/rule as create_tournament above (the function
+        // body explicitly re-derives NULL via NULLIF/COALESCE and
+        // `IS DISTINCT FROM`/`IS NOT NULL` checks) — re-apply after
+        // regenerating.
         Args: {
           p_category: string
-          p_cover_image_url: string
-          p_description: string
+          p_cover_image_url: string | null
+          p_description: string | null
           p_estimated_duration_minutes: number
           p_max_pairs: number
           p_name: string
-          p_prize_description: string
-          p_registration_closes_at: string
-          p_registration_opens_at: string
-          p_secondary_category: string
-          p_starts_at: string
+          p_prize_description: string | null
+          p_registration_closes_at: string | null
+          p_registration_opens_at: string | null
+          p_secondary_category: string | null
+          p_starts_at: string | null
           p_tournament_id: string
           p_visibility: string
         }
@@ -2341,7 +2373,10 @@ export type Database = {
         }[]
       }
       update_tournament_cover_image: {
-        Args: { p_cover_image_url: string; p_tournament_id: string }
+        // p_cover_image_url: nullable — tournaments.cover_image_url has no
+        // NOT NULL. Same generator gap as create_club_news.p_tournament_id
+        // above; re-apply after regenerating.
+        Args: { p_cover_image_url: string | null; p_tournament_id: string }
         Returns: {
           cancelled_at: string
           cancelled_by: string
@@ -2373,13 +2408,21 @@ export type Database = {
       upsert_pricing_rule_with_prices: {
         Args: {
           p_club_id: string
-          p_court_id: string
+          // p_court_id: nullable — club_pricing_rules.court_id has no NOT
+          // NULL (a club-wide rule has no court). Same generator gap as
+          // create_club_news.p_tournament_id above; re-apply after
+          // regenerating.
+          p_court_id: string | null
           p_days_of_week: number[]
           p_display_order: number
           p_end_time: string
           p_name: string
           p_prices: Json
-          p_rule_id: string
+          // p_rule_id: nullable — NULL means "create" (INSERT), non-null
+          // means "update this rule" (UPDATE); the function branches on
+          // `IF p_rule_id IS NULL`. Same generator gap; re-apply after
+          // regenerating.
+          p_rule_id: string | null
           p_start_time: string
         }
         Returns: string
