@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatNewsDate } from "@/components/clubs/PublicNewsCard";
 import { NewsTournamentChampions } from "@/components/clubs/NewsTournamentChampions";
 import { ShareNewsButtons } from "./ShareNewsButtons";
+import { NewsDetailEditAction } from "./NewsDetailEditAction";
 import { newsDetailPath } from "@/lib/newsPaths";
 import { computeTournamentClassification, getTournamentEntriesWithMembers } from "@/lib/tournamentEntries";
 import { tournamentCategoryLabel } from "@/lib/tournamentLabels";
@@ -47,24 +48,21 @@ export default async function ClubNewsDetailPage({ params }: Props) {
 
   if (!club) notFound();
 
+  // Selecciona las columnas completas de club_news (no solo las que la
+  // vista de lectura necesita): NewsForm/EditNewsModal esperan el tipo
+  // ClubNews completo para precargar el modo edición — created_by/
+  // created_at/updated_at nunca se muestran ni se editan aquí, solo
+  // viajan como parte de la fila para satisfacer ese tipo compartido.
+  const NEWS_COLUMNS = "id, club_id, slug, title, content, image_url, created_by, tournament_id, published_at, created_at, updated_at";
+
   // Compatibilidad con enlaces antiguos basados en UUID: si el parámetro
   // tiene forma de UUID, se resuelve por id (siempre acotado a club_id) y
   // se redirige de inmediato a la URL canónica con slug — mismo patrón ya
   // usado por el detalle de torneo. Nunca se deja indexable la variante
   // por UUID; solo existe la URL con slug de aquí en adelante.
   const { data: news } = UUID_RE.test(newsSlug)
-    ? await supabase
-        .from("club_news")
-        .select("id, slug, title, content, image_url, published_at, tournament_id")
-        .eq("id", newsSlug)
-        .eq("club_id", club.id)
-        .single()
-    : await supabase
-        .from("club_news")
-        .select("id, slug, title, content, image_url, published_at, tournament_id")
-        .eq("slug", newsSlug)
-        .eq("club_id", club.id)
-        .single();
+    ? await supabase.from("club_news").select(NEWS_COLUMNS).eq("id", newsSlug).eq("club_id", club.id).single()
+    : await supabase.from("club_news").select(NEWS_COLUMNS).eq("slug", newsSlug).eq("club_id", club.id).single();
 
   if (!news) notFound();
 
@@ -73,6 +71,30 @@ export default async function ClubNewsDetailPage({ params }: Props) {
   }
 
   const path = newsDetailPath(club.slug, news.slug);
+
+  // "Editar noticia" solo para OWNER/ADMIN con membresía ACTIVA en este
+  // club — nunca inferido del rol global del usuario ni de un flag del
+  // cliente. Un visitante no autenticado o un PLAYER nunca ven el botón;
+  // la propia Server Action (updateNews → requireAdminRole) re-valida
+  // esto igual del lado del servidor, así que ocultar el botón aquí es
+  // solo UX, nunca la defensa real.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const membership = user
+    ? (
+        await supabase
+          .from("club_members")
+          .select("role")
+          .eq("club_id", club.id)
+          .eq("profile_id", user.id)
+          .eq("is_active", true)
+          .single()
+      ).data
+    : null;
+
+  const canEditNews = membership?.role === "OWNER" || membership?.role === "ADMIN";
 
   // Campeones del torneo asociado (si existe) — nunca detectado por
   // título/contenido, siempre a través de news.tournament_id (asociación
@@ -147,7 +169,10 @@ export default async function ClubNewsDetailPage({ params }: Props) {
         </div>
 
         <div className="min-w-0">
-          <p className="text-xs text-brand-muted mb-2">{formatNewsDate(news.published_at)}</p>
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <p className="text-xs text-brand-muted">{formatNewsDate(news.published_at)}</p>
+            {canEditNews && <NewsDetailEditAction clubId={club.id} news={news} />}
+          </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white mb-6">{news.title}</h1>
 
           <NewsTournamentChampions champions={championRows} categoryLabel={tournamentCategoryText} />

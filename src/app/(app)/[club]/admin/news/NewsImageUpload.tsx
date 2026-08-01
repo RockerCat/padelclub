@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ImageIcon, Loader2, Upload } from "lucide-react";
+import { ImageIcon, Loader2, Upload, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 const BUCKET = "club-assets";
@@ -67,39 +67,64 @@ export function NewsImageUpload({ clubId, currentImageUrl }: NewsImageUploadProp
     }
   }
 
+  // Quitar la imagen es solo un estado local (limpia el input oculto,
+  // nunca borra nada en Storage — mismo patrón del proyecto de no
+  // limpiar la imagen anterior en ningún flujo existente): deja el
+  // formulario sin imagen hasta que el usuario suba una nueva. El submit
+  // sigue bloqueado del lado del servidor ("La imagen es obligatoria")
+  // exactamente igual que en creación.
+  function handleRemove() {
+    setError(null);
+    setPreviewUrl(null);
+    setStoredUrl(null);
+  }
+
   return (
     <div className="flex flex-col gap-2">
       <label className="text-sm font-medium text-white/80">Imagen</label>
 
       <input type="hidden" name="image_url" value={storedUrl ?? ""} />
 
-      <button
-        type="button"
-        onClick={() => fileRef.current?.click()}
-        disabled={uploading}
-        className="relative w-full aspect-[3/4] rounded-xl border border-dashed border-white/15 bg-white/[0.02] overflow-hidden flex items-center justify-center hover:border-white/30 transition-colors disabled:opacity-60"
-      >
-        {previewUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={previewUrl} alt="" className="w-full h-full object-cover" />
-        ) : (
-          <div className="flex flex-col items-center gap-2 text-brand-muted/60">
-            <ImageIcon className="w-6 h-6" />
-            <span className="text-xs">Selecciona una imagen</span>
-          </div>
-        )}
-
-        <div className="absolute inset-0 bg-black/0 hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 hover:opacity-100">
-          {uploading ? (
-            <Loader2 className="w-5 h-5 text-white animate-spin" />
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          className="relative w-full aspect-[3/4] rounded-xl border border-dashed border-white/15 bg-white/[0.02] overflow-hidden flex items-center justify-center hover:border-white/30 transition-colors disabled:opacity-60"
+        >
+          {previewUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={previewUrl} alt="" className="w-full h-full object-cover" />
           ) : (
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-white bg-black/60 px-3 py-1.5 rounded-lg">
-              <Upload className="w-3.5 h-3.5" />
-              {previewUrl ? "Cambiar imagen" : "Subir imagen"}
-            </span>
+            <div className="flex flex-col items-center gap-2 text-brand-muted/60">
+              <ImageIcon className="w-6 h-6" />
+              <span className="text-xs">Selecciona una imagen</span>
+            </div>
           )}
-        </div>
-      </button>
+
+          <div className="absolute inset-0 bg-black/0 hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 hover:opacity-100">
+            {uploading ? (
+              <Loader2 className="w-5 h-5 text-white animate-spin" />
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-white bg-black/60 px-3 py-1.5 rounded-lg">
+                <Upload className="w-3.5 h-3.5" />
+                {previewUrl ? "Cambiar imagen" : "Subir imagen"}
+              </span>
+            )}
+          </div>
+        </button>
+
+        {previewUrl && !uploading && (
+          <button
+            type="button"
+            onClick={handleRemove}
+            aria-label="Quitar imagen"
+            className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/70 text-white flex items-center justify-center hover:bg-black/90 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
 
       <input
         ref={fileRef}
