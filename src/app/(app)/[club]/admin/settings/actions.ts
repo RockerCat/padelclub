@@ -6,6 +6,7 @@ import { DAY_NAMES, validateOperatingHours, type OperatingHour } from "@/lib/ope
 import { DURATION_CATALOG, getClubDurations, durationLabel } from "@/lib/durations";
 import { roundToCents } from "@/lib/reservationPricing";
 import { clubHubPath } from "@/lib/clubHubPaths";
+import { resolveClubAccess } from "@/lib/clubAccess";
 
 export type UpdateAllowedDurationsState = { success?: boolean; error?: string };
 
@@ -20,22 +21,9 @@ export async function updateClubCover(
 ): Promise<{ error?: string }> {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-  if (userError || !user) return { error: "No autenticado." };
-
-  const { data: membership } = await supabase
-    .from("club_members")
-    .select("role")
-    .eq("club_id", clubId)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-
-  if (!membership || !["OWNER", "ADMIN"].includes(membership.role)) {
-    return { error: "No tienes permiso para editar este club." };
+  const access = await resolveClubAccess(supabase, clubId);
+  if (!access.authorized || !["OWNER", "ADMIN"].includes(access.role)) {
+    return { error: access.authorized ? "No tienes permiso para editar este club." : access.error };
   }
 
   const { error: updateError } = await supabase
@@ -53,25 +41,9 @@ export async function updateClubLogo(
 ): Promise<{ error?: string }> {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    return { error: "No autenticado." };
-  }
-
-  const { data: membership } = await supabase
-    .from("club_members")
-    .select("role")
-    .eq("club_id", clubId)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-
-  if (!membership || !["OWNER", "ADMIN"].includes(membership.role)) {
-    return { error: "No tienes permiso para editar este club." };
+  const access = await resolveClubAccess(supabase, clubId);
+  if (!access.authorized || !["OWNER", "ADMIN"].includes(access.role)) {
+    return { error: access.authorized ? "No tienes permiso para editar este club." : access.error };
   }
 
   const { error: updateError } = await supabase
@@ -92,19 +64,9 @@ export async function updateClubName(
 ): Promise<{ error?: string }> {
   const supabase = await createClient();
 
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
-  if (userError || !user) return { error: "No autenticado." };
-
-  const { data: membership } = await supabase
-    .from("club_members")
-    .select("role")
-    .eq("club_id", clubId)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-
-  if (!membership || !["OWNER", "ADMIN"].includes(membership.role)) {
-    return { error: "No tienes permiso para editar este club." };
+  const access = await resolveClubAccess(supabase, clubId);
+  if (!access.authorized || !["OWNER", "ADMIN"].includes(access.role)) {
+    return { error: access.authorized ? "No tienes permiso para editar este club." : access.error };
   }
 
   const trimmed = name.trim();
@@ -128,22 +90,9 @@ export async function updateAllowedDurations(
   formData: FormData
 ): Promise<UpdateAllowedDurationsState> {
   const supabase = await createClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-  if (userError || !user) return { error: "No autenticado." };
-
-  const { data: membership } = await supabase
-    .from("club_members")
-    .select("role")
-    .eq("club_id", clubId)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-
-  if (!membership || membership.role !== "OWNER") {
-    return { error: "Solo el propietario puede modificar la configuración." };
+  const access = await resolveClubAccess(supabase, clubId);
+  if (!access.authorized || access.role !== "OWNER") {
+    return { error: access.authorized ? "Solo el propietario puede modificar la configuración." : access.error };
   }
 
   const raw = formData.getAll("durations").map((v) => parseInt(v as string, 10));
@@ -187,22 +136,10 @@ export type PricingRuleFormState = { success?: boolean; error?: string };
 
 async function requirePricingOwner(clubId: string) {
   const supabase = await createClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-  if (userError || !user) return { supabase: null, error: "No autenticado." };
+  const access = await resolveClubAccess(supabase, clubId);
 
-  const { data: membership } = await supabase
-    .from("club_members")
-    .select("role")
-    .eq("club_id", clubId)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-
-  if (!membership || membership.role !== "OWNER") {
-    return { supabase: null, error: "Solo el propietario puede modificar las tarifas." };
+  if (!access.authorized || access.role !== "OWNER") {
+    return { supabase: null, error: access.authorized ? "Solo el propietario puede modificar las tarifas." : access.error };
   }
 
   return { supabase, error: null };
@@ -376,22 +313,9 @@ export async function saveOperatingHours(
   hours: OperatingHour[]
 ): Promise<{ success?: boolean; error?: string }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-  if (userError || !user) return { error: "No autenticado." };
-
-  const { data: membership } = await supabase
-    .from("club_members")
-    .select("role")
-    .eq("club_id", clubId)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-
-  if (!membership || membership.role !== "OWNER") {
-    return { error: "Solo el propietario puede modificar los horarios." };
+  const access = await resolveClubAccess(supabase, clubId);
+  if (!access.authorized || access.role !== "OWNER") {
+    return { error: access.authorized ? "Solo el propietario puede modificar los horarios." : access.error };
   }
 
   // Validate each day — closes_at must be strictly after opens_at when open
@@ -434,19 +358,9 @@ export async function addGalleryImage(
 ): Promise<{ error?: string }> {
   const supabase = await createClient();
 
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
-  if (userError || !user) return { error: "No autenticado." };
-
-  const { data: membership } = await supabase
-    .from("club_members")
-    .select("role")
-    .eq("club_id", clubId)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-
-  if (!membership || !["OWNER", "ADMIN"].includes(membership.role)) {
-    return { error: "No tienes permiso para editar este club." };
+  const access = await resolveClubAccess(supabase, clubId);
+  if (!access.authorized || !["OWNER", "ADMIN"].includes(access.role)) {
+    return { error: access.authorized ? "No tienes permiso para editar este club." : access.error };
   }
 
   const { data: club } = await supabase
@@ -500,19 +414,9 @@ export async function removeGalleryImage(
 ): Promise<{ error?: string }> {
   const supabase = await createClient();
 
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
-  if (userError || !user) return { error: "No autenticado." };
-
-  const { data: membership } = await supabase
-    .from("club_members")
-    .select("role")
-    .eq("club_id", clubId)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-
-  if (!membership || !["OWNER", "ADMIN"].includes(membership.role)) {
-    return { error: "No tienes permiso para editar este club." };
+  const access = await resolveClubAccess(supabase, clubId);
+  if (!access.authorized || !["OWNER", "ADMIN"].includes(access.role)) {
+    return { error: access.authorized ? "No tienes permiso para editar este club." : access.error };
   }
 
   const { data: club } = await supabase

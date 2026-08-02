@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { resolveClubAccess } from "@/lib/clubAccess";
 import { TournamentsGrid } from "./TournamentsGrid";
 import { compareTournaments } from "@/lib/tournamentSort";
 
@@ -26,16 +27,13 @@ export default async function TournamentsPage({ params }: TournamentsPageProps) 
 
   if (!club) notFound();
 
-  const { data: membership } = await supabase
-    .from("club_members")
-    .select("role")
-    .eq("club_id", club.id)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-
-  if (!membership) redirect("/unauthorized");
-  if (!["OWNER", "ADMIN"].includes(membership.role)) redirect(`/${slug}`);
+  // resolveClubAccess also recognizes SUPERADMIN's elevated "Entrar al
+  // club" access (never a club_members row) for an active club — the
+  // parent layouts already granted it; this page must not re-reject it
+  // with its own independent membership check.
+  const access = await resolveClubAccess(supabase, club.id);
+  if (!access.authorized) redirect("/unauthorized");
+  if (!["OWNER", "ADMIN"].includes(access.role)) redirect(`/${slug}`);
 
   // Single query for the whole list — club_id filtered explicitly (never
   // relying on RLS alone, RLS remains defense-in-depth).

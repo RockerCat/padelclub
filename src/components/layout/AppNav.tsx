@@ -33,7 +33,7 @@ import { ChangeClubModal } from "./ChangeClubModal";
 import { CreateClubModal } from "./CreateClubModal";
 import type { NotificationRow } from "@/lib/notifications";
 import type { SidebarIdentityData } from "@/lib/userIdentity";
-import { clubRoleLabel } from "@/lib/roleLabels";
+import { clubRoleLabel, PLATFORM_ADMIN_LABEL } from "@/lib/roleLabels";
 import { CLUB_PRIMARY_COLOR } from "@/lib/constants/clubTheme";
 
 function getInitials(name: string): string {
@@ -96,6 +96,11 @@ interface AppNavProps {
   notificationCount?: number;
   notificationItems?: NotificationRow[];
   identity: SidebarIdentityData;
+  /** SUPERADMIN elevated "Entrar al club" access — role stays "OWNER" for
+   *  capability gating below, but the person's own identity must never
+   *  read as "Propietario". Overrides the roleLabel shown next to their
+   *  name/avatar everywhere it's computed. */
+  isSuperadminAccess?: boolean;
 }
 
 // pendingJoinRequests only ever has a meaningful value for OWNER/ADMIN (the
@@ -305,6 +310,9 @@ function MobileTabBarItem({
 interface NavContentProps {
   club: AppNavProps["club"];
   role: AppNavProps["role"];
+  /** Precomputed label — "Superadministrador" for SUPERADMIN elevated
+   *  access, otherwise the normal clubRoleLabel(role). */
+  roleLabel: string;
   membershipCount: number;
   navItems: NavItem[];
   pathname: string;
@@ -325,6 +333,7 @@ interface NavContentProps {
 function NavContent({
   club,
   role,
+  roleLabel,
   membershipCount,
   navItems,
   pathname,
@@ -339,7 +348,7 @@ function NavContent({
   return (
     <nav className="flex flex-col h-full">
       <div className="relative">
-        <ClubHeader club={club} role={role} />
+        <ClubHeader club={club} role={role} roleLabel={roleLabel} />
         <div className="absolute top-3 right-3">
           <NotificationBell initialCount={notificationCount} initialItems={notificationItems} />
         </div>
@@ -421,7 +430,7 @@ function NavContent({
           name={identity.name}
           email={identity.email}
           avatarUrl={identity.avatarUrl}
-          roleLabel={clubRoleLabel(role)}
+          roleLabel={roleLabel}
         />
         <Link
           href="/profile"
@@ -514,9 +523,16 @@ export function AppNav({
   notificationCount = 0,
   notificationItems = [],
   identity,
+  isSuperadminAccess = false,
 }: AppNavProps) {
   const router = useRouter();
   const pathname = usePathname();
+  // Computed once, used everywhere a role label is shown next to the
+  // person's own identity or the club-relationship header — SUPERADMIN
+  // elevated access must never read as "Propietario" (see AppNavProps.
+  // isSuperadminAccess). `role` itself stays "OWNER" for every capability
+  // check below, unaffected.
+  const effectiveRoleLabel = isSuperadminAccess ? PLATFORM_ADMIN_LABEL : clubRoleLabel(role);
   // Menú de usuario mobile — compartido por los tres roles (cada uno monta
   // su propio trigger/panel, nunca los dos a la vez, ver los dos bloques
   // "role === PLAYER ? ... : ..." más abajo): Mi Perfil/Cambiar de
@@ -601,6 +617,7 @@ export function AppNav({
         <NavContent
           club={club}
           role={role}
+          roleLabel={effectiveRoleLabel}
           membershipCount={membershipCount}
           navItems={navItems}
           pathname={pathname}
@@ -652,7 +669,7 @@ export function AppNav({
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-white truncate">{club.name}</p>
-                  <p className="text-[11px] text-brand-muted truncate">{clubRoleLabel(role)}</p>
+                  <p className="text-[11px] text-brand-muted truncate">{effectiveRoleLabel}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -794,7 +811,7 @@ export function AppNav({
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-white truncate">{club.name}</p>
-                  <p className="text-[11px] text-brand-muted truncate">{clubRoleLabel(role)}</p>
+                  <p className="text-[11px] text-brand-muted truncate">{effectiveRoleLabel}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">

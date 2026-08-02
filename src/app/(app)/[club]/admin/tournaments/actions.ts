@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { bogotaWallClockToISO } from "@/lib/utils/bogotaDatetime";
+import { resolveClubAccess } from "@/lib/clubAccess";
 import type { Tournament } from "@/types/database";
 
 export type TournamentActionState = {
@@ -27,25 +28,10 @@ const VISIBILITIES = ["public", "private"];
 
 async function requireAdminRole(clubId: string) {
   const supabase = await createClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+  const access = await resolveClubAccess(supabase, clubId);
 
-  if (userError || !user) {
-    return { supabase: null, error: "No autenticado." };
-  }
-
-  const { data: membership } = await supabase
-    .from("club_members")
-    .select("role")
-    .eq("club_id", clubId)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-
-  if (!membership || !["OWNER", "ADMIN"].includes(membership.role)) {
-    return { supabase: null, error: "Sin permiso." };
+  if (!access.authorized || !["OWNER", "ADMIN"].includes(access.role)) {
+    return { supabase: null, error: access.authorized ? "Sin permiso." : access.error };
   }
 
   return { supabase, error: null };

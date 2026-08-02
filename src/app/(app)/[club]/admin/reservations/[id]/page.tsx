@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { resolveClubAccess } from "@/lib/clubAccess";
 import { updateReservation, cancelReservation, getAvailableSlots } from "../actions";
 import { ReservationForm } from "../ReservationForm";
 import { CancelButton } from "./CancelButton";
@@ -59,15 +60,8 @@ export default async function EditReservationPage({
 
   if (!club) notFound();
 
-  const { data: membership } = await supabase
-    .from("club_members")
-    .select("role")
-    .eq("club_id", club.id)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-
-  if (!membership || !["OWNER", "ADMIN"].includes(membership.role)) {
+  const access = await resolveClubAccess(supabase, club.id);
+  if (!access.authorized || !["OWNER", "ADMIN"].includes(access.role)) {
     redirect(`/${slug}`);
   }
 

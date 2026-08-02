@@ -1,5 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { checkProfileIsPlatformAdmin } from "@/lib/platformAdminQuery";
+import { isClubRole } from "@/types/domain";
 import { getTournamentEntriesWithMembers, summarizeCapacity } from "@/lib/tournamentEntries";
 import { TournamentDetailView } from "@/components/tournaments/TournamentDetailView";
 
@@ -33,7 +35,7 @@ export default async function TournamentDetailPage({ params }: TournamentDetailP
 
   if (!club) notFound();
 
-  const { data: membership } = await supabase
+  const { data: membershipRow } = await supabase
     .from("club_members")
     .select("id, role")
     .eq("club_id", club.id)
@@ -41,6 +43,18 @@ export default async function TournamentDetailPage({ params }: TournamentDetailP
     .eq("is_active", true)
     .single();
 
+  if (membershipRow && !isClubRole(membershipRow.role)) redirect("/unauthorized");
+
+  // SUPERADMIN "Entrar al club" — the parent layouts already granted
+  // elevated access; this page must not re-reject it with its own
+  // independent membership check. No own club_members row, so
+  // ownClubMemberId stays null (isAdmin below already skips every own-
+  // participation lookup for OWNER/ADMIN regardless).
+  const membership: { id: string | null; role: "OWNER" | "ADMIN" | "PLAYER" } | null = membershipRow
+    ? { id: membershipRow.id, role: membershipRow.role as "OWNER" | "ADMIN" | "PLAYER" }
+    : (await checkProfileIsPlatformAdmin(supabase, user.id))
+      ? { id: null, role: "OWNER" }
+      : null;
   if (!membership) redirect("/unauthorized");
 
   // Compatibilidad con enlaces antiguos basados en UUID (incluida la
@@ -81,7 +95,11 @@ export default async function TournamentDetailPage({ params }: TournamentDetailP
     // nunca se autoinscriben (misma regla que ya regía la página admin).
     isAdmin
       ? Promise.resolve({ data: null as { category: string | null }[] | null })
-      : supabase.rpc("get_club_member_sport_state", { p_club_id: club.id, p_club_member_id: membership.id }),
+      : // membership.id is only ever null for elevated SUPERADMIN access,
+        // which always resolves role to "OWNER" (isAdmin true) — this
+        // branch only runs when !isAdmin, so a real PLAYER membership
+        // (with a real id) is the only way to reach it.
+        supabase.rpc("get_club_member_sport_state", { p_club_id: club.id, p_club_member_id: membership.id! }),
     isAdmin
       ? Promise.resolve({ data: null as { full_name: string | null; avatar_url: string | null } | null })
       : supabase.from("profiles").select("full_name, avatar_url").eq("id", user.id).single(),
@@ -109,7 +127,10 @@ export default async function TournamentDetailPage({ params }: TournamentDetailP
         entriesError={entriesError}
         capacity={capacity}
         role={role}
-        ownClubMemberId={membership.id}
+        // TournamentDetailView only reads ownClubMemberId for PLAYER-only
+        // participation UI (never for OWNER/ADMIN, real or elevated) —
+        // same non-null guarantee as the RPC call above.
+        ownClubMemberId={membership.id!}
         ownUserId={user.id}
         ownFullName={ownProfile?.full_name ?? null}
         ownAvatarUrl={ownProfile?.avatar_url ?? null}

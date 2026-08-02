@@ -16,6 +16,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { checkProfileIsPlatformAdmin } from "@/lib/platformAdminQuery";
 import {
   DEFAULT_OPERATING_HOURS,
   DAY_NAMES,
@@ -308,13 +309,20 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
     .single();
   if (!club) notFound();
 
-  const { data: membership } = await supabase
+  const { data: membershipRow } = await supabase
     .from("club_members")
     .select("id, role")
     .eq("club_id", club.id)
     .eq("profile_id", user.id)
     .eq("is_active", true)
     .single();
+
+  // SUPERADMIN "Entrar al club" — the parent layouts already granted
+  // elevated access ([club]/layout.tsx, admin/layout.tsx); this page must
+  // not re-reject it with its own independent membership check. `id` is
+  // only ever used below inside the PLAYER-only branch, which elevated
+  // access (always role "OWNER") never enters.
+  const membership = membershipRow ?? (await checkProfileIsPlatformAdmin(supabase, user.id) ? { id: null, role: "OWNER" as const } : null);
   if (!membership) redirect("/unauthorized");
 
   // PLAYER gets its own personal sport Dashboard at this exact same URL

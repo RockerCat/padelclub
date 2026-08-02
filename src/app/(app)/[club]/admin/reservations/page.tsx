@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { resolveClubAccess } from "@/lib/clubAccess";
 import type { CalendarReservation, CalendarCourt, WeekDay } from "./WeekCalendar";
 import { PendingRequestsSection } from "./PendingRequestsSection";
 import type { PendingRequest } from "./PendingRequestsSection";
@@ -64,14 +65,12 @@ export default async function AdminReservationsPage({
     .single();
   if (!club) notFound();
 
-  const { data: membership } = await supabase
-    .from("club_members")
-    .select("role")
-    .eq("club_id", club.id)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-  if (!membership || !["OWNER", "ADMIN"].includes(membership.role)) {
+  // resolveClubAccess also recognizes SUPERADMIN's elevated "Entrar al
+  // club" access (never a club_members row) for an active club — the
+  // parent layouts already granted it; this page must not re-reject it
+  // with its own independent membership check.
+  const access = await resolveClubAccess(supabase, club.id);
+  if (!access.authorized || !["OWNER", "ADMIN"].includes(access.role)) {
     redirect(`/${slug}`);
   }
 

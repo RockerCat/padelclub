@@ -1,5 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { checkProfileIsPlatformAdmin } from "@/lib/platformAdminQuery";
+import { isClubRole } from "@/types/domain";
 import { RankingView } from "./RankingView";
 import { CLUB_PRIMARY_COLOR } from "@/lib/constants/clubTheme";
 
@@ -30,13 +32,26 @@ export default async function RankingPage({ params }: RankingPageProps) {
     .single();
   if (!club) notFound();
 
-  const { data: membership } = await supabase
+  const { data: membershipRow } = await supabase
     .from("club_members")
     .select("id, role")
     .eq("club_id", club.id)
     .eq("profile_id", user.id)
     .eq("is_active", true)
     .single();
+
+  if (membershipRow && !isClubRole(membershipRow.role)) redirect("/unauthorized");
+
+  // SUPERADMIN "Entrar al club" — the parent layouts already granted
+  // elevated access; this page must not re-reject it with its own
+  // independent membership check. No own club_members row to highlight/
+  // read sport state for, so ownClubMemberId stays null for it — the
+  // ranking view already renders correctly with no "own row" highlighted.
+  const membership: { id: string | null; role: "OWNER" | "ADMIN" | "PLAYER" } | null = membershipRow
+    ? { id: membershipRow.id, role: membershipRow.role as "OWNER" | "ADMIN" | "PLAYER" }
+    : (await checkProfileIsPlatformAdmin(supabase, user.id))
+      ? { id: null, role: "OWNER" }
+      : null;
   if (!membership) redirect("/unauthorized");
 
   // Catálogo global, ordenado por sort_order — nunca hardcodeado. Público
@@ -53,10 +68,12 @@ export default async function RankingPage({ params }: RankingPageProps) {
   // la primera del catálogo por sort_order. Nunca un valor fijo.
   let initialCategory: string | null = null;
 
-  const { data: ownState } = await supabase.rpc("get_club_member_sport_state", {
-    p_club_id: club.id,
-    p_club_member_id: membership.id,
-  });
+  const { data: ownState } = membership.id
+    ? await supabase.rpc("get_club_member_sport_state", {
+        p_club_id: club.id,
+        p_club_member_id: membership.id,
+      })
+    : { data: null };
   if (ownState && ownState.length > 0) {
     initialCategory = ownState[0].category;
   } else if (club.default_player_category) {

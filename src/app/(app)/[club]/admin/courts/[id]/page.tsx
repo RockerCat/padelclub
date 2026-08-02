@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { resolveClubAccess } from "@/lib/clubAccess";
 import { Badge } from "@/components/ui";
 import { CourtForm } from "../CourtForm";
 import { updateCourt } from "../actions";
@@ -28,16 +29,9 @@ export default async function CourtDetailPage({ params }: CourtDetailPageProps) 
 
   if (!club) notFound();
 
-  const { data: membership } = await supabase
-    .from("club_members")
-    .select("role")
-    .eq("club_id", club.id)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-
-  if (!membership) redirect("/unauthorized");
-  if (!["OWNER", "ADMIN"].includes(membership.role)) redirect(`/${slug}`);
+  const access = await resolveClubAccess(supabase, club.id);
+  if (!access.authorized) redirect("/unauthorized");
+  if (!["OWNER", "ADMIN"].includes(access.role)) redirect(`/${slug}`);
 
   const { data: court } = await supabase
     .from("courts")

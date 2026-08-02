@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { resolveClubAccess } from "@/lib/clubAccess";
 
 export type CourtFormState = {
   success?: boolean;
@@ -8,31 +9,19 @@ export type CourtFormState = {
 };
 
 // ─── Shared permission guard ─────────────────────────────────────────────────
+// Real OWNER/ADMIN membership behaves exactly as before; resolveClubAccess
+// additionally recognizes SUPERADMIN's elevated "Entrar al club" access
+// (never a club_members row) for an active club — see src/lib/clubAccess.ts.
 
 async function requireAdminRole(clubId: string) {
   const supabase = await createClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+  const access = await resolveClubAccess(supabase, clubId);
 
-  if (userError || !user) {
-    return { supabase: null, user: null, error: "No autenticado." };
+  if (!access.authorized || !["OWNER", "ADMIN"].includes(access.role)) {
+    return { supabase: null, user: null, error: access.authorized ? "Sin permiso." : access.error };
   }
 
-  const { data: membership } = await supabase
-    .from("club_members")
-    .select("role")
-    .eq("club_id", clubId)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-
-  if (!membership || !["OWNER", "ADMIN"].includes(membership.role)) {
-    return { supabase: null, user: null, error: "Sin permiso." };
-  }
-
-  return { supabase, user, error: null };
+  return { supabase, user: access.user, error: null };
 }
 
 // ─── Shared field parsing ────────────────────────────────────────────────────

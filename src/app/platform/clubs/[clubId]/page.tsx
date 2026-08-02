@@ -9,7 +9,6 @@ import {
   Megaphone,
   Home,
   Lock,
-  Power,
   UserCog,
   LogIn,
   Building2,
@@ -17,6 +16,8 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { Badge, Button } from "@/components/ui";
 import { ClubClaimSection, type ClubClaimStatus } from "./ClubClaimSection";
+import { DeactivateClubButton } from "./DeactivateClubButton";
+import { ReactivateClubButton } from "./ReactivateClubButton";
 
 interface PageProps {
   params: Promise<{ clubId: string }>;
@@ -167,13 +168,39 @@ export default async function PlatformClubDetailPage({ params }: PageProps) {
             Acciones
           </h2>
           <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
-            <SoonButton
-              label={club.is_active ? "Desactivar club" : "Activar club"}
-              Icon={Power}
-              variant="danger"
-            />
+            {club.is_active ? (
+              <DeactivateClubButton clubId={club.id} />
+            ) : (
+              <ReactivateClubButton clubId={club.id} />
+            )}
             <SoonButton label="Cambiar Owner" Icon={UserCog} />
-            <SoonButton label="Entrar al club" Icon={LogIn} />
+            {club.is_active ? (
+              <Link
+                href={`/${club.slug}/dashboard`}
+                className="inline-flex items-center justify-between gap-2 h-10 px-4 text-sm font-medium rounded-xl border border-white/20 text-white hover:border-white/40 hover:bg-white/5 active:bg-white/10 transition-all duration-200 w-full sm:w-auto"
+              >
+                <span className="flex items-center gap-2">
+                  <LogIn className="w-4 h-4" />
+                  Entrar al club
+                </span>
+              </Link>
+            ) : (
+              <Button
+                variant="secondary"
+                disabled
+                title="Reactiva el club primero para poder entrar."
+                className="justify-between w-full sm:w-auto"
+              >
+                <span className="flex items-center gap-2">
+                  <LogIn className="w-4 h-4" />
+                  Entrar al club
+                </span>
+                <span className="text-[10px] font-medium bg-white/10 text-brand-muted px-1.5 py-0.5 rounded-md flex items-center gap-1 ml-2">
+                  <Lock className="w-2.5 h-2.5" />
+                  Reactiva primero
+                </span>
+              </Button>
+            )}
             <SoonButton label="Administrar administradores" Icon={Building2} />
           </div>
         </>

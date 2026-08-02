@@ -787,6 +787,8 @@ export type Database = {
           country: string | null
           cover_image_url: string | null
           created_at: string
+          deactivated_at: string | null
+          deactivated_by: string | null
           default_player_category: string | null
           description: string | null
           facebook: string | null
@@ -800,6 +802,8 @@ export type Database = {
           name: string
           pending_claim: boolean
           primary_color: string
+          reactivated_at: string | null
+          reactivated_by: string | null
           secondary_color: string
           slug: string
           state: string | null
@@ -817,6 +821,8 @@ export type Database = {
           country?: string | null
           cover_image_url?: string | null
           created_at?: string
+          deactivated_at?: string | null
+          deactivated_by?: string | null
           default_player_category?: string | null
           description?: string | null
           facebook?: string | null
@@ -830,6 +836,8 @@ export type Database = {
           name: string
           pending_claim?: boolean
           primary_color?: string
+          reactivated_at?: string | null
+          reactivated_by?: string | null
           secondary_color?: string
           slug: string
           state?: string | null
@@ -847,6 +855,8 @@ export type Database = {
           country?: string | null
           cover_image_url?: string | null
           created_at?: string
+          deactivated_at?: string | null
+          deactivated_by?: string | null
           default_player_category?: string | null
           description?: string | null
           facebook?: string | null
@@ -860,6 +870,8 @@ export type Database = {
           name?: string
           pending_claim?: boolean
           primary_color?: string
+          reactivated_at?: string | null
+          reactivated_by?: string | null
           secondary_color?: string
           slug?: string
           state?: string | null
@@ -870,11 +882,25 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "clubs_deactivated_by_fkey"
+            columns: ["deactivated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "clubs_default_player_category_fkey"
             columns: ["default_player_category"]
             isOneToOne: false
             referencedRelation: "sport_categories"
             referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "clubs_reactivated_by_fkey"
+            columns: ["reactivated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -2128,9 +2154,17 @@ export type Database = {
           slug: string
         }[]
       }
+      platform_deactivate_club: {
+        Args: { p_club_id: string }
+        Returns: undefined
+      }
       platform_generate_club_claim_link: {
         Args: { p_club_id: string; p_token_hash: string }
         Returns: string
+      }
+      platform_reactivate_club: {
+        Args: { p_club_id: string }
+        Returns: undefined
       }
       platform_revoke_club_claim_link: {
         Args: { p_club_id: string }

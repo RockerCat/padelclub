@@ -8,6 +8,9 @@ import { getPendingJoinRequestsCount } from "@/lib/joinRequests";
 import { getUnreadNotificationCount, getRecentNotifications } from "@/lib/notifications";
 import { getSidebarIdentity } from "@/lib/userIdentity";
 import { isClubRole } from "@/types/domain";
+import { ClubDeactivatedScreen } from "@/components/layout/ClubDeactivatedScreen";
+import { checkProfileIsPlatformAdmin } from "@/lib/platformAdminQuery";
+import { SuperadminAccessBanner } from "@/components/layout/SuperadminAccessBanner";
 
 interface ClubLayoutProps {
   children: React.ReactNode;
@@ -34,11 +37,18 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
   // A club created via platform_create_pending_club is is_active=true from
   // birth (Entrega de Club — see 20261005000001), so this plain lookup
   // already finds it — no special-cased pending-club branch needed.
+  //
+  // No .eq("is_active", true) here on purpose: an inactive club (SUPERADMIN
+  // "Desactivar club") must still resolve for its own OWNER/ADMIN/PLAYER so
+  // they can be shown ClubDeactivatedScreen below, instead of a plain
+  // notFound() indistinguishable from a wrong/nonexistent slug. RLS's
+  // clubs_select_own_member policy already lets an existing member read
+  // their own club row regardless of is_active — a non-member still gets
+  // zero rows either way, so this is not a new information leak.
   const result = await supabase
     .from("clubs")
-    .select("id, name, slug, logo_url, archived_at")
+    .select("id, name, slug, logo_url, archived_at, is_active")
     .eq("slug", slug)
-    .eq("is_active", true)
     .single();
 
   console.log("[club result]", result);
@@ -62,18 +72,46 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
 
   console.log("[membership]", membership);
 
-  if (!membership) {
-    redirect("/unauthorized");
+  let role: "OWNER" | "ADMIN" | "PLAYER";
+  let isSuperadminAccess = false;
+
+  if (membership) {
+    // club_members.role is DB-enforced to exactly these three values (see
+    // isClubRole) but that isn't visible to the generated Row type —
+    // narrow explicitly instead of an `as` cast that wouldn't actually
+    // narrow anything.
+    if (!isClubRole(membership.role)) {
+      redirect("/unauthorized");
+    }
+    role = membership.role;
+  } else {
+    // SUPERADMIN "Entrar al club" — elevated, non-persistent OWNER-
+    // equivalent access to an ACTIVE club, never a club_members row.
+    // Re-derived fresh on every request from profiles.is_platform_admin +
+    // club.is_active — never cached, never a cookie/session flag. Mirrors
+    // the same check src/lib/clubAccess.ts (resolveClubAccess) uses for
+    // every admin server action; see
+    // supabase/migrations/20261008000001_superadmin_club_access.sql for
+    // the matching, narrowly-scoped SQL-side additive policies/RPC
+    // branches this depends on.
+    const isPlatformAdmin = await checkProfileIsPlatformAdmin(supabase, user.id);
+    if (!isPlatformAdmin || !club.is_active) {
+      redirect("/unauthorized");
+    }
+    role = "OWNER";
+    isSuperadminAccess = true;
   }
 
-  // club_members.role is DB-enforced to exactly these three values (see
-  // isClubRole) but that isn't visible to the generated Row type — narrow
-  // explicitly instead of an `as` cast that wouldn't actually narrow anything.
-  const { role: membershipRole } = membership;
-  if (!isClubRole(membershipRole)) {
-    redirect("/unauthorized");
+  // SUPERADMIN "Desactivar club" — identical screen for OWNER/ADMIN/PLAYER,
+  // never a 404 (the club and the caller's membership both genuinely
+  // exist). Returned before the Promise.all below so a deactivated club
+  // never pays for join-request/notification/identity queries for a
+  // screen that's about to replace the whole shell. No {children} here —
+  // this is what actually stops every nested page.tsx under [club]/ from
+  // ever running its own (redundant) is_active check.
+  if (!club.is_active) {
+    return <ClubDeactivatedScreen />;
   }
-  const role = membershipRole;
 
   // Count total active memberships (for "Cambiar de club") and pending join
   // requests (for the Jugadores nav badge, OWNER/ADMIN only) side by side —
@@ -108,8 +146,15 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
           notificationCount={notificationCount}
           notificationItems={notificationItems}
           identity={identity}
+          isSuperadminAccess={isSuperadminAccess}
         />
         <div className="flex-1 min-w-0 flex flex-col">
+          {isSuperadminAccess && (
+            <div className="px-4 md:px-6 pt-4">
+              <SuperadminAccessBanner clubId={club.id} />
+            </div>
+          )}
+
           {/* OWNER-only: the real enforcement is server-side (every write RPC
               rejects an archived club) — this is just visibility, per CLAUDE.md
               → Notifications & Live-Update Principles' spirit of never hiding

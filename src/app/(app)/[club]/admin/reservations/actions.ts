@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getEffectiveHour, timeToMinutes as sharedTimeToMinutes } from "@/lib/operatingHours";
 import { validateRejectionInput } from "@/lib/reservationRejection";
 import { mapUpdateReservationError } from "@/lib/reservationErrors";
+import { resolveClubAccess } from "@/lib/clubAccess";
 
 export type ReservationFormState = {
   error?: string;
@@ -15,34 +16,14 @@ export type ReservationFormState = {
 
 async function requireAdminRole(clubId: string) {
   const supabase = await createClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+  const access = await resolveClubAccess(supabase, clubId);
 
-  if (userError || !user) {
-    console.error("[reservations] auth.getUser failed:", userError);
-    return { supabase: null, user: null, error: "No autenticado." };
+  if (!access.authorized || !["OWNER", "ADMIN"].includes(access.role)) {
+    console.error("[reservations] access denied — clubId:", clubId);
+    return { supabase: null, user: null, error: access.authorized ? "Sin permiso." : access.error };
   }
 
-  const { data: membership, error: memberError } = await supabase
-    .from("club_members")
-    .select("role")
-    .eq("club_id", clubId)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-
-  if (memberError) {
-    console.error("[reservations] membership lookup failed:", memberError);
-  }
-
-  if (!membership || !["OWNER", "ADMIN"].includes(membership.role)) {
-    console.error("[reservations] access denied — role:", membership?.role ?? "none", "userId:", user.id, "clubId:", clubId);
-    return { supabase: null, user: null, error: "Sin permiso." };
-  }
-
-  return { supabase, user, error: null };
+  return { supabase, user: access.user, error: null };
 }
 
 // ─── Parse + validate ─────────────────────────────────────────────────────────

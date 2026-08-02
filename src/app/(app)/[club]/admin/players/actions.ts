@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { addMinutes } from "@/lib/courtAvailability";
 import { sanitizeSportNote } from "@/lib/sportOperations";
+import { resolveClubAccess } from "@/lib/clubAccess";
 import type { PlayerCategory } from "@/types/database";
 import type { MemberRow } from "./MembersClient";
 
@@ -20,26 +21,13 @@ function reservationEndDatetime(r: ActiveReservationRow): Date {
 
 async function requireAdminRole(clubId: string) {
   const supabase = await createClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+  const access = await resolveClubAccess(supabase, clubId);
 
-  if (userError || !user) return { supabase: null, user: null, role: null, error: "No autenticado." };
-
-  const { data: membership } = await supabase
-    .from("club_members")
-    .select("role")
-    .eq("club_id", clubId)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-
-  if (!membership || !["OWNER", "ADMIN"].includes(membership.role)) {
-    return { supabase: null, user: null, role: null, error: "Sin permiso." };
+  if (!access.authorized || !["OWNER", "ADMIN"].includes(access.role)) {
+    return { supabase: null, user: null, role: null, error: access.authorized ? "Sin permiso." : access.error };
   }
 
-  return { supabase, user, role: membership.role as "OWNER" | "ADMIN", error: null };
+  return { supabase, user: access.user, role: access.role as "OWNER" | "ADMIN", error: null };
 }
 
 // ─── toggleMemberActive ───────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { checkProfileIsPlatformAdmin } from "@/lib/platformAdminQuery";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -53,7 +54,16 @@ export default async function AdminLayout({ children, params }: AdminLayoutProps
   console.log("[membership]", membership);
 
   if (!membership) {
-    redirect("/unauthorized");
+    // SUPERADMIN "Entrar al club" — same elevated-access fallback as
+    // [club]/layout.tsx (the parent already granted access; this nested
+    // layout must not re-reject it with its own independent membership
+    // check). The query above already filters is_active = true, so a
+    // found `club` row here is guaranteed active.
+    const isPlatformAdmin = await checkProfileIsPlatformAdmin(supabase, user.id);
+    if (!isPlatformAdmin) {
+      redirect("/unauthorized");
+    }
+    return <>{children}</>;
   }
 
   if (membership.role === "PLAYER") {

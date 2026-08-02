@@ -55,3 +55,43 @@ export async function revokeClaimLink(clubId: string): Promise<ActionResult> {
   revalidatePath(`/platform/clubs/${clubId}`);
   return {};
 }
+
+// Never deletes anything — only flips clubs.is_active to false (plus
+// deactivated_at/deactivated_by for audit). Never touches archived_at,
+// which stays exclusively the OWNER's own archive_club. See
+// reactivateClub below for the counterpart.
+export async function deactivateClub(clubId: string): Promise<ActionResult> {
+  const gate = await requirePlatformAdmin();
+  if (gate.error) return { error: gate.error };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("platform_deactivate_club", { p_club_id: clubId });
+
+  if (error) {
+    return { error: "No se pudo desactivar el club. Intenta de nuevo." };
+  }
+
+  revalidatePath(`/platform/clubs/${clubId}`);
+  return {};
+}
+
+// Counterpart to deactivateClub — only flips clubs.is_active back to true
+// (plus reactivated_at/reactivated_by for audit). Never touches
+// membership, reservations, tournaments, news, courts, pricing rules or
+// claim links; never touches archived_at or the deactivated_at/by history.
+export async function reactivateClub(clubId: string): Promise<ActionResult> {
+  const gate = await requirePlatformAdmin();
+  if (gate.error) return { error: gate.error };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("platform_reactivate_club", { p_club_id: clubId });
+
+  if (error) {
+    if (error.code === "P0002") return { error: "El club no existe." };
+    if (error.code === "22023") return { error: "Este club ya está activo." };
+    return { error: "No se pudo reactivar el club. Intenta de nuevo." };
+  }
+
+  revalidatePath(`/platform/clubs/${clubId}`);
+  return {};
+}

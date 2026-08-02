@@ -4,33 +4,23 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { insertSingleUseInvite } from "@/lib/invitations";
 import { clubHubPath } from "@/lib/clubHubPaths";
+import { resolveClubAccess } from "@/lib/clubAccess";
 
 type ActionResult = { error?: string };
 
 async function requireOwnerRole(clubId: string) {
   const supabase = await createClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+  const access = await resolveClubAccess(supabase, clubId);
 
-  if (userError || !user) {
-    return { supabase: null, user: null, error: "No autenticado." };
+  if (!access.authorized || access.role !== "OWNER") {
+    return {
+      supabase: null,
+      user: null,
+      error: access.authorized ? "Solo el propietario puede realizar esta acción." : access.error,
+    };
   }
 
-  const { data: membership } = await supabase
-    .from("club_members")
-    .select("role")
-    .eq("club_id", clubId)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-
-  if (!membership || membership.role !== "OWNER") {
-    return { supabase: null, user: null, error: "Solo el propietario puede realizar esta acción." };
-  }
-
-  return { supabase, user, error: null };
+  return { supabase, user: access.user, error: null };
 }
 
 export async function removeAdmin(

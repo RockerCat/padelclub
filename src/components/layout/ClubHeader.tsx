@@ -8,6 +8,9 @@ interface ClubHeaderProps {
     logo_url: string | null;
   };
   role: string;
+  /** Overrides the label derived from `role` — used for SUPERADMIN
+   *  elevated access, which must never read as "Propietario" here. */
+  roleLabel?: string;
 }
 
 function getInitials(name: string): string {
@@ -19,7 +22,7 @@ function getInitials(name: string): string {
     .toUpperCase();
 }
 
-export function ClubHeader({ club, role }: ClubHeaderProps) {
+export function ClubHeader({ club, role, roleLabel }: ClubHeaderProps) {
   return (
     <div className="relative overflow-hidden px-4 pt-6 pb-5 shrink-0">
       {/* Radial glow background — primary top-left, secondary bottom-right */}
@@ -60,7 +63,7 @@ export function ClubHeader({ club, role }: ClubHeaderProps) {
         {/* Name + role */}
         <div>
           <p className="text-sm font-bold text-white leading-tight">{club.name}</p>
-          <p className="text-xs text-brand-muted mt-0.5">{clubRoleLabel(role)}</p>
+          <p className="text-xs text-brand-muted mt-0.5">{roleLabel ?? clubRoleLabel(role)}</p>
         </div>
       </div>
 

@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { resolveClubAccess } from "@/lib/clubAccess";
 import { createReservation } from "../actions";
 import { ReservationForm } from "../ReservationForm";
 import { getClubDurations } from "@/lib/durations";
@@ -33,15 +34,8 @@ export default async function NewReservationPage({
   if (!club) notFound();
 
   // layout.tsx already guards OWNER/ADMIN, but double-check just in case
-  const { data: membership } = await supabase
-    .from("club_members")
-    .select("role")
-    .eq("club_id", club.id)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-
-  if (!membership || !["OWNER", "ADMIN"].includes(membership.role)) {
+  const access = await resolveClubAccess(supabase, club.id);
+  if (!access.authorized || !["OWNER", "ADMIN"].includes(access.role)) {
     redirect(`/${slug}`);
   }
 

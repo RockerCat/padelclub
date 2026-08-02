@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { resolveClubAccess } from "@/lib/clubAccess";
 import { resolveClubHubTab } from "./clubHubTabsConfig";
 import { ClubHubTabs } from "./ClubHubTabs";
 import { getClubPublicPageData } from "@/lib/clubPublicPageData";
@@ -55,17 +56,15 @@ export default async function ClubHubPage({ params, searchParams }: ClubHubPageP
     .single();
   if (!club) notFound();
 
-  const { data: membership } = await supabase
-    .from("club_members")
-    .select("role")
-    .eq("club_id", club.id)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-  if (!membership) redirect("/unauthorized");
-  if (!["OWNER", "ADMIN"].includes(membership.role)) redirect(`/${slug}`);
+  // resolveClubAccess also recognizes SUPERADMIN's elevated "Entrar al
+  // club" access (never a club_members row) for an active club — the
+  // parent layouts already granted it; this page must not re-reject it
+  // with its own independent membership check.
+  const access = await resolveClubAccess(supabase, club.id);
+  if (!access.authorized) redirect("/unauthorized");
+  if (!["OWNER", "ADMIN"].includes(access.role)) redirect(`/${slug}`);
 
-  const role = membership.role as "OWNER" | "ADMIN";
+  const role = access.role as "OWNER" | "ADMIN";
   const activeTab = resolveClubHubTab(
     typeof resolvedSearchParams.tab === "string" ? resolvedSearchParams.tab : undefined,
     role
