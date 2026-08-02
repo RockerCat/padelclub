@@ -1,32 +1,25 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { resolveClubAccess } from "@/lib/clubAccess";
 
 export type OnboardingActionState = { success?: boolean; error?: string };
 
 // Named requireOwner for its original onboarding context (only ever run
 // by the club's OWNER, right after creation), but also backs Página
-// Pública's reuse of these same steps (PublicProfileModal, LocationModal)
-// — so ADMIN is allowed too. No practical change for onboarding itself:
-// a brand-new club has no ADMIN yet when this flow runs.
+// Pública's and Configuración's reuse of these same steps
+// (PublicProfileModal, LocationModal) — so ADMIN is allowed too. Routed
+// through the central resolveClubAccess helper (not a second inline
+// club_members lookup) so a SUPERADMIN's elevated "Entrar al club" access
+// is recognized here exactly like it already is everywhere else in
+// settings/actions.ts. No practical change for onboarding itself: a
+// brand-new club has no ADMIN yet when this flow runs.
 async function requireOwner(clubId: string) {
   const supabase = await createClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-  if (userError || !user) return { supabase: null, error: "No autenticado." };
+  const access = await resolveClubAccess(supabase, clubId);
 
-  const { data: membership } = await supabase
-    .from("club_members")
-    .select("role")
-    .eq("club_id", clubId)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-
-  if (!membership || !["OWNER", "ADMIN"].includes(membership.role)) {
-    return { supabase: null, error: "No tienes permiso para editar este club." };
+  if (!access.authorized || !["OWNER", "ADMIN"].includes(access.role)) {
+    return { supabase: null, error: access.authorized ? "No tienes permiso para editar este club." : access.error };
   }
 
   return { supabase, error: null };

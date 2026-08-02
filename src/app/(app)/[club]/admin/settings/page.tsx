@@ -7,14 +7,13 @@ interface SettingsPageProps {
   params: Promise<{ club: string }>;
 }
 
-// Configuración del club se movió al hub "Club" (vista "Configuración",
-// ahora OWNER-only) — ver CLAUDE.md, bloque de reorganización #2. A
-// diferencia de las otras rutas históricas (redirect incondicional, la
-// revalidación vive en el hub), esta conserva su propio chequeo de rol —
-// mismo patrón exacto que admin/team/page.tsx para "Equipo": Configuración
-// es una capacidad de OWNER, así que un ADMIN visitando esta URL legacy
-// directamente nunca debe llegar, ni de rebote, al hub con esa vista — se
-// le redirige a `/${slug}` en su lugar, nunca al hub ciegamente.
+// Configuración del club se movió al hub "Club" (vista "Configuración") —
+// ver CLAUDE.md, bloque de reorganización #2. Disponible para OWNER y ADMIN
+// (Ubicación, Operación, Tarifas, Categoría de jugadores son configuración
+// operativa que ambos roles gestionan — solo "Archivar club" dentro del hub
+// queda exclusiva de OWNER); un PLAYER u otro rol no autorizado visitando
+// esta URL legacy directamente se redirige a `/${slug}` en su lugar, nunca
+// al hub ciegamente.
 export default async function SettingsPage({ params }: SettingsPageProps) {
   const { club: slug } = await params;
 
@@ -36,7 +35,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
 
   const access = await resolveClubAccess(supabase, club.id);
   if (!access.authorized) redirect("/unauthorized");
-  if (access.role !== "OWNER") redirect(`/${slug}`);
+  if (!["OWNER", "ADMIN"].includes(access.role)) redirect(`/${slug}`);
 
   redirect(clubHubPath(slug, "configuracion"));
 }

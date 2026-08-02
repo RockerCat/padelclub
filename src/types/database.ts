@@ -1155,6 +1155,9 @@ export type Database = {
           created_by: string
           date: string
           duration_minutes: number
+          extra_amount: number
+          extra_currency: string | null
+          extra_minutes: number
           id: string
           notes: string | null
           price_amount: number | null
@@ -1180,6 +1183,9 @@ export type Database = {
           created_by: string
           date: string
           duration_minutes?: number
+          extra_amount?: number
+          extra_currency?: string | null
+          extra_minutes?: number
           id?: string
           notes?: string | null
           price_amount?: number | null
@@ -1205,6 +1211,9 @@ export type Database = {
           created_by?: string
           date?: string
           duration_minutes?: number
+          extra_amount?: number
+          extra_currency?: string | null
+          extra_minutes?: number
           id?: string
           notes?: string | null
           price_amount?: number | null
@@ -1262,6 +1271,64 @@ export type Database = {
             columns: ["rejected_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reservation_extra_time_entries: {
+        Row: {
+          added_amount: number
+          added_by: string
+          added_minutes: number
+          club_id: string
+          created_at: string
+          currency: string
+          id: string
+          note: string | null
+          reservation_id: string
+        }
+        Insert: {
+          added_amount?: number
+          added_by: string
+          added_minutes: number
+          club_id: string
+          created_at?: string
+          currency: string
+          id?: string
+          note?: string | null
+          reservation_id: string
+        }
+        Update: {
+          added_amount?: number
+          added_by?: string
+          added_minutes?: number
+          club_id?: string
+          created_at?: string
+          currency?: string
+          id?: string
+          note?: string | null
+          reservation_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reservation_extra_time_entries_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservation_extra_time_entries_club_id_fkey"
+            columns: ["club_id"]
+            isOneToOne: false
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservation_extra_time_entries_reservation_id_fkey"
+            columns: ["reservation_id"]
+            isOneToOne: false
+            referencedRelation: "reservations"
             referencedColumns: ["id"]
           },
         ]
@@ -1663,6 +1730,42 @@ export type Database = {
         Returns: Record<string, unknown>
       }
       _slugify_tournament_name: { Args: { p_name: string }; Returns: string }
+      add_reservation_extra_time: {
+        Args: {
+          p_extra_amount: number
+          p_extra_minutes: number
+          p_note: string | null
+          p_reservation_id: string
+        }
+        Returns: {
+          cancelled_at: string | null
+          cancelled_by: string | null
+          club_id: string
+          court_id: string
+          created_at: string | null
+          created_by: string
+          date: string
+          duration_minutes: number
+          extra_amount: number
+          extra_currency: string | null
+          extra_minutes: number
+          id: string
+          notes: string | null
+          price_amount: number | null
+          price_calculated_at: string | null
+          price_currency: string | null
+          pricing_rule_id: string | null
+          rejected_at: string | null
+          rejected_by: string | null
+          rejection_reason: string | null
+          rejection_reason_code: string | null
+          start_time: string
+          status: string
+          title: string | null
+          type: string
+          updated_at: string | null
+        }
+      }
       adjust_club_player_points: {
         Args: {
           p_club_id: string
@@ -2103,6 +2206,10 @@ export type Database = {
       }
       notify_reservation_created_for_players: {
         Args: { p_reservation_id: string }
+        Returns: undefined
+      }
+      notify_reservation_extra_time_added: {
+        Args: { p_extra_minutes: number; p_reservation_id: string }
         Returns: undefined
       }
       notify_reservation_rejected: {

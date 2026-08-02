@@ -219,11 +219,6 @@ export async function createTournament(
     p_cover_image_url: f.coverImageUrl,
   });
 
-  // TEMPORARY diagnostic logging — remove once the root cause of the
-  // generic "No fue posible completar la acción" message is confirmed.
-  // Logs unconditionally (not just in tournamentErrorMessage's fallback
-  // branch) so we also see it for a 22023 whose message isn't in the
-  // mapped list (currently returns "Datos inválidos." with no log at all).
   if (error) {
     console.error("[createTournament] create_tournament RPC error:", {
       code: error.code,
@@ -231,9 +226,8 @@ export async function createTournament(
       details: (error as { details?: string }).details,
       hint: (error as { hint?: string }).hint,
     });
+    return { error: tournamentErrorMessage(error) };
   }
-
-  if (error) return { error: tournamentErrorMessage(error) };
 
   revalidatePath(`/${clubSlug}/admin/tournaments`);
   return { success: true, tournament: data?.[0] };
@@ -327,7 +321,15 @@ export async function openTournamentRegistration(
     p_tournament_id: tournamentId,
   });
 
-  if (error) return { error: tournamentErrorMessage(error) };
+  if (error) {
+    console.error("[openTournamentRegistration] open_tournament_registration RPC error:", {
+      code: error.code,
+      message: error.message,
+      details: (error as { details?: string }).details,
+      hint: (error as { hint?: string }).hint,
+    });
+    return { error: tournamentErrorMessage(error) };
+  }
 
   revalidatePath(`/${clubSlug}/admin/tournaments`);
   revalidatePath(`/${clubSlug}/tournaments/${tournamentSlug}`);

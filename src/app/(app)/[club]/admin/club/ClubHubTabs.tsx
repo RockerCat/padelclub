@@ -17,9 +17,10 @@ export function ClubHubTabs({ active, role }: ClubHubTabsProps) {
   const searchParams = useSearchParams();
 
   const tabs = clubHubTabsForRole(role);
-  // 4 tabs (OWNER) → 2x2; exactly 3 → single row of 3; 2 (ADMIN, since
-  // Configuración became OWNER-only) → single row of 2. Never a fixed
-  // column count that could leave a mobile row half-empty.
+  // 4 tabs (OWNER: Perfil público, Noticias, Equipo, Configuración) → 2x2;
+  // 3 (ADMIN: Perfil público, Noticias, Configuración — Equipo stays
+  // OWNER-only) → single row of 3. Never a fixed column count that could
+  // leave a mobile row half-empty.
   const gridColsClass = tabs.length === 3 ? "grid-cols-3" : "grid-cols-2";
 
   function selectTab(key: ClubHubTabKey) {

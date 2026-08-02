@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition, type ReactNode } from "react";
-import { X, Pencil, XCircle, Check, Clock } from "lucide-react";
+import { X, Pencil, XCircle, Check, Clock, Timer } from "lucide-react";
 import {
   createReservation,
   updateReservation,
@@ -9,10 +9,12 @@ import {
   approvePendingReservation,
   rejectPendingReservation,
   cancelReservation,
+  addReservationExtraTime,
 } from "./actions";
-import type { ReservationEditData, PendingActionResult } from "./actions";
+import type { ReservationEditData, PendingActionResult, AddExtraTimeResult } from "./actions";
 import { ReservationForm } from "./ReservationForm";
 import { RejectReservationModal } from "./RejectReservationModal";
+import { AddExtraTimeModal } from "./AddExtraTimeModal";
 import type { RejectionReasonCode } from "@/lib/reservationRejection";
 import { durationLabel } from "@/lib/durations";
 import { PlayerAvatar } from "@/components/players/PlayerAvatar";
@@ -134,6 +136,9 @@ export function ReservationTicketPanel({
   const [rejecting, startRejectTransition] = useTransition();
   const [approving, startApproveTransition] = useTransition();
   const [pendingError, setPendingError] = useState<string | null>(null);
+  const [extraTimeModalOpen, setExtraTimeModalOpen] = useState(false);
+  const [extraTimeError, setExtraTimeError] = useState<string | null>(null);
+  const [addingExtraTime, startExtraTimeTransition] = useTransition();
 
   const panelKey =
     panelState?.mode === "view"
@@ -156,6 +161,8 @@ export function ReservationTicketPanel({
     setPendingError(null);
     setRejectError(null);
     setRejectModalOpen(false);
+    setExtraTimeModalOpen(false);
+    setExtraTimeError(null);
     setEditData(null);
     setLoadingEdit(panelState?.mode === "view");
   }
@@ -238,6 +245,30 @@ export function ReservationTicketPanel({
         onClose();
       } else {
         setRejectError(result.error ?? "Error al rechazar.");
+      }
+    });
+  }
+
+  function handleAddExtraTimeConfirm(extraMinutes: number, extraAmount: number, note: string) {
+    if (state.mode !== "view") return;
+    setExtraTimeError(null);
+    startExtraTimeTransition(async () => {
+      const result: AddExtraTimeResult = await addReservationExtraTime(
+        clubId,
+        state.reservation.id,
+        extraMinutes,
+        extraAmount,
+        note
+      );
+      if (result.success && result.reservation) {
+        // Reflects immediately without waiting for the parent's
+        // router.refresh() (still triggered via onChanged so the
+        // calendar/agenda blocks the extended interval right away too).
+        setEditData((prev) => (prev ? { ...prev, ...result.reservation } : prev));
+        setExtraTimeModalOpen(false);
+        onChanged();
+      } else {
+        setExtraTimeError(result.error ?? "Error al agregar el tiempo extra.");
       }
     });
   }
@@ -432,9 +463,16 @@ export function ReservationTicketPanel({
                 <Row label="Fecha" value={formatDate(panelState.reservation.date)} />
                 <Row
                   label="Hora"
-                  value={`${fmt(panelState.reservation.start_time)} – ${endTime(panelState.reservation.start_time, panelState.reservation.duration_minutes)}`}
+                  value={`${fmt(editData.start_time)} – ${endTime(editData.start_time, editData.duration_minutes)}`}
                 />
-                <Row label="Duración" value={durationLabel(panelState.reservation.duration_minutes)} />
+                <Row
+                  label="Duración"
+                  value={
+                    editData.extra_minutes > 0
+                      ? `${durationLabel(editData.duration_minutes)} (incluye ${editData.extra_minutes} min extra)`
+                      : durationLabel(editData.duration_minutes)
+                  }
+                />
                 <Row label="Tipo" value={TYPE_LABELS[panelState.reservation.type] ?? panelState.reservation.type} />
                 <Row label="Título" value={panelState.reservation.title} />
 
@@ -476,8 +514,40 @@ export function ReservationTicketPanel({
                       : null
                   }
                 />
+                {/* Extra-time breakdown — only once at least one extension
+                    has been applied ("nunca reemplaza" el precio original,
+                    solo lo complementa: price_amount arriba nunca se toca
+                    por esta acción). */}
+                {editData.extra_minutes > 0 && (
+                  <>
+                    <Row
+                      label="Tiempo extra agregado"
+                      value={`${editData.extra_minutes} min`}
+                    />
+                    <Row
+                      label="Valor extra"
+                      value={formatCurrency(editData.extra_amount, editData.extra_currency ?? "COP")}
+                    />
+                    <Row
+                      label="Total"
+                      value={formatCurrency(
+                        (editData.price_amount ?? 0) + editData.extra_amount,
+                        editData.price_currency ?? editData.extra_currency ?? "COP"
+                      )}
+                    />
+                  </>
+                )}
                 <Row label="Creada por" value={editData.creator_name} />
                 <Row label="Origen" value={editData.creator_is_player ? "Solicitud aprobada" : "Creada por el club"} />
+
+                <button
+                  type="button"
+                  onClick={() => setExtraTimeModalOpen(true)}
+                  className="flex items-center justify-center gap-1.5 h-10 mt-5 rounded-xl border border-white/15 text-sm font-medium text-white/90 hover:border-white/30 hover:bg-white/5 transition-colors"
+                >
+                  <Timer className="w-3.5 h-3.5" />
+                  Agregar tiempo extra
+                </button>
 
                 {confirmingCancel ? (
                   <div className="mt-5 rounded-xl border border-red-500/30 bg-red-500/5 p-4">
@@ -535,6 +605,21 @@ export function ReservationTicketPanel({
           error={rejectError}
           onConfirm={handleRejectConfirm}
           onCancel={() => setRejectModalOpen(false)}
+        />
+      )}
+
+      {panelState.mode === "view" && extraTimeModalOpen && editData && (
+        <AddExtraTimeModal
+          pending={addingExtraTime}
+          error={extraTimeError}
+          startTime={fmt(editData.start_time)}
+          currentDurationMinutes={editData.duration_minutes}
+          currentEndTime={endTime(editData.start_time, editData.duration_minutes)}
+          priceAmount={editData.price_amount}
+          existingExtraAmount={editData.extra_amount}
+          currency={editData.price_currency ?? editData.extra_currency ?? "COP"}
+          onConfirm={handleAddExtraTimeConfirm}
+          onCancel={() => setExtraTimeModalOpen(false)}
         />
       )}
     </>

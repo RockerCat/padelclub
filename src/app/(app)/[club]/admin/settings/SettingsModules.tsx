@@ -28,11 +28,12 @@ function formatCurrency(amount: number, currency: string): string {
   return new Intl.NumberFormat("es-CO", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
 }
 
-// Interactive when onClick is provided (OWNER — opens the edit modal) vs. a
-// plain, non-clickable summary block when it isn't (ADMIN — "ver el resumen
-// ... pero no debe poder crear/editar/activar/desactivar"). Same container,
-// border, radius, spacing and title style either way — only the "Editar"
-// affordance and click behavior differ.
+// Interactive when onClick is provided (opens the edit modal) vs. a plain,
+// non-clickable summary block when it isn't — every module below is
+// interactive for both OWNER and ADMIN now; onClick stays optional purely
+// so a future view-only card can reuse this same component without a
+// second one. Same container, border, radius, spacing and title style
+// either way — only the "Editar" affordance and click behavior differ.
 function ModuleCard({
   icon: Icon,
   title,
@@ -110,32 +111,29 @@ export function SettingsModules({
   return (
     <>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {role === "OWNER" && (
-          <>
-            <ModuleCard icon={MapPin} title="Ubicación" onClick={() => setOpenModal("location")}>
-              <p className="text-sm text-white/80 truncate">{locationLine || "Sin ubicación configurada"}</p>
-            </ModuleCard>
+        {/* Ubicación, Operación, Tarifas y Categoría de jugadores son
+            configuración operativa — editable tanto por OWNER como por
+            ADMIN (horarios, cierres puntuales, tarifas por instrucción del
+            OWNER, etc.). Solo "Archivar club" abajo, una acción de
+            propiedad/ciclo de vida del club, queda exclusiva de OWNER. */}
+        <ModuleCard icon={MapPin} title="Ubicación" onClick={() => setOpenModal("location")}>
+          <p className="text-sm text-white/80 truncate">{locationLine || "Sin ubicación configurada"}</p>
+        </ModuleCard>
 
-            <ModuleCard icon={Clock} title="Operación" onClick={() => setOpenModal("operation")}>
-              {schedule.length === 0 ? (
-                <p className="text-xs text-brand-muted/50">Sin horarios configurados</p>
-              ) : (
-                <p className="text-xs text-white/70">
-                  {schedule[0].label} <span className="text-brand-muted">· {schedule[0].timeRange}</span>
-                </p>
-              )}
-              <p className="text-xs text-brand-muted truncate">
-                Duraciones: {allowedDurations.map((m) => durationLabel(m)).join(", ")}
-              </p>
-            </ModuleCard>
-          </>
-        )}
+        <ModuleCard icon={Clock} title="Operación" onClick={() => setOpenModal("operation")}>
+          {schedule.length === 0 ? (
+            <p className="text-xs text-brand-muted/50">Sin horarios configurados</p>
+          ) : (
+            <p className="text-xs text-white/70">
+              {schedule[0].label} <span className="text-brand-muted">· {schedule[0].timeRange}</span>
+            </p>
+          )}
+          <p className="text-xs text-brand-muted truncate">
+            Duraciones: {allowedDurations.map((m) => durationLabel(m)).join(", ")}
+          </p>
+        </ModuleCard>
 
-        <ModuleCard
-          icon={Banknote}
-          title="Tarifas"
-          onClick={role === "OWNER" ? () => setOpenModal("pricing") : undefined}
-        >
+        <ModuleCard icon={Banknote} title="Tarifas" onClick={() => setOpenModal("pricing")}>
           {pricingRules.length === 0 ? (
             <p className="text-xs text-brand-muted/50">Sin tarifas configuradas</p>
           ) : (
@@ -152,11 +150,8 @@ export function SettingsModules({
           )}
         </ModuleCard>
 
-        {/* Fase 1 módulo deportivo — a diferencia de Ubicación/Operación
-            (OWNER-only) y Tarifas (ADMIN solo ve el resumen), este módulo es
-            editable tanto por OWNER como por ADMIN, tal como lo exige la
-            especificación de este bloque. Solo configura la categoría
-            predeterminada — sin puntos, ranking, ciclos ni historial. */}
+        {/* Fase 1 módulo deportivo — solo configura la categoría
+            predeterminada, sin puntos, ranking, ciclos ni historial. */}
         <ModuleCard icon={Layers} title="Categoría de jugadores" onClick={() => setOpenModal("defaultPlayerCategory")}>
           {club.default_player_category ? (
             <p className="text-sm text-white/80">Categoría inicial: {club.default_player_category}</p>

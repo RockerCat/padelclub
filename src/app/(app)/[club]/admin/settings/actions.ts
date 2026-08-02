@@ -91,8 +91,8 @@ export async function updateAllowedDurations(
 ): Promise<UpdateAllowedDurationsState> {
   const supabase = await createClient();
   const access = await resolveClubAccess(supabase, clubId);
-  if (!access.authorized || access.role !== "OWNER") {
-    return { error: access.authorized ? "Solo el propietario puede modificar la configuración." : access.error };
+  if (!access.authorized || !["OWNER", "ADMIN"].includes(access.role)) {
+    return { error: access.authorized ? "No tienes permiso para modificar la configuración." : access.error };
   }
 
   const raw = formData.getAll("durations").map((v) => parseInt(v as string, 10));
@@ -126,20 +126,22 @@ export async function updateAllowedDurations(
 }
 
 // ─── Pricing rules (Tarifas) ──────────────────────────────────────────────────
-// Commercial policy, same restriction as updateAllowedDurations/
-// saveOperatingHours above: OWNER-only, never ADMIN. RLS already enforces
-// this at the database level (club_pricing_rules_insert_owner/_update_owner)
+// Operational configuration, same shared gate as updateAllowedDurations/
+// saveOperatingHours above: OWNER and ADMIN, never PLAYER (an ADMIN adjusts
+// tarifas by the OWNER's instruction — see CLAUDE.md → Role Philosophy).
+// RLS enforces this at the database level too
+// (club_pricing_rules_insert_admin/_update_admin, upsert_pricing_rule_with_prices)
 // — this app-layer check exists only to return a clear message instead of a
 // raw Postgrest permission error.
 
 export type PricingRuleFormState = { success?: boolean; error?: string };
 
-async function requirePricingOwner(clubId: string) {
+async function requirePricingAdmin(clubId: string) {
   const supabase = await createClient();
   const access = await resolveClubAccess(supabase, clubId);
 
-  if (!access.authorized || access.role !== "OWNER") {
-    return { supabase: null, error: access.authorized ? "Solo el propietario puede modificar las tarifas." : access.error };
+  if (!access.authorized || !["OWNER", "ADMIN"].includes(access.role)) {
+    return { supabase: null, error: access.authorized ? "No tienes permiso para modificar las tarifas." : access.error };
   }
 
   return { supabase, error: null };
@@ -209,10 +211,18 @@ function parsePrices(formData: FormData, allowedDurations: number[], currency: s
   return { prices };
 }
 
-function pricingErrorMessage(error: { code?: string; message?: string }): string {
+// Always logs the real Postgrest/RPC error server-side first — every
+// branch below, not only the final fallback — so an unexpected code never
+// gets silently swallowed under a friendly message during investigation.
+// Never surfaces error.message/details/hint to the client (could leak
+// Supabase internals); the client only ever sees one of the fixed strings
+// below.
+function pricingErrorMessage(error: { code?: string | null; message?: string }): string {
+  console.error("[pricingRules]", error);
   if (error.code === "23514") return "Los datos no cumplen las reglas de validación (revisa días, horario o precio).";
   if (error.code === "23P01") return "Esta franja se solapa con una regla activa existente para el mismo alcance y día.";
-  console.error("[pricingRules]", error);
+  if (error.code === "42501") return "No tienes permiso para modificar las tarifas de este club.";
+  if (error.code === "P0002") return "La tarifa ya no existe. Actualiza la página e intenta de nuevo.";
   return "Error al guardar la tarifa. Intenta de nuevo.";
 }
 
@@ -221,7 +231,7 @@ export async function createPricingRule(
   _prevState: PricingRuleFormState,
   formData: FormData
 ): Promise<PricingRuleFormState> {
-  const { supabase, error: authError } = await requirePricingOwner(clubId);
+  const { supabase, error: authError } = await requirePricingAdmin(clubId);
   if (authError || !supabase) return { error: authError! };
 
   const parsed = parsePricingForm(formData);
@@ -258,7 +268,7 @@ export async function updatePricingRule(
   _prevState: PricingRuleFormState,
   formData: FormData
 ): Promise<PricingRuleFormState> {
-  const { supabase, error: authError } = await requirePricingOwner(clubId);
+  const { supabase, error: authError } = await requirePricingAdmin(clubId);
   if (authError || !supabase) return { error: authError! };
 
   const parsed = parsePricingForm(formData);
@@ -295,7 +305,7 @@ export async function togglePricingRuleActive(
   ruleId: string,
   isActive: boolean
 ): Promise<{ error?: string }> {
-  const { supabase, error: authError } = await requirePricingOwner(clubId);
+  const { supabase, error: authError } = await requirePricingAdmin(clubId);
   if (authError || !supabase) return { error: authError };
 
   const { error: updateError } = await supabase
@@ -314,8 +324,8 @@ export async function saveOperatingHours(
 ): Promise<{ success?: boolean; error?: string }> {
   const supabase = await createClient();
   const access = await resolveClubAccess(supabase, clubId);
-  if (!access.authorized || access.role !== "OWNER") {
-    return { error: access.authorized ? "Solo el propietario puede modificar los horarios." : access.error };
+  if (!access.authorized || !["OWNER", "ADMIN"].includes(access.role)) {
+    return { error: access.authorized ? "No tienes permiso para modificar los horarios." : access.error };
   }
 
   // Validate each day — closes_at must be strictly after opens_at when open

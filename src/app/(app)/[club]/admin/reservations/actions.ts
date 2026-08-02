@@ -304,6 +304,14 @@ export type ReservationEditData = {
   created_by: string;
   creator_name: string | null;
   creator_is_player: boolean;
+  // "Agregar tiempo extra" totals — duration_minutes above already includes
+  // every extra minute ever added (see 20261009000001_reservation_extra_time.sql
+  // for why duration_minutes itself is the reservation's current total
+  // occupancy length); these three let the panel show the extra-time
+  // breakdown separately without re-deriving it.
+  extra_minutes: number;
+  extra_amount: number;
+  extra_currency: string | null;
 };
 
 // ─── Pending reservation approval / rejection ─────────────────────────────────
@@ -475,7 +483,7 @@ export async function getReservationForEdit(
   const { data } = await supabase
     .from("reservations")
     .select(
-      "court_id, date, start_time, duration_minutes, type, title, notes, status, created_by, price_amount, price_currency, reservation_players(profile_id)"
+      "court_id, date, start_time, duration_minutes, type, title, notes, status, created_by, price_amount, price_currency, extra_minutes, extra_amount, extra_currency, reservation_players(profile_id)"
     )
     .eq("id", reservationId)
     .eq("club_id", clubId)
@@ -509,6 +517,9 @@ export async function getReservationForEdit(
     created_by: data.created_by,
     creator_name: creatorProfile?.full_name ?? null,
     creator_is_player: creatorMembership?.role === "PLAYER",
+    extra_minutes: data.extra_minutes,
+    extra_amount: data.extra_amount,
+    extra_currency: data.extra_currency,
   };
 }
 
@@ -543,4 +554,98 @@ export async function cancelReservation(
   }
 
   redirect(`/${clubSlug}/admin/reservations?cancelled=1`);
+}
+
+// ─── addReservationExtraTime ───────────────────────────────────────────────
+// "Agregar tiempo extra" — routed through the SECURITY DEFINER RPC
+// add_reservation_extra_time (20261009000001), which takes the exact same
+// shared advisory lock and conflict-check helper every other reservation
+// write in this module already uses, so this can never race a concurrent
+// create/edit/approve for the same court+day into an overlap. Only a
+// confirmed reservation is extendable — this action never reduces
+// duration, never changes court/date/players/type/creator.
+
+export type AddExtraTimeResult = {
+  success?: boolean;
+  error?: string;
+  reservation?: {
+    duration_minutes: number;
+    extra_minutes: number;
+    extra_amount: number;
+    extra_currency: string | null;
+  };
+};
+
+function mapAddExtraTimeError(error: { code?: string | null; message?: string }): string {
+  switch (error.code) {
+    case "42501":
+      return "No tienes permiso para agregar tiempo extra a esta reserva.";
+    case "P0002":
+      return "La reserva o la cancha ya no está disponible.";
+    case "P0005":
+      return "Este club se encuentra archivado.";
+    case "22023":
+      return error.message || "Esta reserva ya no admite tiempo extra.";
+    case "P0003":
+      return error.message || "La extensión no es válida para el horario del club.";
+    case "23P01":
+      return "Ese tiempo extra choca con otra reserva confirmada. Elige menos minutos u otro horario.";
+    default:
+      return "Error al agregar el tiempo extra. Intenta de nuevo.";
+  }
+}
+
+export async function addReservationExtraTime(
+  clubId: string,
+  reservationId: string,
+  extraMinutes: number,
+  extraAmount: number,
+  note: string
+): Promise<AddExtraTimeResult> {
+  const { supabase, error: authError } = await requireAdminRole(clubId);
+  if (authError || !supabase) return { error: authError ?? "Sin permiso." };
+
+  if (!Number.isInteger(extraMinutes) || extraMinutes <= 0) {
+    return { error: "Los minutos adicionales deben ser un número entero mayor que 0." };
+  }
+  if (!Number.isFinite(extraAmount) || extraAmount < 0) {
+    return { error: "El valor adicional no puede ser negativo." };
+  }
+
+  const { data, error } = await supabase.rpc("add_reservation_extra_time", {
+    p_reservation_id: reservationId,
+    p_extra_minutes: extraMinutes,
+    p_extra_amount: extraAmount,
+    p_note: note.trim() || null,
+  });
+
+  if (error) {
+    console.error("[addReservationExtraTime] add_reservation_extra_time failed:", {
+      reservationId,
+      clubId,
+      supabaseError: error,
+    });
+    return { error: mapAddExtraTimeError(error) };
+  }
+
+  const { error: notifyError } = await supabase.rpc("notify_reservation_extra_time_added", {
+    p_reservation_id: reservationId,
+    p_extra_minutes: extraMinutes,
+  });
+  if (notifyError) {
+    console.error("[addReservationExtraTime] notify_reservation_extra_time_added failed:", {
+      reservationId,
+      notifyError,
+    });
+  }
+
+  return {
+    success: true,
+    reservation: {
+      duration_minutes: data.duration_minutes,
+      extra_minutes: data.extra_minutes,
+      extra_amount: data.extra_amount,
+      extra_currency: data.extra_currency,
+    },
+  };
 }

@@ -232,8 +232,30 @@ function PricingRuleForm({
   const [state, formAction, pending] = useActionState<PricingRuleFormState, FormData>(boundAction, {});
   const [selectedDays, setSelectedDays] = useState<Set<number>>(() => new Set(rule?.days_of_week ?? []));
   const currentCurrency = rule?.club_pricing_rule_prices[0]?.currency ?? "COP";
+  // duration_minutes/price_amount are coerced through Number(...) here —
+  // numeric/integer columns normally arrive as real JS numbers from
+  // PostgREST, but comparing with a bare `===` against whatever the client
+  // actually received is one silent-mismatch risk this function doesn't
+  // need to carry (e.g. a value that round-tripped through JSON as a
+  // string). undefined only when this specific rule genuinely has no
+  // saved price for that duration yet (see the migration note below) —
+  // never coerced to 0, which would silently look like "free".
   function priceFor(minutes: number): number | undefined {
-    return rule?.club_pricing_rule_prices.find((p) => p.duration_minutes === minutes)?.price_amount;
+    const match = rule?.club_pricing_rule_prices.find((p) => Number(p.duration_minutes) === minutes);
+    if (!match) return undefined;
+    const amount = Number(match.price_amount);
+    return Number.isFinite(amount) ? amount : undefined;
+  }
+  // A rule created before this club's allowed_reservation_durations
+  // included `minutes` genuinely has no row for it yet (the one-time
+  // proportional→fixed-price migration, 20260803000003, only backfilled
+  // durations the club allowed back then) — this is a real "not configured
+  // yet" state per CLAUDE.md's Reservation Pricing Principles, never
+  // defaulted to 0. The placeholder below only clarifies *why* the field
+  // is empty; it never becomes the submitted value on its own (the input
+  // stays required).
+  function pricePlaceholder(minutes: number): string | undefined {
+    return priceFor(minutes) === undefined && rule ? "Sin precio configurado para esta duración" : undefined;
   }
 
   // Root cause of the stale-list bug: this effect used to only call
@@ -335,6 +357,7 @@ function PricingRuleForm({
             min="0"
             step="1"
             defaultValue={priceFor(minutes)}
+            placeholder={pricePlaceholder(minutes)}
             required
           />
         ))}
