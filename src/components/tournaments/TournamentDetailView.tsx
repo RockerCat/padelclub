@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Camera, ChevronDown, Globe, ImageIcon, Lock, Maximize2, Pencil, X } from "lucide-react";
+import { ArrowLeft, Camera, ChevronDown, Globe, ImageIcon, Lock, Maximize2, MessageCircle, Pencil, X } from "lucide-react";
 import { Badge, Button, ConfirmDialog, Toast } from "@/components/ui";
 import { formatDurationMinutes } from "@/lib/utils/tournamentDuration";
 import { TournamentForm } from "@/app/(app)/[club]/admin/tournaments/TournamentForm";
@@ -347,6 +347,16 @@ export function TournamentDetailView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Same hydration-safe origin pattern as ShareNewsButtons — starts as the
+  // relative path (matches SSR output) and upgrades to an absolute URL
+  // once mounted, so the WhatsApp share link always carries a real,
+  // shareable tournament URL.
+  const [origin, setOrigin] = useState<string | null>(null);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOrigin(window.location.origin);
+  }, []);
+
   const boundUpdate = updateTournament.bind(null, clubId, tournament.id, tournament.slug, clubSlug);
 
   const canEdit =
@@ -361,8 +371,18 @@ export function TournamentDetailView({
   const canFinalize = isAdmin && tournament.status === "in_progress";
   const canCancel =
     isAdmin && ["draft", "registration_open", "registration_closed", "in_progress"].includes(tournament.status);
+  // Compartir por WhatsApp — solo mientras el torneo tiene sentido
+  // promocionar (inscripciones abiertas/cerradas o ya en curso), nunca en
+  // draft (aún no es público de facto), cancelled o completed.
+  const canShareWhatsApp =
+    isAdmin && ["registration_open", "registration_closed", "in_progress"].includes(tournament.status);
   const hasAnyAdminAction =
-    canEdit || canOpenRegistration || canCloseRegistration || canReopenRegistration || canStart || canFinalize || canCancel;
+    canEdit || canOpenRegistration || canCloseRegistration || canReopenRegistration || canStart || canFinalize || canCancel || canShareWhatsApp;
+
+  const tournamentUrl = `${origin ?? ""}/${clubSlug}/tournaments/${tournament.slug}`;
+  const whatsappShareHref = `https://wa.me/?text=${encodeURIComponent(
+    [`🏆 ${tournament.name}`, ...(tournament.description ? ["", tournament.description] : []), "", "Inscríbete aquí:", tournamentUrl].join("\n")
+  )}`;
 
   function handleEditSuccess(updated: Tournament | undefined) {
     setEditing(false);
@@ -555,6 +575,16 @@ export function TournamentDetailView({
 
               {hasAnyAdminAction && (
                 <div className="flex items-center gap-2 flex-wrap">
+                  {canShareWhatsApp && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => window.open(whatsappShareHref, "_blank", "noopener,noreferrer")}
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      Compartir por WhatsApp
+                    </Button>
+                  )}
                   {canEdit && (
                     <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
                       <Pencil className="w-3.5 h-3.5" />
