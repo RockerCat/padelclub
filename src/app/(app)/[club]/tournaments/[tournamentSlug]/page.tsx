@@ -1,7 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { checkProfileIsPlatformAdmin } from "@/lib/platformAdminQuery";
-import { isClubRole } from "@/types/domain";
+import { resolveClubAccess } from "@/lib/clubAccess";
 import { getTournamentEntriesWithMembers, summarizeCapacity } from "@/lib/tournamentEntries";
 import { TournamentDetailView } from "@/components/tournaments/TournamentDetailView";
 
@@ -35,27 +34,16 @@ export default async function TournamentDetailPage({ params }: TournamentDetailP
 
   if (!club) notFound();
 
-  const { data: membershipRow } = await supabase
-    .from("club_members")
-    .select("id, role")
-    .eq("club_id", club.id)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-
-  if (membershipRow && !isClubRole(membershipRow.role)) redirect("/unauthorized");
-
-  // SUPERADMIN "Entrar al club" — the parent layouts already granted
-  // elevated access; this page must not re-reject it with its own
-  // independent membership check. No own club_members row, so
-  // ownClubMemberId stays null (isAdmin below already skips every own-
-  // participation lookup for OWNER/ADMIN regardless).
-  const membership: { id: string | null; role: "OWNER" | "ADMIN" | "PLAYER" } | null = membershipRow
-    ? { id: membershipRow.id, role: membershipRow.role as "OWNER" | "ADMIN" | "PLAYER" }
-    : (await checkProfileIsPlatformAdmin(supabase, user.id))
-      ? { id: null, role: "OWNER" }
-      : null;
-  if (!membership) redirect("/unauthorized");
+  // resolveClubAccess is the single source of truth for "who is this
+  // caller in this club" — a real membership row, or SUPERADMIN's
+  // elevated "Entrar al club" access (already granted by the parent
+  // layouts; this page must not re-derive/re-reject it independently).
+  // No own club_members row for elevated access, so ownClubMemberId
+  // stays null below (isAdmin already skips every own-participation
+  // lookup for OWNER/ADMIN regardless, real or elevated).
+  const access = await resolveClubAccess(supabase, club.id);
+  if (!access.authorized) redirect("/unauthorized");
+  const membership = { id: access.clubMemberId, role: access.role };
 
   // Compatibilidad con enlaces antiguos basados en UUID (incluida la
   // vieja ruta /admin/tournaments/<uuid>): si el parámetro tiene forma de

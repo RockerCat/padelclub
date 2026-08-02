@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { resolveClubAccess } from "@/lib/clubAccess";
 import { getClubEntryPath } from "@/lib/utils/navigation";
 import { getClubPublicPageData } from "@/lib/clubPublicPageData";
 import { getPlayerReservations } from "@/lib/playerReservations";
@@ -9,7 +10,6 @@ import { ClubHero } from "@/components/clubs/ClubHero";
 import { PublicNewsCard } from "@/components/clubs/PublicNewsCard";
 import { PlayerHomeActivity } from "./PlayerHomeActivity";
 import { ClubInfoSections } from "./ClubInfoSections";
-import type { ClubRole } from "@/types/database";
 
 interface PlayerHomePageProps {
   params: Promise<{ club: string }>;
@@ -43,19 +43,15 @@ export default async function PlayerHomePage({ params }: PlayerHomePageProps) {
     .single();
   if (!club) notFound();
 
-  const { data: membership } = await supabase
-    .from("club_members")
-    .select("role")
-    .eq("club_id", club.id)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-  if (!membership) redirect("/unauthorized");
+  const access = await resolveClubAccess(supabase, club.id);
+  if (!access.authorized) redirect("/unauthorized");
 
   // Same rule as the public page: OWNER/ADMIN never land on the member
-  // home — straight to their own operational entry point.
-  if (membership.role !== "PLAYER") {
-    redirect(getClubEntryPath(slug, membership.role as ClubRole));
+  // home — straight to their own operational entry point. SUPERADMIN
+  // elevated access always resolves to "OWNER", so it lands on the
+  // dashboard here too, same as a real OWNER visiting this legacy URL.
+  if (access.role !== "PLAYER") {
+    redirect(getClubEntryPath(slug, access.role));
   }
 
   const now = new Date();

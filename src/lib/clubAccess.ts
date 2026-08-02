@@ -10,6 +10,8 @@ export type ClubAccess =
       role: "OWNER" | "ADMIN" | "PLAYER";
       /** True when this access is elevated platform access, not a real club_members row. */
       isSuperadminAccess: boolean;
+      /** The real club_members.id, or null for elevated SUPERADMIN access (no row exists). */
+      clubMemberId: string | null;
     }
   | { authorized: false; error: "No autenticado." | "Sin permiso." };
 
@@ -36,20 +38,20 @@ export async function resolveClubAccess(
 
   const { data: membership } = await supabase
     .from("club_members")
-    .select("role")
+    .select("id, role")
     .eq("club_id", clubId)
     .eq("profile_id", user.id)
     .eq("is_active", true)
     .single();
 
   if (membership && (membership.role === "OWNER" || membership.role === "ADMIN" || membership.role === "PLAYER")) {
-    return { authorized: true, user, role: membership.role, isSuperadminAccess: false };
+    return { authorized: true, user, role: membership.role, isSuperadminAccess: false, clubMemberId: membership.id };
   }
 
   if (await checkProfileIsPlatformAdmin(supabase, user.id)) {
     const { data: club } = await supabase.from("clubs").select("is_active").eq("id", clubId).single();
     if (club?.is_active) {
-      return { authorized: true, user, role: "OWNER", isSuperadminAccess: true };
+      return { authorized: true, user, role: "OWNER", isSuperadminAccess: true, clubMemberId: null };
     }
   }
 

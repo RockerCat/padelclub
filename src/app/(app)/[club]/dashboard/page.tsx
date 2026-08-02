@@ -6,17 +6,14 @@ import {
   Users,
   Home,
   Settings,
-  AlertTriangle,
-  Shield,
   Share2,
   CalendarClock,
   CalendarRange,
   Flame,
   TrendingDown,
-  type LucideIcon,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { checkProfileIsPlatformAdmin } from "@/lib/platformAdminQuery";
+import { resolveClubAccess } from "@/lib/clubAccess";
 import {
   DEFAULT_OPERATING_HOURS,
   DAY_NAMES,
@@ -101,53 +98,9 @@ type UpcomingRow = {
   reservation_players: Array<{ profiles: { full_name: string | null } | null }>;
 };
 
-// ─── KPI card sub-component ───────────────────────────────────────────────────
+// ─── Mini stat sub-component ───────────────────────────────────────────────────
 
-function KpiCard({
-  label,
-  value,
-  unit,
-  sub,
-  Icon,
-  color,
-}: {
-  label: string;
-  value: string;
-  unit?: string;
-  sub?: string;
-  Icon: LucideIcon;
-  color: string;
-}) {
-  return (
-    <div className="relative bg-brand-surface border border-white/10 rounded-2xl p-5 overflow-hidden">
-      <div
-        className="absolute inset-x-0 top-0 h-[3px]"
-        style={{ backgroundColor: color, opacity: 0.8 }}
-      />
-      <Icon className="absolute right-4 bottom-4 w-14 h-14 text-white opacity-[0.04]" />
-      <div
-        className="w-9 h-9 rounded-xl flex items-center justify-center mb-4"
-        style={{
-          backgroundColor: `color-mix(in srgb, ${color} 15%, transparent)`,
-          color,
-        }}
-      >
-        <Icon className="w-4 h-4" />
-      </div>
-      <p className="text-xs text-brand-muted mb-1 leading-tight">{label}</p>
-      <p className="leading-none mb-1" style={{ color }}>
-        <span className="text-3xl font-bold tabular-nums">{value}</span>
-        {unit && (
-          <span className="text-xl font-semibold ml-0.5">{unit}</span>
-        )}
-      </p>
-      {sub && <p className="text-[11px] text-brand-muted/70">{sub}</p>}
-    </div>
-  );
-}
-
-// Small stacked stat used inside the "Operación próxima" cards, which each
-// show several stats at once (unlike KpiCard, which is built for exactly one).
+// Small stacked stat used inside the "Operación próxima" cards.
 function MiniStat({ value, label }: { value: string; label: string }) {
   return (
     <div>
@@ -309,21 +262,15 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
     .single();
   if (!club) notFound();
 
-  const { data: membershipRow } = await supabase
-    .from("club_members")
-    .select("id, role")
-    .eq("club_id", club.id)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-
-  // SUPERADMIN "Entrar al club" — the parent layouts already granted
-  // elevated access ([club]/layout.tsx, admin/layout.tsx); this page must
-  // not re-reject it with its own independent membership check. `id` is
-  // only ever used below inside the PLAYER-only branch, which elevated
-  // access (always role "OWNER") never enters.
-  const membership = membershipRow ?? (await checkProfileIsPlatformAdmin(supabase, user.id) ? { id: null, role: "OWNER" as const } : null);
-  if (!membership) redirect("/unauthorized");
+  // resolveClubAccess is the single source of truth for "who is this
+  // caller in this club" — a real membership row, or SUPERADMIN's
+  // elevated "Entrar al club" access (already granted by the parent
+  // layouts; this page must not re-derive/re-reject it independently).
+  // `clubMemberId` is only ever used below inside the PLAYER-only branch,
+  // which elevated access (always role "OWNER") never enters.
+  const access = await resolveClubAccess(supabase, club.id);
+  if (!access.authorized) redirect("/unauthorized");
+  const membership = { id: access.clubMemberId, role: access.role };
 
   // PLAYER gets its own personal sport Dashboard at this exact same URL
   // (see getClubEntryPath) — a totally different composition/view, never a
@@ -335,7 +282,10 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
       supabase,
       club.id,
       slug,
-      membership.id,
+      // clubMemberId is only ever null for elevated SUPERADMIN access,
+      // which always resolves role to "OWNER" — this branch only runs for
+      // a real PLAYER membership, which always has a real id.
+      membership.id!,
       user.id,
       user.email ?? null,
       todayStrForPlayer
@@ -356,52 +306,26 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
   today.setHours(0, 0, 0, 0);
   const todayStr = toDateStr(today);
 
-  // ─── Baseline fetches — needed on every view (onboarding banner, empty
-  // state, "Canchas" KPI) regardless of which tab is active ───────────────────
-  const [courtsRes, operatingHoursRes, hasAnyReservationRes, playerCountRes, adminCountRes] =
-    await Promise.all([
-      // Active courts — id/name/surface, used by onboarding step4 and by the
-      // Operación view's per-court breakdown.
-      supabase
-        .from("courts")
-        .select("id, name, surface")
-        .eq("club_id", club.id)
-        .eq("is_active", true)
-        .order("name"),
+  // ─── Baseline fetches — needed on every view (onboarding banner, "Canchas"
+  // KPI) regardless of which tab is active ─────────────────────────────────
+  const [courtsRes, operatingHoursRes] = await Promise.all([
+    // Active courts — id/name/surface, used by onboarding step4 and by the
+    // Operación view's per-court breakdown.
+    supabase
+      .from("courts")
+      .select("id, name, surface")
+      .eq("club_id", club.id)
+      .eq("is_active", true)
+      .order("name"),
 
-      // Occupancy denominator (Operación) + onboarding step3 check.
-      supabase
-        .from("club_operating_hours")
-        .select("day_of_week, is_open, opens_at, closes_at")
-        .eq("club_id", club.id),
-
-      // Empty-state check — does this club have ANY reservation, ever.
-      supabase
-        .from("reservations")
-        .select("id", { count: "exact", head: true })
-        .eq("club_id", club.id)
-        .limit(1),
-
-      supabase
-        .from("club_members")
-        .select("id", { count: "exact", head: true })
-        .eq("club_id", club.id)
-        .eq("role", "PLAYER")
-        .eq("is_active", true),
-
-      supabase
-        .from("club_members")
-        .select("id", { count: "exact", head: true })
-        .eq("club_id", club.id)
-        .in("role", ["OWNER", "ADMIN"])
-        .eq("is_active", true),
-    ]);
+    // Occupancy denominator (Operación) + onboarding step3 check.
+    supabase
+      .from("club_operating_hours")
+      .select("day_of_week, is_open, opens_at, closes_at")
+      .eq("club_id", club.id),
+  ]);
 
   const courts = courtsRes.data ?? [];
-  const hasAnyReservation = (hasAnyReservationRes.count ?? 0) > 0;
-  const playerCount = playerCountRes.count ?? 0;
-  const adminCount = adminCountRes.count ?? 0;
-  const isEmpty = !hasAnyReservation;
 
   const dbHours = (operatingHoursRes.data ?? []) as OperatingHour[];
   const effectiveHours: OperatingHour[] = DEFAULT_OPERATING_HOURS.map((def) => {
@@ -421,7 +345,6 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
     { done: step3Done, step: 3, todoLabel: "Falta configurar horarios" },
     { done: step4Done, step: 4, todoLabel: "Falta agregar una cancha" },
   ].filter((item) => !item.done);
-  const firstIncompleteStep = pendingSetupItems[0]?.step ?? null;
 
   // Defined once, rendered in two places: unconditionally for the empty
   // state (unchanged position/behavior), and inside the "Actividad Reciente"
@@ -482,7 +405,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
   let actividadContent: React.ReactNode = null;
   let canchasContent: React.ReactNode = null;
 
-  if (!isEmpty && activeTab === "operacion") {
+  if (activeTab === "operacion") {
     const [upcomingRes, futureWeekRes] = await Promise.all([
       // Próximo turno por cancha — upcoming confirmed reservations from right
       // now onward, sorted chronologically; the first row per court_id is
@@ -727,7 +650,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
     );
   }
 
-  if (!isEmpty && activeTab === "rendimiento") {
+  if (activeTab === "rendimiento") {
     const periodKey = resolveStatsPeriodKey(periodParam);
     const { start, end } = resolveStatsPeriod(periodKey);
     const { data: stats, error } = await getClubStatistics(supabase, club.id, start, end);
@@ -795,7 +718,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
     );
   }
 
-  if (!isEmpty && activeTab === "actividad") {
+  if (activeTab === "actividad") {
     const activityItems = await getRecentActivity(supabase, club.id, slug);
     actividadContent = (
       <div className="flex flex-col gap-8">
@@ -808,7 +731,7 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
     );
   }
 
-  if (!isEmpty && activeTab === "canchas") {
+  if (activeTab === "canchas") {
     // Filtered server-side by the resolved status, never fetched whole and
     // hidden with CSS — one query, no duplicate fetch.
     const { data: filteredCourts } = await supabase
@@ -888,99 +811,53 @@ export default async function DashboardPage({ params, searchParams }: DashboardP
         />
       )}
 
-      {isEmpty ? (
-        /* ─── Empty state: management dashboard summary ──────────────────── */
-        <>
-          {/* Sección 1 — KPIs principales */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            <KpiCard label="Canchas" value={String(courts.length)} Icon={Home} color="var(--club-primary)" />
-            <KpiCard label="Jugadores" value={String(playerCount)} Icon={Users} color="var(--club-secondary)" />
-            <KpiCard label="Reservas" value="0" Icon={CalendarDays} color="var(--club-primary)" />
-            <KpiCard label="Administradores" value={String(adminCount)} Icon={Shield} color="var(--club-secondary)" />
-          </div>
-
-          {/* Sección 2 — Configuración pendiente (solo si falta algo) */}
-          {pendingSetupItems.length > 0 && (
-            <div className="bg-brand-surface border border-amber-400/20 rounded-2xl p-5 mb-8">
-              <p className="text-sm font-semibold text-white mb-1">Configuración pendiente</p>
-              <p className="text-xs text-brand-muted/70 mb-4">
-                Todavía hay elementos por configurar antes de aprovechar completamente tu club.
-              </p>
-              <div className="flex flex-col gap-3 mb-5">
-                {pendingSetupItems.map((item) => (
-                  <div key={item.step} className="flex items-center gap-3">
-                    <div
-                      className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
-                      style={{ backgroundColor: "color-mix(in srgb, #EAB308 15%, transparent)" }}
-                    >
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-                    </div>
-                    <span className="text-sm text-amber-300/90">{item.todoLabel}</span>
-                  </div>
-                ))}
-              </div>
+      {/* ─── Próximos pasos recomendados — complementary shortcuts while
+          setup is still incomplete, never a replacement for the tools
+          below. "Crear primera reserva" only appears once the club has a
+          court, since a reservation can't exist without one. ──────────── */}
+      {pendingSetupItems.length > 0 && (
+        <div className="mb-8">
+          <p className="text-sm font-semibold text-white mb-4">Próximos pasos recomendados</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {(
+              [
+                { label: "Invitar jugadores", sub: "Comparte el enlace de invitación con tu comunidad", href: `/${slug}/admin/players`, Icon: Users, color: "var(--club-primary)", external: false, show: true },
+                { label: "Crear primera reserva", sub: "Registra manualmente el primer turno del club", href: `/${slug}/admin/reservations/new`, Icon: CalendarDays, color: "var(--club-secondary)", external: false, show: step4Done },
+                { label: "Ver página pública", sub: "Así es como los jugadores ven tu club", href: `/${slug}`, Icon: Share2, color: "var(--club-primary)", external: true, show: true },
+              ] as const
+            )
+              .filter((step) => step.show)
+              .map((step) => (
               <Link
-                href={`/${slug}/dashboard?setupStep=${firstIncompleteStep}`}
-                className="inline-flex items-center justify-center h-9 px-4 rounded-xl text-sm font-semibold transition-all hover:brightness-110"
-                style={{ backgroundColor: "var(--club-primary)", color: "var(--club-bg, #001A24)" }}
+                key={step.label}
+                href={step.href}
+                target={step.external ? "_blank" : undefined}
+                style={{ "--ns-color": step.color } as React.CSSProperties}
+                className="flex flex-col gap-2 p-4 rounded-2xl bg-brand-surface border border-white/10 hover:border-[var(--ns-color)] transition-colors"
               >
-                Continuar configuración
-              </Link>
-            </div>
-          )}
-
-          {/* Sección 3 — Próximos pasos recomendados */}
-          <div className="mb-8">
-            <p className="text-sm font-semibold text-white mb-4">Próximos pasos recomendados</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {(
-                [
-                  { label: "Invitar jugadores", sub: "Comparte el enlace de invitación con tu comunidad", href: `/${slug}/admin/players`, Icon: Users, color: "var(--club-primary)", external: false },
-                  { label: "Crear primera reserva", sub: "Registra manualmente el primer turno del club", href: `/${slug}/admin/reservations/new`, Icon: CalendarDays, color: "var(--club-secondary)", external: false },
-                  { label: "Ver página pública", sub: "Así es como los jugadores ven tu club", href: `/${slug}`, Icon: Share2, color: "var(--club-primary)", external: true },
-                ] as const
-              ).map((step) => (
-                <Link
-                  key={step.label}
-                  href={step.href}
-                  target={step.external ? "_blank" : undefined}
-                  style={{ "--ns-color": step.color } as React.CSSProperties}
-                  className="flex flex-col gap-2 p-4 rounded-2xl bg-brand-surface border border-white/10 hover:border-[var(--ns-color)] transition-colors"
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center"
+                  style={{ backgroundColor: `color-mix(in srgb, ${step.color} 15%, transparent)`, color: step.color }}
                 >
-                  <div
-                    className="w-9 h-9 rounded-xl flex items-center justify-center"
-                    style={{ backgroundColor: `color-mix(in srgb, ${step.color} 15%, transparent)`, color: step.color }}
-                  >
-                    <step.Icon className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-white">{step.label}</p>
-                    <p className="text-xs text-brand-muted/60 mt-0.5">{step.sub}</p>
-                  </div>
-                </Link>
-              ))}
-            </div>
+                  <step.Icon className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-white">{step.label}</p>
+                  <p className="text-xs text-brand-muted/60 mt-0.5">{step.sub}</p>
+                </div>
+              </Link>
+            ))}
           </div>
-
-          {/* Sección 4 — Actividad reciente (placeholder) */}
-          <div className="bg-brand-surface border border-white/10 rounded-2xl p-6 mb-8">
-            <p className="text-sm font-semibold text-white mb-2">Actividad reciente</p>
-            <p className="text-sm text-brand-muted">
-              Aquí aparecerán las últimas reservas, registros de jugadores y actividad del club.
-            </p>
-          </div>
-
-          {quickAccessSection}
-        </>
-      ) : (
-        <DashboardTabs
-          active={activeTab}
-          operacion={operacionContent}
-          rendimiento={rendimientoContent}
-          actividad={actividadContent}
-          canchas={canchasContent}
-        />
+        </div>
       )}
+
+      <DashboardTabs
+        active={activeTab}
+        operacion={operacionContent}
+        rendimiento={rendimientoContent}
+        actividad={actividadContent}
+        canchas={canchasContent}
+      />
 
     </div>
   );

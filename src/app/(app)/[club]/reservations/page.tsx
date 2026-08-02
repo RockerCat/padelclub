@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { resolveClubAccess } from "@/lib/clubAccess";
 import { PlayerAvailabilityCalendar } from "./PlayerAvailabilityCalendar";
 import type { DayRangeBlock } from "@/components/courts/DayRangeNav";
 import { getClubDurations } from "@/lib/durations";
@@ -107,14 +108,8 @@ export default async function PlayerReservationsPage({
     .single();
   if (!club) notFound();
 
-  const { data: membership } = await supabase
-    .from("club_members")
-    .select("role")
-    .eq("club_id", club.id)
-    .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .single();
-  if (!membership) redirect("/unauthorized");
+  const access = await resolveClubAccess(supabase, club.id);
+  if (!access.authorized) redirect("/unauthorized");
 
   // ─── Week metadata (needed before the week range below) ──────────────────────
   const now = new Date();

@@ -176,7 +176,22 @@ export default async function PlatformClubDetailPage({ params }: PageProps) {
             <SoonButton label="Cambiar Owner" Icon={UserCog} />
             {club.is_active ? (
               <Link
-                href={`/${club.slug}/dashboard`}
+                // A club with zero courts has never been through any setup
+                // step (branding/location/hours/tarifas/courts all start
+                // blank for both create_club_with_owner and
+                // platform_create_pending_club) — court_count === 0 is the
+                // one signal already available here without duplicating
+                // dashboard/page.tsx's own onboarding-completeness check.
+                // ?new=1 is the exact same query param
+                // src/app/onboarding/actions.ts already appends after a
+                // normal OWNER creates a club — reusing that contract is
+                // what makes OnboardingWizard auto-open here too, instead
+                // of leaving SUPERADMIN on the collapsed reminder bar a
+                // fresh club would otherwise show. Once the club has at
+                // least one court, this reverts to a plain link — a
+                // returning visit must never re-trigger the wizard, same
+                // as it never does for a real OWNER's normal navigation.
+                href={club.court_count === 0 ? `/${club.slug}/dashboard?new=1` : `/${club.slug}/dashboard`}
                 className="inline-flex items-center justify-between gap-2 h-10 px-4 text-sm font-medium rounded-xl border border-white/20 text-white hover:border-white/40 hover:bg-white/5 active:bg-white/10 transition-all duration-200 w-full sm:w-auto"
               >
                 <span className="flex items-center gap-2">
