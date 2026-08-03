@@ -106,6 +106,9 @@ function tournamentErrorMessage(error: { code?: string; message?: string }): str
     }
     if (msg.includes("Invalid category")) return "Selecciona una categoría válida.";
     if (msg.includes("Invalid max pairs")) return "Un torneo debe permitir al menos 2 duplas.";
+    if (msg.includes("Invalid entry fee amount")) {
+      return "El valor de inscripción debe ser un número entero mayor o igual a 0.";
+    }
     // El RPC interpola el conteo real de duplas activas directamente en el
     // mensaje ('max_pairs cannot be less than N active tournament
     // entries') — se extrae aquí en vez de recalcularlo con minMaxPairs en
@@ -162,6 +165,8 @@ function parseTournamentFields(formData: FormData) {
   const estimatedDurationMinutes = estimatedDurationMinutesRaw ? parseInt(estimatedDurationMinutesRaw, 10) : NaN;
   const prizeDescription = (formData.get("prize_description") as string | null)?.trim() || null;
   const coverImageUrl = (formData.get("cover_image_url") as string | null)?.trim() || null;
+  const entryFeeAmountRaw = formData.get("entry_fee_amount") as string | null;
+  const entryFeeAmount = entryFeeAmountRaw ? parseInt(entryFeeAmountRaw, 10) : 0;
 
   if (!name) return { error: "El nombre del torneo es obligatorio." } as const;
   if (!category) return { error: "Selecciona una categoría." } as const;
@@ -170,6 +175,9 @@ function parseTournamentFields(formData: FormData) {
   }
   if (!Number.isInteger(maxPairs) || maxPairs < 2) {
     return { error: "Un torneo debe permitir al menos 2 duplas." } as const;
+  }
+  if (!Number.isInteger(entryFeeAmount) || entryFeeAmount < 0) {
+    return { error: "El valor de inscripción debe ser un número entero mayor o igual a 0." } as const;
   }
   if (!VISIBILITIES.includes(visibility)) return { error: "Selecciona una visibilidad válida." } as const;
   if (!Number.isInteger(estimatedDurationMinutes) || estimatedDurationMinutes < 1) {
@@ -196,6 +204,7 @@ function parseTournamentFields(formData: FormData) {
       estimatedDurationMinutes,
       prizeDescription,
       coverImageUrl,
+      entryFeeAmount,
     },
   } as const;
 }
@@ -229,6 +238,7 @@ export async function createTournament(
     p_secondary_category: f.secondaryCategory,
     p_prize_description: f.prizeDescription,
     p_cover_image_url: f.coverImageUrl,
+    p_entry_fee_amount: f.entryFeeAmount,
   });
 
   if (error) {
@@ -276,6 +286,7 @@ export async function updateTournament(
     p_secondary_category: f.secondaryCategory,
     p_prize_description: f.prizeDescription,
     p_cover_image_url: f.coverImageUrl,
+    p_entry_fee_amount: f.entryFeeAmount,
   });
 
   if (error) return { error: tournamentErrorMessage(error) };

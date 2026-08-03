@@ -45,3 +45,16 @@ export function tournamentVisibilityLabel(visibility: string): string {
 export function tournamentCategoryLabel(category: string, secondaryCategory: string | null): string {
   return secondaryCategory ? `${category} + ${secondaryCategory}` : category;
 }
+
+// Valor de inscripción — moneda fija COP (informativo, sin pagos ni
+// recaudo real). Un solo formato reutilizado en tarjetas, detalle y vista
+// de PLAYER, nunca reimplementado por pantalla.
+export function tournamentEntryFeeLabel(entryFeeAmount: number): string {
+  if (entryFeeAmount <= 0) return "Inscripción gratuita";
+  const formatted = new Intl.NumberFormat("es-CO", {
+    style: "currency",
+    currency: "COP",
+    maximumFractionDigits: 0,
+  }).format(entryFeeAmount);
+  return `Inscripción: ${formatted} por persona`;
+}

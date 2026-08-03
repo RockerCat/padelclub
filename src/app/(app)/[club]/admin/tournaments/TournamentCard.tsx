@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui";
 import { Globe, Lock, Users } from "lucide-react";
 import {
   tournamentCategoryLabel,
+  tournamentEntryFeeLabel,
   tournamentStatusBadgeVariant,
   tournamentStatusLabel,
   tournamentVisibilityLabel,
@@ -74,6 +75,7 @@ export function TournamentCard({
             )}
             {tournamentVisibilityLabel(tournament.visibility)}
           </span>
+          <span>{tournamentEntryFeeLabel(tournament.entry_fee_amount)}</span>
         </div>
 
         <div className="mt-auto pt-2 border-t border-white/[0.06] flex flex-col gap-1">

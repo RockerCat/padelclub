@@ -21,6 +21,7 @@ import {
 } from "@/app/(app)/[club]/admin/tournaments/actions";
 import {
   tournamentCategoryLabel,
+  tournamentEntryFeeLabel,
   tournamentStatusBadgeVariant,
   tournamentStatusLabel,
   tournamentVisibilityLabel,
@@ -705,6 +706,12 @@ export function TournamentDetailView({
                 <div>
                   <p className="text-xs text-brand-muted mb-1">Cupo máximo</p>
                   <p className="text-sm text-white font-medium">{tournament.max_pairs} duplas</p>
+                </div>
+                <div>
+                  <p className="text-xs text-brand-muted mb-1">Inscripción</p>
+                  <p className="text-sm text-white font-medium">
+                    {tournamentEntryFeeLabel(tournament.entry_fee_amount)}
+                  </p>
                 </div>
                 {tournament.prize_description && (
                   <div>

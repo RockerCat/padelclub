@@ -1540,6 +1540,7 @@ export type Database = {
           created_at: string
           created_by: string
           description: string | null
+          entry_fee_amount: number
           estimated_duration_minutes: number | null
           id: string
           max_pairs: number
@@ -1569,6 +1570,7 @@ export type Database = {
           created_at?: string
           created_by: string
           description?: string | null
+          entry_fee_amount?: number
           estimated_duration_minutes?: number | null
           id?: string
           max_pairs: number
@@ -1598,6 +1600,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           description?: string | null
+          entry_fee_amount?: number
           estimated_duration_minutes?: number | null
           id?: string
           max_pairs?: number
@@ -1820,6 +1823,7 @@ export type Database = {
           created_at: string
           created_by: string
           description: string | null
+          entry_fee_amount: number
           estimated_duration_minutes: number | null
           id: string
           max_pairs: number
@@ -1856,6 +1860,7 @@ export type Database = {
           created_at: string
           created_by: string
           description: string
+          entry_fee_amount: number
           estimated_duration_minutes: number
           id: string
           max_pairs: number
@@ -1916,6 +1921,7 @@ export type Database = {
           created_at: string
           created_by: string
           description: string
+          entry_fee_amount: number
           estimated_duration_minutes: number
           id: string
           max_pairs: number
@@ -2041,6 +2047,7 @@ export type Database = {
           p_club_id: string
           p_cover_image_url?: string | null
           p_description?: string | null
+          p_entry_fee_amount?: number
           p_estimated_duration_minutes?: number
           p_max_pairs: number
           p_name: string
@@ -2064,6 +2071,7 @@ export type Database = {
           created_at: string
           created_by: string
           description: string
+          entry_fee_amount: number
           estimated_duration_minutes: number
           id: string
           max_pairs: number
@@ -2290,6 +2298,7 @@ export type Database = {
           created_at: string
           created_by: string
           description: string
+          entry_fee_amount: number
           estimated_duration_minutes: number
           id: string
           max_pairs: number
@@ -2416,6 +2425,7 @@ export type Database = {
           created_at: string
           created_by: string
           description: string
+          entry_fee_amount: number
           estimated_duration_minutes: number
           id: string
           max_pairs: number
@@ -2470,6 +2480,7 @@ export type Database = {
           created_at: string
           created_by: string
           description: string | null
+          entry_fee_amount: number
           estimated_duration_minutes: number | null
           id: string
           max_pairs: number
@@ -2528,6 +2539,7 @@ export type Database = {
           created_at: string
           created_by: string
           description: string
+          entry_fee_amount: number
           estimated_duration_minutes: number
           id: string
           max_pairs: number
@@ -2570,6 +2582,7 @@ export type Database = {
           p_category: string
           p_cover_image_url: string | null
           p_description: string | null
+          p_entry_fee_amount: number
           p_estimated_duration_minutes: number
           p_max_pairs: number
           p_name: string
@@ -2594,6 +2607,7 @@ export type Database = {
           created_at: string
           created_by: string
           description: string
+          entry_fee_amount: number
           estimated_duration_minutes: number
           id: string
           max_pairs: number
@@ -2629,6 +2643,7 @@ export type Database = {
           created_at: string
           created_by: string
           description: string
+          entry_fee_amount: number
           estimated_duration_minutes: number
           id: string
           max_pairs: number

@@ -76,6 +76,11 @@ export function TournamentForm({ clubId, tournament, categories, action, onSucce
   const [prizeInput, setPrizeInput] = useState(() =>
     isEdit ? tournament!.prize_description ?? "" : "🥇 1er lugar:\n🥈 2do lugar:"
   );
+  // Valor de inscripción por persona, COP. 0 por defecto al crear; al
+  // editar siempre el valor realmente guardado.
+  const [entryFeeAmountInput, setEntryFeeAmountInput] = useState(() =>
+    String(tournament?.entry_fee_amount ?? 0)
+  );
 
   // Al crear: la hora local actual, calculada en el momento en que este
   // formulario se monta (nunca al momento del build, nunca una constante
@@ -297,6 +302,18 @@ export function TournamentForm({ clubId, tournament, categories, action, onSucce
             value={maxPairsInput}
             onChange={(e) => handleMaxPairsChange(e.target.value)}
             hint={isEdit ? `Mínimo permitido: ${effectiveMinMaxPairs} duplas registradas actualmente.` : undefined}
+            required
+          />
+
+          <Input
+            name="entry_fee_amount"
+            label="Valor de inscripción por persona"
+            type="number"
+            min={0}
+            step={1}
+            value={entryFeeAmountInput}
+            onChange={(e) => setEntryFeeAmountInput(e.target.value)}
+            hint="Moneda: COP. Usa 0 para inscripción gratuita."
             required
           />
         </div>
