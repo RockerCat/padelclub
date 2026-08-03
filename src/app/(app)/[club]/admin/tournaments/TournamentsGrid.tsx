@@ -10,9 +10,19 @@ import type { Tournament, SportCategory } from "@/types/database";
 interface TournamentsGridProps {
   tournaments: Tournament[];
   confirmedCountByTournamentId?: Record<string, number>;
-  categories: Pick<SportCategory, "code" | "sort_order">[];
+  // Solo se usan cuando role !== "PLAYER" (para CreateTournamentModal) —
+  // opcional para que la página de PLAYER pueda reutilizar este mismo
+  // componente sin tener que cargar sport_categories, que nunca necesita.
+  categories?: Pick<SportCategory, "code" | "sort_order">[];
   clubSlug: string;
   clubId: string;
+  // Único prop nuevo para reutilizar el mismo componente en la vista de
+  // PLAYER (Bloque de tabs) — decide tanto el juego de tabs visible como
+  // si se muestra "Crear torneo" (OWNER/ADMIN-only, sin cambios en esa
+  // regla). Ningún otro comportamiento (filtrado, tab por defecto,
+  // tarjetas, navegación al detalle) depende del rol: es exactamente la
+  // misma lógica para los tres.
+  role: "OWNER" | "ADMIN" | "PLAYER";
 }
 
 // "archived" is not a real tournaments.status value — it's orthogonal
@@ -30,7 +40,7 @@ type TabKey =
   | "cancelled"
   | "archived";
 
-const TAB_ORDER: { key: TabKey; label: string }[] = [
+const ADMIN_TAB_ORDER: { key: TabKey; label: string }[] = [
   { key: "draft", label: "Borradores" },
   { key: "registration_open", label: "Inscripciones abiertas" },
   { key: "registration_closed", label: "Inscripciones cerradas" },
@@ -40,32 +50,42 @@ const TAB_ORDER: { key: TabKey; label: string }[] = [
   { key: "archived", label: "Archivados" },
 ];
 
+// PLAYER nunca ve Borradores (un torneo sin publicar) ni Archivados (un
+// torneo que el club retiró de su operación normal) — mismo orden que el
+// de OWNER/ADMIN para el resto, solo con esos dos tabs quitados.
+const PLAYER_TAB_ORDER: { key: TabKey; label: string }[] = ADMIN_TAB_ORDER.filter(
+  ({ key }) => key !== "draft" && key !== "archived"
+);
+
 function tournamentsForTab(tournaments: Tournament[], key: TabKey): Tournament[] {
   return tournaments.filter((t) => (key === "archived" ? !!t.archived_at : t.status === key && !t.archived_at));
 }
 
 // En vivo gana siempre que exista al menos un torneo en ese estado; si
-// no, el primer tab (en el orden de arriba) que tenga al menos un torneo.
+// no, el primer tab (en el orden dado) que tenga al menos un torneo.
 // Con el club totalmente vacío no importa cuál quede activo (no hay nada
 // que mostrar), así que cae en el primero por simplicidad.
-function resolveDefaultTab(tournaments: Tournament[]): TabKey {
+function resolveDefaultTab(tournaments: Tournament[], tabOrder: { key: TabKey; label: string }[]): TabKey {
   if (tournamentsForTab(tournaments, "in_progress").length > 0) return "in_progress";
-  for (const { key } of TAB_ORDER) {
+  for (const { key } of tabOrder) {
     if (tournamentsForTab(tournaments, key).length > 0) return key;
   }
-  return TAB_ORDER[0].key;
+  return tabOrder[0].key;
 }
 
 export function TournamentsGrid({
   tournaments,
   confirmedCountByTournamentId,
-  categories,
+  categories = [],
   clubSlug,
   clubId,
+  role,
 }: TournamentsGridProps) {
   const router = useRouter();
+  const canCreate = role !== "PLAYER";
+  const tabOrder = role === "PLAYER" ? PLAYER_TAB_ORDER : ADMIN_TAB_ORDER;
   const [creating, setCreating] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabKey>(() => resolveDefaultTab(tournaments));
+  const [activeTab, setActiveTab] = useState<TabKey>(() => resolveDefaultTab(tournaments, tabOrder));
   const tournamentsInTab = tournamentsForTab(tournaments, activeTab);
 
   // Preference per spec: navigate straight to the new tournament's detail
@@ -88,17 +108,21 @@ export function TournamentsGrid({
         <div>
           <h1 className="text-2xl font-bold text-white">Torneos</h1>
           <p className="text-brand-muted mt-1 text-sm">
-            Administra inscripciones, duplas y clasificación de tus torneos.
+            {canCreate
+              ? "Administra inscripciones, duplas y clasificación de tus torneos."
+              : "Consulta los torneos del club e inscríbete con tu partner."}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setCreating(true)}
-          className="inline-flex items-center gap-2 h-10 px-4 text-sm font-medium rounded-xl bg-brand-primary text-brand-bg hover:brightness-110 active:brightness-95 transition-all duration-200 shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          Crear torneo
-        </button>
+        {canCreate && (
+          <button
+            type="button"
+            onClick={() => setCreating(true)}
+            className="inline-flex items-center gap-2 h-10 px-4 text-sm font-medium rounded-xl bg-brand-primary text-brand-bg hover:brightness-110 active:brightness-95 transition-all duration-200 shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            Crear torneo
+          </button>
+        )}
       </div>
 
       {tournaments.length === 0 ? (
@@ -108,16 +132,20 @@ export function TournamentsGrid({
           </div>
           <h3 className="text-base font-semibold text-white mb-1">Aún no hay torneos</h3>
           <p className="text-sm text-brand-muted max-w-sm mb-6">
-            Crea el primer torneo del club para administrar inscripciones, duplas y clasificación.
+            {canCreate
+              ? "Crea el primer torneo del club para administrar inscripciones, duplas y clasificación."
+              : "El club todavía no ha publicado torneos."}
           </p>
-          <button
-            type="button"
-            onClick={() => setCreating(true)}
-            className="inline-flex items-center gap-2 h-10 px-4 text-sm font-medium rounded-xl bg-brand-primary text-brand-bg hover:brightness-110 active:brightness-95 transition-all duration-200"
-          >
-            <Plus className="w-4 h-4" />
-            Crear torneo
-          </button>
+          {canCreate && (
+            <button
+              type="button"
+              onClick={() => setCreating(true)}
+              className="inline-flex items-center gap-2 h-10 px-4 text-sm font-medium rounded-xl bg-brand-primary text-brand-bg hover:brightness-110 active:brightness-95 transition-all duration-200"
+            >
+              <Plus className="w-4 h-4" />
+              Crear torneo
+            </button>
+          )}
         </div>
       ) : (
         <>
@@ -125,9 +153,10 @@ export function TournamentsGrid({
               desktop. Cada tab filtra el mismo arreglo `tournaments` ya
               cargado por el padre (sin consulta nueva); un torneo cae en
               exactamente un tab (los archivados nunca en los otros seis),
-              así que nunca hay duplicados. */}
+              así que nunca hay duplicados. Mismo componente para los tres
+              roles — solo cambia qué tabs incluye `tabOrder`. */}
           <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 mb-6" role="tablist">
-            {TAB_ORDER.map(({ key, label }) => {
+            {tabOrder.map(({ key, label }) => {
               const isActive = activeTab === key;
               return (
                 <button
@@ -165,7 +194,7 @@ export function TournamentsGrid({
         </>
       )}
 
-      {creating && (
+      {canCreate && creating && (
         <CreateTournamentModal
           clubSlug={clubSlug}
           clubId={clubId}

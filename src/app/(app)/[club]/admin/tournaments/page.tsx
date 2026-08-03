@@ -60,6 +60,7 @@ export default async function TournamentsPage({ params }: TournamentsPageProps) 
         categories={sportCategories ?? []}
         clubSlug={slug}
         clubId={club.id}
+        role={access.role}
       />
     </div>
   );
