@@ -14,10 +14,13 @@ import { getFontEmbedCSS, toSvg } from "html-to-image";
 export const SHARE_CARD_WIDTH = 1080;
 export const SHARE_CARD_HEIGHT = 1350;
 
-// Bloque 3.6 — 6s por imagen: ni una imagen remota lenta/colgada (Supabase
+// Bloque 3.6 — por imagen: ni una imagen remota lenta/colgada (Supabase
 // Storage caído, red del cliente) ni un bucket privado inaccesible deben
-// bloquear la resolución completa. Rango pedido: 5-8s.
-const IMAGE_FETCH_TIMEOUT_MS = 6000;
+// bloquear la resolución completa. Rango pedido: 5-8s — 8s (el máximo de
+// ese rango, subido desde 6s en el Bloque 3.10) para dar más margen real en
+// redes móviles, donde este mismo timeout por imagen puede no alcanzar
+// cuando compite con otras descargas simultáneas (ver AVATAR_FETCH_CONCURRENCY).
+const IMAGE_FETCH_TIMEOUT_MS = 8000;
 
 // Convierte una URL remota (avatar/logo, típicamente Supabase Storage
 // público) a un data URL propio ANTES de montar la tarjeta exportable — así
@@ -50,12 +53,50 @@ export async function resolveImageDataUrl(url: string | null | undefined): Promi
   }
 }
 
-// Resuelve varias imágenes en paralelo (nunca en serie, nunca una consulta
-// nueva por jugador — son fetch de archivos ya públicos, no RPCs).
+// Bloque 3.10 — CAUSA del avatar faltante reportado desde PLAYER en Chrome
+// móvil (iOS), siempre en las posiciones 4-10 (la lista), nunca en el podio:
+// el Top 10 dispara hasta 11 descargas (logo + 10 avatares) totalmente en
+// paralelo (un solo Promise.all sin límite). En una red móvil, esas 11
+// descargas compiten por el mismo ancho de banda limitado — las primeras
+// (podio, posiciones 1-3, encoladas primero por el propio orden de
+// top10.map) terminan a tiempo, pero las últimas en resolverse (posiciones
+// 4-10) tienen cada vez menos margen real dentro de su propio timeout de
+// IMAGE_FETCH_TIMEOUT_MS — cada resolveImageDataUrl individual sigue
+// siendo correcto, nunca lanza, pero termina en el mismo fallback de
+// "sin avatar" que una imagen realmente rota, no por serlo sino por no
+// haber tenido ancho de banda suficiente a tiempo. Nunca ocurría en
+// desktop/wifi (mismo código, sin esta contención real) — de ahí que
+// OWNER/ADMIN (probado en desktop) nunca lo viera.
+//
+// Corrección: acota la concurrencia real de descargas (nunca cambia
+// resolveImageDataUrl en sí, el mismo helper y el mismo fallback de
+// siempre) — como mucho AVATAR_FETCH_CONCURRENCY imágenes a la vez, así
+// cada una recibe una porción real de ancho de banda en vez de repartirlo
+// entre 10 a la vez. Mismo orden de salida que antes (un array por índice,
+// nunca reordenado).
+const AVATAR_FETCH_CONCURRENCY = 4;
+
+// Resuelve varias imágenes con concurrencia acotada (nunca en serie
+// estricta — sigue siendo paralelo, solo no las 10 a la vez — y nunca una
+// consulta nueva por jugador: son fetch de archivos ya públicos, no RPCs).
 export async function resolveImageDataUrls(
   urls: Array<string | null | undefined>
 ): Promise<Array<string | null>> {
-  return Promise.all(urls.map(resolveImageDataUrl));
+  const results = new Array<string | null>(urls.length).fill(null);
+  let nextIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (true) {
+      const i = nextIndex;
+      nextIndex += 1;
+      if (i >= urls.length) return;
+      results[i] = await resolveImageDataUrl(urls[i]);
+    }
+  }
+
+  const workerCount = Math.min(AVATAR_FETCH_CONCURRENCY, urls.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return results;
 }
 
 // Bloque 3.6 — primera causa raíz encontrada (fuentes web) del bloqueo
