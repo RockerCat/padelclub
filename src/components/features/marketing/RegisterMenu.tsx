@@ -12,12 +12,13 @@ import { cn } from "@/lib/utils/cn";
 // Opens a small menu with exactly two options, each reusing an existing,
 // unmodified flow:
 //
-// - "Como jugador" → the generic signup form (/auth/signup, no `next`) —
-//   the exact same route today's Navbar already falls back to for a
-//   logged-out visitor. After confirming, the account lands at
-//   /clubs?welcome=1 (SignupForm's own existing default) with no type yet
-//   (see CLAUDE.md → Role Philosophy) — free to join/request any club as
-//   PLAYER from there, unchanged.
+// - "Como jugador" → the generic signup form, with an explicit
+//   `next=/clubs` so it lands straight on the club explorer — never
+//   SignupForm's own "/clubs?welcome=1" default, which is styled as the
+//   OWNER "crea tu primer club" onboarding and must never be shown to a
+//   PLAYER-intent signup (see CLAUDE.md → Role Philosophy: the account has
+//   no type yet at this point, but the entry point already knows the
+//   intent is PLAYER).
 // - "Propietario de club" → the exact same signup form, but with
 //   `next=/clubs/create` — SignupForm/`/auth/callback` already support an
 //   explicit `next` to skip the generic welcome screen (see SignupForm's
@@ -36,7 +37,7 @@ interface RegisterMenuProps {
   align?: "left" | "right";
 }
 
-const SIGNUP_PLAYER_HREF = "/auth/signup";
+const SIGNUP_PLAYER_HREF = `/auth/signup?next=${encodeURIComponent("/clubs")}`;
 const SIGNUP_OWNER_HREF = `/auth/signup?next=${encodeURIComponent("/clubs/create")}`;
 
 export function RegisterMenu({ triggerContent, triggerClassName, align = "left" }: RegisterMenuProps) {

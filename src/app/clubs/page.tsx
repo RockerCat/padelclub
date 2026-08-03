@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isPlatformAdmin } from "@/lib/platformAdmin";
 import { Badge } from "@/components/ui";
 import { getClubEntryPath } from "@/lib/utils/navigation";
-import { LogOut, Plus, Compass, CheckCircle2, ShieldCheck, ChevronDown } from "lucide-react";
+import { LogOut, Plus, CheckCircle2, ShieldCheck, ChevronDown } from "lucide-react";
 import { ExploreSection } from "./ExploreSection";
 import type { DirectoryClub, MemberInfo } from "./ExploreSection";
 import { NotificationBell } from "@/components/layout/NotificationBell";
@@ -46,6 +46,7 @@ export default async function ClubsPage({
 
   let memberships: MembershipRow[] = [];
   let lastClubId: string | null = null;
+  let accountType: string | null = null;
   let platformAdmin = false;
   let notificationCount = 0;
   let notificationItems: Awaited<ReturnType<typeof getRecentNotifications>> = [];
@@ -60,7 +61,7 @@ export default async function ClubsPage({
         .order("joined_at", { ascending: true }),
       supabase
         .from("profiles")
-        .select("last_club_id")
+        .select("last_club_id, account_type")
         .eq("id", user.id)
         .single(),
       isPlatformAdmin(),
@@ -69,14 +70,27 @@ export default async function ClubsPage({
     ]);
     memberships = (membershipsResult.data ?? []) as unknown as MembershipRow[];
     lastClubId = profileResult.data?.last_club_id ?? null;
+    accountType = profileResult.data?.account_type ?? null;
     platformAdmin = isAdmin;
     notificationCount = unreadCount;
     notificationItems = recentNotifications;
   }
 
-  const hasClubs      = memberships.length > 0;
-  const isOwner       = memberships.some((m) => m.role === "OWNER");
-  const isWelcomeMode = showWelcome && !!user && !hasClubs;
+  const hasClubs = memberships.length > 0;
+  const isOwner  = memberships.some((m) => m.role === "OWNER");
+  // welcome=1 renders the OWNER "crea tu primer club" onboarding — never
+  // shown to an account already known to be PLAYER (account_type is the
+  // authoritative, server-side signal; a client-supplied ?welcome=1 alone
+  // is never trusted for this), even if it's manually typed into the URL.
+  const isWelcomeMode = showWelcome && !!user && !hasClubs && accountType !== "PLAYER";
+  // A logged-in account with zero active club memberships is, by
+  // construction, never OWNER or ADMIN here (both roles always imply an
+  // active club_members row) — it's either an established PLAYER with no
+  // current club, or a just-registered account with no account_type yet
+  // (see CLAUDE.md → Role Philosophy). platformAdmin (SUPERADMIN) is the
+  // one other account shape that can reach !hasClubs, so it's excluded
+  // explicitly rather than left to fall through unnoticed.
+  const isPlayerEmptyState = !!user && !hasClubs && !platformAdmin;
 
   // Skip directory fetch when in welcome mode — not needed
   const [directoryClubs, pendingRequestClubIds] = await Promise.all([
@@ -200,16 +214,14 @@ export default async function ClubsPage({
         /* ── Normal mode ────────────────────────────────────────────────────── */
         <div className="py-8 md:py-12">
 
-            {/* ── Mis clubes (authenticated only) ─────────────────────────── */}
-            {user && (
+            {/* ── Mis clubes (authenticated, with active memberships) ─────── */}
+            {user && hasClubs && (
               <section className="max-w-3xl mx-auto px-4 mb-10">
                 <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-3">
                   Mis clubes
                 </h2>
 
-                {hasClubs ? (
-                  <>
-                    <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-3">
                       {sorted.map(({ role, clubs: club }) => {
                         const entryPath = getClubEntryPath(club.slug, role);
                         const initials  = getInitials(club.name);
@@ -270,43 +282,14 @@ export default async function ClubsPage({
                         </Link>
                       </div>
                     )}
-                  </>
-                ) : (
-                  /* ── Empty state (no clubs, no welcome mode) ── */
-                  <div className="rounded-2xl border border-white/10 bg-brand-surface px-6 py-10 flex flex-col items-center text-center gap-6">
-                    <div className="w-14 h-14 rounded-2xl bg-white/4 border border-white/10 flex items-center justify-center">
-                      <Compass className="w-7 h-7 text-brand-muted/40" />
-                    </div>
-
-                    <div>
-                      <p className="text-base font-semibold text-white mb-1.5">Bienvenido a MiPadelClub</p>
-                      <p className="text-sm text-brand-muted">Todavía no perteneces a ningún club.</p>
-                    </div>
-
-                    <div className="flex flex-col sm:flex-row gap-3 w-full max-w-sm">
-                      <a
-                        href="#explorar"
-                        className="flex-1 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold border border-white/20 text-white hover:border-white/40 hover:bg-white/5 transition-colors"
-                      >
-                        <Compass className="w-4 h-4" />
-                        Explorar clubes
-                      </a>
-                      <Link
-                        href="/clubs/create"
-                        className="flex-1 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold bg-brand-primary text-brand-bg hover:bg-brand-primary/90 transition-colors"
-                      >
-                        <Plus className="w-4 h-4" />
-                        Crear mi club
-                      </Link>
-                    </div>
-
-                    <div className="text-xs text-brand-muted/50 leading-relaxed max-w-xs">
-                      <span className="text-brand-muted/70 font-medium">Explorar:</span> encuentra un club donde jugar pádel.{" "}
-                      <span className="text-brand-muted/70 font-medium">Crear:</span> registra y gestiona tu propio club.
-                    </div>
-                  </div>
-                )}
               </section>
+            )}
+
+            {/* ── PLAYER sin membresías: encabezado simple, sin tarjeta ────── */}
+            {isPlayerEmptyState && (
+              <div className="max-w-3xl mx-auto px-4 mb-6">
+                <h1 className="text-lg font-semibold text-white">Bienvenido a MiPadel.club</h1>
+              </div>
             )}
 
             {/* ── Explorar clubes ────────────────────────────────────────────── */}
