@@ -9,11 +9,13 @@ import { formatDurationMinutes } from "@/lib/utils/tournamentDuration";
 import { TournamentForm } from "@/app/(app)/[club]/admin/tournaments/TournamentForm";
 import { EditTournamentCoverModal } from "@/app/(app)/[club]/admin/tournaments/EditTournamentCoverModal";
 import {
+  archiveTournament,
   cancelTournament,
   closeTournamentRegistration,
   finalizeTournament,
   openTournamentRegistration,
   reopenTournamentRegistration,
+  restoreTournament,
   startTournament,
   updateTournament,
 } from "@/app/(app)/[club]/admin/tournaments/actions";
@@ -78,7 +80,16 @@ function formatDateTime(iso: string | null): string {
   });
 }
 
-type PendingTransition = "open" | "close" | "reopen" | "cancel" | "start" | "finalize" | null;
+type PendingTransition =
+  | "open"
+  | "close"
+  | "reopen"
+  | "cancel"
+  | "start"
+  | "finalize"
+  | "archive"
+  | "restore"
+  | null;
 
 export function TournamentDetailView({
   tournament: initialTournament,
@@ -365,7 +376,12 @@ export function TournamentDetailView({
       tournament.status === "registration_open" ||
       tournament.status === "registration_closed");
   const canOpenRegistration = isAdmin && tournament.status === "draft";
-  const canCloseRegistration = isAdmin && tournament.status === "registration_open";
+  // Cerrar inscripciones requiere al menos 2 duplas realmente confirmadas
+  // (nunca pendientes/rechazadas/retiradas) — con 0 o 1, el organizador
+  // solo puede mantener las inscripciones abiertas o cancelar el torneo
+  // (canCancel, sin cambios). Misma regla reforzada en el RPC.
+  const canCloseRegistration =
+    isAdmin && tournament.status === "registration_open" && capacity.confirmed >= 2;
   const canReopenRegistration = isAdmin && tournament.status === "registration_closed";
   const canStart = isAdmin && tournament.status === "registration_closed" && capacity.confirmed >= 1;
   const canFinalize = isAdmin && tournament.status === "in_progress";
@@ -376,8 +392,24 @@ export function TournamentDetailView({
   // draft (aún no es público de facto), cancelled o completed.
   const canShareWhatsApp =
     isAdmin && ["registration_open", "registration_closed", "in_progress"].includes(tournament.status);
+  // Archivar — solo torneos finalizados o cancelados, y solo si aún no
+  // están archivados (nunca dos veces). Restaurar es la acción inversa,
+  // solo disponible una vez archivado. El estado deportivo (status) nunca
+  // cambia por ninguna de las dos — ver 20261020000001_tournament_archive.
+  const canArchive =
+    isAdmin && ["completed", "cancelled"].includes(tournament.status) && !tournament.archived_at;
+  const canRestore = isAdmin && !!tournament.archived_at;
   const hasAnyAdminAction =
-    canEdit || canOpenRegistration || canCloseRegistration || canReopenRegistration || canStart || canFinalize || canCancel || canShareWhatsApp;
+    canEdit ||
+    canOpenRegistration ||
+    canCloseRegistration ||
+    canReopenRegistration ||
+    canStart ||
+    canFinalize ||
+    canCancel ||
+    canShareWhatsApp ||
+    canArchive ||
+    canRestore;
 
   const tournamentUrl = `${origin ?? ""}/${clubSlug}/tournaments/${tournament.slug}`;
   const whatsappShareHref = `https://wa.me/?text=${encodeURIComponent(
@@ -429,6 +461,10 @@ export function TournamentDetailView({
           ? reopenTournamentRegistration
           : confirming === "start"
           ? startTournament
+          : confirming === "archive"
+          ? archiveTournament
+          : confirming === "restore"
+          ? restoreTournament
           : cancelTournament;
 
       const result = await action(clubId, tournament.id, tournament.slug, clubSlug);
@@ -449,6 +485,10 @@ export function TournamentDetailView({
           ? "Inscripciones reabiertas correctamente"
           : confirming === "start"
           ? "Torneo iniciado — ¡en curso!"
+          : confirming === "archive"
+          ? "Torneo archivado correctamente"
+          : confirming === "restore"
+          ? "Torneo restaurado correctamente"
           : "Torneo cancelado correctamente"
       );
       router.refresh();
@@ -501,6 +541,19 @@ export function TournamentDetailView({
       message: "Esta acción conservará el torneo como historial, pero no podrá continuar su operación.",
       confirmLabel: "Cancelar torneo",
       confirmVariant: "danger",
+    },
+    archive: {
+      title: "Archivar torneo",
+      message:
+        "El torneo se moverá a la pestaña Archivados y dejará de mezclarse con los demás torneos. Conserva toda su información e historial — puedes restaurarlo cuando quieras.",
+      confirmLabel: "Archivar torneo",
+      confirmVariant: "primary",
+    },
+    restore: {
+      title: "Restaurar torneo",
+      message: "El torneo volverá a aparecer en la pestaña correspondiente a su estado actual.",
+      confirmLabel: "Restaurar torneo",
+      confirmVariant: "primary",
     },
   };
 
@@ -619,6 +672,16 @@ export function TournamentDetailView({
                   {canCancel && (
                     <Button variant="danger" size="sm" onClick={() => { setActionError(null); setConfirming("cancel"); }}>
                       Cancelar torneo
+                    </Button>
+                  )}
+                  {canArchive && (
+                    <Button variant="secondary" size="sm" onClick={() => { setActionError(null); setConfirming("archive"); }}>
+                      Archivar torneo
+                    </Button>
+                  )}
+                  {canRestore && (
+                    <Button variant="secondary" size="sm" onClick={() => { setActionError(null); setConfirming("restore"); }}>
+                      Restaurar torneo
                     </Button>
                   )}
                 </div>

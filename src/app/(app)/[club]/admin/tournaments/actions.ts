@@ -64,6 +64,18 @@ function tournamentErrorMessage(error: { code?: string; message?: string }): str
     ) {
       return "El torneo cambió de estado y esta acción ya no está disponible.";
     }
+    if (msg.includes("At least 2 confirmed pairs are required to close registration")) {
+      return "Se requieren al menos 2 duplas inscritas para cerrar las inscripciones.";
+    }
+    if (msg.includes("Only a completed or cancelled tournament can be archived")) {
+      return "Solo un torneo finalizado o cancelado puede archivarse.";
+    }
+    if (msg.includes("Tournament is already archived")) {
+      return "Este torneo ya está archivado.";
+    }
+    if (msg.includes("Tournament is not archived")) {
+      return "Este torneo no está archivado.";
+    }
     // Los tres campos que update_tournament congela una vez abiertas las
     // inscripciones ya emiten mensajes distintos entre sí desde el propio
     // RPC ('category cannot change...', 'secondary_category cannot
@@ -395,7 +407,15 @@ export async function cancelTournament(
     p_tournament_id: tournamentId,
   });
 
-  if (error) return { error: tournamentErrorMessage(error) };
+  if (error) {
+    console.error("[cancelTournament] cancel_tournament RPC error:", {
+      code: error.code,
+      message: error.message,
+      details: (error as { details?: string }).details,
+      hint: (error as { hint?: string }).hint,
+    });
+    return { error: tournamentErrorMessage(error) };
+  }
 
   revalidatePath(`/${clubSlug}/admin/tournaments`);
   revalidatePath(`/${clubSlug}/tournaments/${tournamentSlug}`);
@@ -442,9 +462,81 @@ export async function finalizeTournament(
     p_tournament_id: tournamentId,
   });
 
-  if (error) return { error: tournamentErrorMessage(error) };
+  if (error) {
+    console.error("[finalizeTournament] finalize_tournament RPC error:", {
+      code: error.code,
+      message: error.message,
+      details: (error as { details?: string }).details,
+      hint: (error as { hint?: string }).hint,
+    });
+    return { error: tournamentErrorMessage(error) };
+  }
 
   revalidatePath(`/${clubSlug}/admin/tournaments`);
   revalidatePath(`/${clubSlug}/tournaments/${tournamentSlug}`);
   return { success: true, alreadyFinalized: data?.[0]?.already_finalized ?? false };
+}
+
+// ─── archiveTournament ───────────────────────────────────────────────────────
+// Only a completed or cancelled tournament can be archived — never touches
+// status, entries, points, classification or news, purely a visibility
+// toggle for the admin listing (archived_at/archived_by).
+export async function archiveTournament(
+  clubId: string,
+  tournamentId: string,
+  tournamentSlug: string,
+  clubSlug: string
+): Promise<TournamentActionState> {
+  const { supabase, error: authError } = await requireAdminRole(clubId);
+  if (authError || !supabase) return { error: authError! };
+
+  const { data, error } = await supabase.rpc("archive_tournament", {
+    p_tournament_id: tournamentId,
+  });
+
+  if (error) {
+    console.error("[archiveTournament] archive_tournament RPC error:", {
+      code: error.code,
+      message: error.message,
+      details: (error as { details?: string }).details,
+      hint: (error as { hint?: string }).hint,
+    });
+    return { error: tournamentErrorMessage(error) };
+  }
+
+  revalidatePath(`/${clubSlug}/admin/tournaments`);
+  revalidatePath(`/${clubSlug}/tournaments/${tournamentSlug}`);
+  return { success: true, tournament: data?.[0] };
+}
+
+// ─── restoreTournament ───────────────────────────────────────────────────────
+// Clears archived_at/archived_by only — status is never touched, so the
+// tournament reappears exactly in the tab its unchanged status already
+// maps to (Finalizados or Cancelados).
+export async function restoreTournament(
+  clubId: string,
+  tournamentId: string,
+  tournamentSlug: string,
+  clubSlug: string
+): Promise<TournamentActionState> {
+  const { supabase, error: authError } = await requireAdminRole(clubId);
+  if (authError || !supabase) return { error: authError! };
+
+  const { data, error } = await supabase.rpc("restore_tournament", {
+    p_tournament_id: tournamentId,
+  });
+
+  if (error) {
+    console.error("[restoreTournament] restore_tournament RPC error:", {
+      code: error.code,
+      message: error.message,
+      details: (error as { details?: string }).details,
+      hint: (error as { hint?: string }).hint,
+    });
+    return { error: tournamentErrorMessage(error) };
+  }
+
+  revalidatePath(`/${clubSlug}/admin/tournaments`);
+  revalidatePath(`/${clubSlug}/tournaments/${tournamentSlug}`);
+  return { success: true, tournament: data?.[0] };
 }

@@ -1528,6 +1528,8 @@ export type Database = {
       }
       tournaments: {
         Row: {
+          archived_at: string | null
+          archived_by: string | null
           cancelled_at: string | null
           cancelled_by: string | null
           category: string
@@ -1555,6 +1557,8 @@ export type Database = {
           visibility: string
         }
         Insert: {
+          archived_at?: string | null
+          archived_by?: string | null
           cancelled_at?: string | null
           cancelled_by?: string | null
           category: string
@@ -1582,6 +1586,8 @@ export type Database = {
           visibility?: string
         }
         Update: {
+          archived_at?: string | null
+          archived_by?: string | null
           cancelled_at?: string | null
           cancelled_by?: string | null
           category?: string
@@ -1609,6 +1615,13 @@ export type Database = {
           visibility?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "tournaments_archived_by_fkey"
+            columns: ["archived_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tournaments_cancelled_by_fkey"
             columns: ["cancelled_by"]
@@ -1792,6 +1805,38 @@ export type Database = {
         Returns: undefined
       }
       archive_club: { Args: { p_club_id: string }; Returns: undefined }
+      archive_tournament: {
+        Args: { p_tournament_id: string }
+        Returns: {
+          archived_at: string | null
+          archived_by: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          category: string
+          club_id: string
+          completed_at: string | null
+          completed_by: string | null
+          cover_image_url: string | null
+          created_at: string
+          created_by: string
+          description: string | null
+          estimated_duration_minutes: number | null
+          id: string
+          max_pairs: number
+          name: string
+          prize_description: string | null
+          registration_closes_at: string | null
+          registration_opens_at: string | null
+          secondary_category: string | null
+          slug: string
+          started_at: string | null
+          started_by: string | null
+          starts_at: string | null
+          status: string
+          updated_at: string
+          visibility: string
+        }[]
+      }
       cancel_reservation: {
         Args: { p_reservation_id: string }
         Returns: undefined
@@ -1799,6 +1844,8 @@ export type Database = {
       cancel_tournament: {
         Args: { p_tournament_id: string }
         Returns: {
+          archived_at: string
+          archived_by: string
           cancelled_at: string
           cancelled_by: string
           category: string
@@ -1857,6 +1904,8 @@ export type Database = {
       close_tournament_registration: {
         Args: { p_tournament_id: string }
         Returns: {
+          archived_at: string
+          archived_by: string
           cancelled_at: string
           cancelled_by: string
           category: string
@@ -2003,6 +2052,8 @@ export type Database = {
           p_visibility?: string
         }
         Returns: {
+          archived_at: string
+          archived_by: string
           cancelled_at: string
           cancelled_by: string
           category: string
@@ -2227,6 +2278,8 @@ export type Database = {
       open_tournament_registration: {
         Args: { p_tournament_id: string }
         Returns: {
+          archived_at: string
+          archived_by: string
           cancelled_at: string
           cancelled_by: string
           category: string
@@ -2344,6 +2397,8 @@ export type Database = {
       reopen_tournament_registration: {
         Args: { p_tournament_id: string }
         Returns: {
+          archived_at: string
+          archived_by: string
           cancelled_at: string
           cancelled_by: string
           category: string
@@ -2393,6 +2448,38 @@ export type Database = {
         Args: { p_reservation_id: string; p_status: string }
         Returns: undefined
       }
+      restore_tournament: {
+        Args: { p_tournament_id: string }
+        Returns: {
+          archived_at: string | null
+          archived_by: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          category: string
+          club_id: string
+          completed_at: string | null
+          completed_by: string | null
+          cover_image_url: string | null
+          created_at: string
+          created_by: string
+          description: string | null
+          estimated_duration_minutes: number | null
+          id: string
+          max_pairs: number
+          name: string
+          prize_description: string | null
+          registration_closes_at: string | null
+          registration_opens_at: string | null
+          secondary_category: string | null
+          slug: string
+          started_at: string | null
+          started_by: string | null
+          starts_at: string | null
+          status: string
+          updated_at: string
+          visibility: string
+        }[]
+      }
       set_tournament_entry_points: {
         Args: {
           p_entry_ids: string[]
@@ -2422,6 +2509,8 @@ export type Database = {
       start_tournament: {
         Args: { p_tournament_id: string }
         Returns: {
+          archived_at: string
+          archived_by: string
           cancelled_at: string
           cancelled_by: string
           category: string
@@ -2486,6 +2575,8 @@ export type Database = {
           p_visibility: string
         }
         Returns: {
+          archived_at: string
+          archived_by: string
           cancelled_at: string
           cancelled_by: string
           category: string
@@ -2519,6 +2610,8 @@ export type Database = {
         // above; re-apply after regenerating.
         Args: { p_cover_image_url: string | null; p_tournament_id: string }
         Returns: {
+          archived_at: string
+          archived_by: string
           cancelled_at: string
           cancelled_by: string
           category: string
