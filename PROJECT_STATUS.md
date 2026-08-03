@@ -3,7 +3,8 @@
 ## Estado General
 
 * Estado: Validation Gate 1.0
-* Última actualización: 1 de agosto de 2026 (Dashboard deportivo personal del PLAYER, nuevo punto de entrada al club en `/[club]/dashboard` — bifurca la misma ruta del Dashboard OWNER/ADMIN por rol, sin tocar ese dashboard. Encabezado deportivo con tendencia de ranking, próxima actividad, evolución de puntos/posición reconstruida desde el ledger real, resumen deportivo, mis torneos con clasificación oficial, logros calculados dinámicamente y actividad reciente unificada. Una sola RPC nueva, self-only: `get_my_club_sport_profile`. Ver Dashboard del PLAYER)
+* Última actualización: 2 de agosto de 2026 (Panel de Plataforma SUPERADMIN construido de punta a punta: Entrega de Club — creación de un club "en espera" desde `/platform`, el SUPERADMIN recibe una fila OWNER real y temporal, link de reclamo de un solo uso, `claim_club` como handoff atómico y permanente; Acceso elevado — `effective_club_role`/`is_superadmin_club_access` permiten operar cualquier club activo ya reclamado sin crear membresía, con banner persistente "Administrando como SUPERADMIN"; Desactivar/Reactivar club (`clubs.is_active`, distinto y ortogonal a `archived_at`). Además: tiempo extra sobre una reserva confirmada (`add_reservation_extra_time`), ADMIN gana acceso a Configuración operativa (ubicación, horarios, duraciones, tarifas — Equipo y archivado del club siguen siendo solo-OWNER), archivado de torneos (`archive_tournament`/`restore_tournament`, ortogonal al `status` deportivo), mapa interactivo en Directorio de Clubes, y una serie de correcciones reales de columna ambigua (`42702`) en once funciones del módulo de Torneos — ver Módulo de Torneos → Lecciones permanentes y CLAUDE.md → Tournament Module Principles)
+* Actualización anterior: 1 de agosto de 2026 (Dashboard deportivo personal del PLAYER, nuevo punto de entrada al club en `/[club]/dashboard` — bifurca la misma ruta del Dashboard OWNER/ADMIN por rol, sin tocar ese dashboard. Encabezado deportivo con tendencia de ranking, próxima actividad, evolución de puntos/posición reconstruida desde el ledger real, resumen deportivo, mis torneos con clasificación oficial, logros calculados dinámicamente y actividad reciente unificada. Una sola RPC nueva, self-only: `get_my_club_sport_profile`. Ver Dashboard del PLAYER)
 * Actualización anterior: 31 de julio de 2026 (Reconstrucción del núcleo de Torneos: se retiró por completo la arquitectura de cuadro eliminatorio — bracket, partidos, programación de canchas, premiación por posición de bracket — y se reemplazó por un modelo más simple, evento de club con inscripciones, clasificación por puntos editada directamente por OWNER/ADMIN y `finalize_tournament` como cierre idempotente que aplica esos puntos al ranking. Sobre ese nuevo modelo: clasificación en vivo rediseñada (medallas reales, fila uniforme, edición de puntos inline), vista de torneo finalizado con podio real en todo ancho de pantalla — incluido mobile — con soporte genuino de empates en cualquier posición, confetti de celebración repetido mientras la pestaña está visible, portada del torneo editable en cualquier estado, cierre editorial que genera una noticia trazada al torneo (`club_news.tournament_id`, máximo una por torneo garantizado por índice único), y URLs legibles por slug tanto para torneos como para noticias, con avatares reales de campeones en el detalle de una noticia de torneo. Ver Módulo de Torneos y CLAUDE.md → Tournament Module Principles)
 * Actualización anterior: 29 de julio de 2026 (Módulo de Torneos llevado de punta a punta sobre la arquitectura de bracket ya retirada — ver entrada más reciente; en su momento incluyó programación de partidos/canchas, registro y corrección de resultados con cierre automático del torneo, premiación deportiva con resumen de puntos, y noticia asistida tras finalizar. Ranking llevado a Fase 2: UI administrativa completa, Ranking público según visibilidad del club, medallas/badges deportivos unificados, y exportación visual (PNG) de Ranking — ver Módulo Deportivo — Ranking (Fase 2))
 
@@ -86,16 +87,18 @@ Operador del club.
 
 Acceso a:
 
-* Reservaciones
+* Reservaciones (incluye agregar tiempo extra a una reserva confirmada)
 * Canchas
 * Jugadores
 * Solicitudes de reserva
+* Configuración operativa (ubicación, horarios de operación, duraciones permitidas, tarifas) — ampliado en `20261010000001_admin_club_settings_access.sql`: el uso real del club mostró que ADMIN necesita estos ajustes en el día a día, no solo OWNER
 
 Sin acceso a:
 
 * Dashboard OWNER
 * Branding
-* Configuración general
+* Equipo (invitar/gestionar otros ADMIN) — sigue siendo solo-OWNER
+* Archivar el club — sigue siendo solo-OWNER
 
 ---
 
@@ -109,6 +112,21 @@ Acceso a:
 * Disponibilidad de canchas
 * Solicitud de reservas
 * Clubes a los que pertenece
+
+---
+
+## SUPERADMIN
+
+Operador de la plataforma, nunca del club. Nunca es OWNER/ADMIN/PLAYER ni tiene una fila `club_members` histórica en ningún club, salvo la única excepción temporal descrita abajo. Opera exclusivamente desde `/platform`.
+
+Acceso a:
+
+* Listado y detalle de clubes y usuarios de la plataforma (`/platform/clubs`, `/platform/users`)
+* Entrega de Club: crear un club "en espera" (`platform_create_pending_club`) y generar/revocar su link de reclamo de un solo uso
+* Acceso elevado a cualquier club activo ya reclamado ("Entrar al club"), sin crear membresía
+* Desactivar/reactivar cualquier club (`clubs.is_active`)
+
+Ver Panel de Plataforma (SUPERADMIN) más abajo para el detalle completo, y CLAUDE.md → Role Philosophy → SUPERADMIN para las reglas permanentes.
 
 ---
 
@@ -149,6 +167,7 @@ Incluye:
 * Detección de membresía
 * CTA para solicitar acceso
 * CTA para unirse
+* Mapa interactivo (`ClubsMap.tsx`, Leaflet) junto al listado — se centra en el primer club filtrado con coordenadas válidas (o vista de Colombia si no hay ninguna), selección sincronizada en ambos sentidos entre pin y tarjeta de lista
 
 ---
 
@@ -515,7 +534,7 @@ Estado:
 
 Modelo:
 
-* `clubs.archived_at timestamptz NULL`. Archivado ⇔ `archived_at IS NOT NULL`. No reutiliza `clubs.is_active` (columna ya existente pero nunca usada por ningún flujo hasta ahora — se deja reservada para un futuro toggle de suspensión a nivel de plataforma por SUPERADMIN, `/platform/clubs/[clubId]`, aún no implementado)
+* `clubs.archived_at timestamptz NULL`. Archivado ⇔ `archived_at IS NOT NULL`. No reutiliza `clubs.is_active` — esa columna es un control de plataforma independiente y ortogonal, exclusivo de SUPERADMIN, implementado después (`platform_deactivate_club`/`platform_reactivate_club`, ver Panel de Plataforma (SUPERADMIN)): `archived_at` es la decisión del propio OWNER y no tiene reactivación en el MVP; `is_active` es de la plataforma y sí es reversible
 * Único trigger: RPC `archive_club(p_club_id)` (`SECURITY DEFINER`), invocable solo por el OWNER activo del club — valida auth, membresía, rol y estado "no archivado ya" enteramente en servidor; nunca confía en nada enviado por el cliente
 * Atómico: bloquea la fila (`FOR UPDATE`) antes de escribir, así dos clics/llamadas concurrentes solo permiten que uno archive — el otro recibe "El club ya fue archivado"
 * Efecto exclusivo: `archived_at = now()`. Nada más se modifica — miembros, reservas (pasadas y futuras), tarifas, branding e historial permanecen intactos; ninguna reserva se cancela automáticamente
@@ -698,7 +717,7 @@ Pendiente:
 
 Estado:
 
-✅ MVP funcional — UI administrativa completa del Ranking, Ranking público según visibilidad del club, medallas/badges deportivos unificados en toda superficie relevante, y exportación visual (PNG) del Ranking. Una migración de esta fase (`20260920000001`) está **pendiente de aplicación manual**.
+✅ MVP funcional — UI administrativa completa del Ranking, Ranking público según visibilidad del club, medallas/badges deportivos unificados en toda superficie relevante, y exportación visual (PNG) del Ranking. `20260920000001` se documentó en su momento como pendiente de aplicación manual; dado que decenas de migraciones posteriores (incluida toda la saga de Torneos y el Panel de Plataforma SUPERADMIN) ya están confirmadas corriendo en vivo, se asume aplicada — no queda ninguna evidencia de que siga pendiente, pero no se ha vuelto a verificar directamente contra la base de datos.
 
 ## Ranking administrativo (Bloque 3.1)
 
@@ -708,7 +727,7 @@ Estado:
 ## Ranking público (Bloque 3.2)
 
 * Nueva ruta `/clubs/[slug]/ranking` (fuera del layout autenticado, alcanzable sin sesión para un club público): reutiliza `RankingView` con un nuevo prop `readOnly` que fuerza modo lectura sin importar el rol real del visitante — nunca una segunda implementación de la vista
-* **Gap real encontrado y corregido**: `get_club_category_ranking`/`get_club_category_ranking_view` exigían membresía activa incondicionalmente, bloqueando incluso a un visitante anónimo de un club público. Corregido en `supabase/migrations/20260920000001_public_club_ranking_read.sql` (**pendiente de aplicación manual**): permite lectura anónima/no-miembro únicamente cuando el club es `visibility='public'` y no está archivado; un miembro activo conserva acceso sin importar visibilidad o archivado, exactamente igual que antes de este cambio
+* **Gap real encontrado y corregido**: `get_club_category_ranking`/`get_club_category_ranking_view` exigían membresía activa incondicionalmente, bloqueando incluso a un visitante anónimo de un club público. Corregido en `supabase/migrations/20260920000001_public_club_ranking_read.sql` (estado de aplicación: ver nota arriba): permite lectura anónima/no-miembro únicamente cuando el club es `visibility='public'` y no está archivado; un miembro activo conserva acceso sin importar visibilidad o archivado, exactamente igual que antes de este cambio
 * Enlace "Ver clasificación por categoría" agregado a la página pública del club (`ClubPublicView`), en reemplazo del placeholder "Ranking: En construcción"
 
 ## Medallas y badges deportivos globales (Bloque 3.3)
@@ -734,7 +753,7 @@ Estado:
 
 Pendiente:
 
-* Aplicar `20260920000001_public_club_ranking_read.sql` en producción (escrita y auditada, no aplicada)
+* Confirmar de forma directa contra la base de datos que `20260920000001_public_club_ranking_read.sql` está aplicada (ver nota de estado más arriba)
 * Badges de categoría en Reservas (evaluado, no implementado — ver arriba)
 * Verificación visual real de la tarjeta exportable en dispositivo/navegador (validado por código y build, no por captura observada)
 
@@ -791,9 +810,22 @@ supabase/migrations/20260929000001_club_news_tournament_link.sql
 supabase/migrations/20260930000001_tournament_cover_image_any_status.sql
 supabase/migrations/20261001000001_club_news_slug.sql
 supabase/migrations/20261001000002_create_club_news_function.sql
+supabase/migrations/20261008000001_superadmin_club_access.sql          (agrega el bypass de acceso elevado SUPERADMIN a ~15 RPCs de Torneos — ver Panel de Plataforma (SUPERADMIN); introdujo, sin querer, la ambigüedad de columna corregida por las 11 migraciones siguientes)
+supabase/migrations/20261012000001_reassert_create_tournament_admin_access.sql (re-aplicación sin cambios reales de `create_tournament` — la causa real del síntoma que la motivó se encontró recién en la migración siguiente)
+supabase/migrations/20261013000001_fix_create_tournament_ambiguous_club_id.sql
+supabase/migrations/20261014000001_fix_open_registration_ambiguous_club_id.sql
+supabase/migrations/20261015000001_close_registration_min_pairs.sql    (nueva regla: mínimo 2 duplas confirmadas para cerrar inscripciones; agregó, sin querer, otra ambigüedad — ver `20261023000001`)
+supabase/migrations/20261016000001_fix_register_entry_ambiguous_club_id.sql
+supabase/migrations/20261017000001_fix_cancel_tournament_ambiguous_club_id.sql
+supabase/migrations/20261018000001_fix_start_tournament_ambiguous_club_id.sql
+supabase/migrations/20261019000001_fix_set_entry_points_ambiguous_club_id.sql
+supabase/migrations/20261020000001_tournament_archive.sql              (archivado de torneo — ver Modelo de datos)
+supabase/migrations/20261021000001_tournament_lifecycle_archive_columns.sql (sync manual de `RETURNS TABLE` tras agregar `archived_at`/`archived_by`; corrigió, de paso, la misma ambigüedad en `update_tournament`/`reopen_tournament_registration`/`update_tournament_cover_image`)
+supabase/migrations/20261022000001_fix_withdraw_entry_ambiguous_club_id.sql (la única función que el barrido anterior no cubrió — encontrada diagnosticando un reporte real de un PLAYER)
+supabase/migrations/20261023000001_fix_close_registration_ambiguous_status.sql (misma clase de bug, columna `status` en vez de `club_id` — encontrada diagnosticando un reporte real de un OWNER)
 ```
 
-**Importante para aplicación manual pendiente**: `20260919000001` y `20260921000001` escriben/modifican funciones que la propia reconstrucción del núcleo (`20260922000001`) ya elimina (`DROP FUNCTION IF EXISTS`) — aplicarlas ya no tiene efecto útil y pueden omitirse sin riesgo; el `IF EXISTS` del DROP posterior las neutraliza igual si se aplican en orden. La única migración de esta lista genuinamente pendiente de aplicación manual y con efecto real hoy es `20260920000001` (ranking, no torneos).
+**Nota sobre aplicación manual**: `20260919000001` y `20260921000001` escriben/modifican funciones que la propia reconstrucción del núcleo (`20260922000001`) ya elimina (`DROP FUNCTION IF EXISTS`) — aplicarlas nunca tuvo efecto útil y pueden omitirse sin riesgo; el `IF EXISTS` del DROP posterior las neutraliza igual si se aplican en orden. Todo lo demás en esta lista, incluidas las 13 migraciones más recientes arriba, está confirmado corriendo en vivo — varias de las correcciones de columna ambigua se diagnosticaron precisamente reproduciendo el error real (`42702`) contra la base de datos de producción/staging.
 
 ## Modelo de datos (post-reconstrucción)
 
@@ -811,6 +843,7 @@ supabase/migrations/20261001000002_create_club_news_function.sql
 * `update_tournament(...)` — editable hasta `started_at` (no solo hasta abrir inscripciones); `max_pairs` editable con inscripciones abiertas, validado contra la cantidad real de duplas activas (mensaje de error interpola el conteo real)
 * `open_tournament_registration`, `close_tournament_registration`, `reopen_tournament_registration`, `cancel_tournament`, `start_tournament` (`registration_closed` → `in_progress`, puebla `started_at`/`started_by`) — transiciones de estado, sin bypass de rol
 * `update_tournament_cover_image(p_tournament_id, p_cover_image_url)` — OWNER/ADMIN, deliberadamente **sin** el gate de estado que sí aplica `update_tournament`: la portada es editable en cualquier estado, incluido `completed`
+* `archive_tournament(p_tournament_id)` / `restore_tournament(p_tournament_id)` — OWNER/ADMIN, solo sobre un torneo `completed` o `cancelled`; toggle puro de visibilidad (`archived_at`/`archived_by`) ortogonal al `status` deportivo, que nunca se toca — mismo diseño que `clubs.archived_at`. Al restaurar, el torneo reaparece en la pestaña que su `status` sin cambios ya implicaba
 
 **Inscripción y duplas:**
 
@@ -837,7 +870,9 @@ RLS habilitada en las 3 tablas núcleo restantes (`tournaments`, `tournament_ent
 
 ## Lecciones permanentes (capturadas en CLAUDE.md → Tournament Module Principles)
 
-Dos clases de bug real, ya corregidas, siguen siendo relevantes para cualquier función nueva del módulo: (1) cualquier `RETURN QUERY SELECT (row).*` debe mantenerse en sincronía manual con el esquema real de la tabla — una discordancia de aridad tras agregar una columna solo se detecta en tiempo de ejecución; (2) un `RETURNING` sin calificar dentro de una función cuyo `RETURNS TABLE` comparte nombre de columna con la tabla escrita (p. ej. `id`) es ambiguo (`42702`) y también solo se detecta en tiempo de ejecución — cualquier `INSERT`/`RETURNING` de este tipo debe alias la tabla explícitamente.
+Dos clases de bug real, ya corregidas, siguen siendo relevantes para cualquier función nueva del módulo: (1) cualquier `RETURN QUERY SELECT (row).*` debe mantenerse en sincronía manual con el esquema real de la tabla — una discordancia de aridad tras agregar una columna solo se detecta en tiempo de ejecución; (2) cualquier referencia a columna sin calificar (en un `WHERE`, una subconsulta, o un `RETURNING`) dentro de una función cuyo `RETURNS TABLE` comparte nombre de columna con una tabla leída o escrita en el cuerpo (p. ej. `id`, `club_id`, `status`) es ambigua (`42702`) y también solo se detecta en tiempo de ejecución — cualquier sentencia de este tipo debe alias la tabla explícitamente.
+
+**Historial real de (2), no hipotético**: el bypass de acceso elevado SUPERADMIN agregado en `20261008000001` (ver Panel de Plataforma (SUPERADMIN)) introdujo exactamente este bug — una subconsulta `NOT EXISTS` sin alias sobre `club_members` — en prácticamente todas las funciones de ciclo de vida del módulo. Se fue encontrando y corrigiendo función por función, nunca de una sola pasada: `create_tournament` (`20261013000001`), `open_tournament_registration` (`20261014000001`), `close_tournament_registration` (`20261015000001`), `register_tournament_entry` (`20261016000001`), `cancel_tournament` (`20261017000001`), `start_tournament` (`20261018000001`), `set_tournament_entry_points` (`20261019000001`), `update_tournament`/`reopen_tournament_registration`/`update_tournament_cover_image` (`20261021000001`, encontradas de paso durante un sync de `RETURNS TABLE` no relacionado), `withdraw_tournament_entry` (`20261022000001`, encontrada diagnosticando un reporte real de un PLAYER que no podía retirar su dupla). `close_tournament_registration` volvió a fallar después de ya corregida, esta vez por una columna distinta (`status`, en el conteo de duplas confirmadas agregado por `20261015000001`) — corregido en `20261023000001` tras diagnosticar un reporte real de un OWNER. Lección operativa además de la técnica: cuando un patrón de bug se confirma en una función, auditar activamente las funciones hermanas que comparten el mismo patrón recién introducido, en vez de esperar a que cada una falle en producción una por una.
 
 ## UI — Administración
 
@@ -909,6 +944,58 @@ Backend nuevo, mínimo y acotado:
 
 ---
 
+# Reservas — Tiempo Extra
+
+Estado: ✅ MVP funcional (`supabase/migrations/20261009000001_reservation_extra_time.sql`)
+
+OWNER/ADMIN pueden extender la duración de una reserva ya `confirmed` más allá de lo originalmente reservado, con un cargo extra opcional. No es una edición (ver Reservation Editing & Cancellation Principles en CLAUDE.md, sin cambios) — es un mecanismo aditivo y separado:
+
+* `reservations.duration_minutes` pasa a representar la ocupación total vigente (duración original + toda extensión otorgada), decisión deliberada para que cualquier chequeo de conflicto, cálculo de hora de fin o vista de calendario ya existente siga funcionando sin ningún cambio
+* Nuevas columnas acumulador `extra_minutes`/`extra_amount`/`extra_currency` — nunca tocan `price_amount`/`price_currency` originales
+* Tabla nueva `reservation_extra_time_entries`, append-only, RLS cerrada sin políticas (mismo patrón que `club_player_point_movements`) — historial completo de cada extensión
+* `add_reservation_extra_time(p_reservation_id, p_extra_minutes, p_extra_amount, p_note)` — solo sobre `status='confirmed'`, 1 a 480 minutos, valida contra el horario de cierre del club, usa el mismo lock/chequeo de conflicto (`_lock_court_date`/`_check_reservation_conflict`) que cualquier otra escritura de disponibilidad, releyendo bajo el lock para acumular correctamente ante extensiones concurrentes
+* Notificación propia (`notify_reservation_extra_time_added`) a el creador y todos los `reservation_players`, reutilizando el sistema de notificaciones existente
+* UI: `AddExtraTimeModal` (formulario puro — muestra hora de fin actual/nueva, cargo extra, nuevo total; la llamada real al RPC vive en `ReservationTicketPanel`, que ya orquesta el resto de acciones de una reserva)
+
+---
+
+# Panel de Plataforma (SUPERADMIN)
+
+Estado: ✅ MVP funcional. Construido en `20261003000001` → `20261008000001`. Ver CLAUDE.md → Role Philosophy → SUPERADMIN para las reglas permanentes; este apartado documenta el detalle de lo construido, incluidas dos iteraciones de diseño intermedias que ya no reflejan el código actual (se documentan solo como historial, no como arquitectura vigente).
+
+## Entrega de Club (creación y reclamo)
+
+* `platform_create_pending_club(p_name, p_slug, p_visibility)` — SUPERADMIN-only. Crea el club con `is_active=true, pending_claim=true` y, en la misma transacción, inserta al SUPERADMIN creador como fila `club_members(role='OWNER')` real y activa — así puede usar cualquier flujo OWNER normal (branding, ubicación, canchas, horarios, tarifas, reservas, torneos, jugadores, invitaciones ADMIN) sin ningún rol sintetizado ni superficie paralela
+* Iteración de diseño descartada, sin efecto en el código actual: la primera versión (`20261003000001`) creaba el club con `is_active=false` y cero miembros, apoyada en una función `is_platform_admin_for_pending_club` con su propio bypass de RLS — todo esto fue eliminado por completo en `20261005000001` al adoptar el modelo de "fila OWNER real" descrito arriba
+* Esta fila OWNER temporal es la única forma de membresía que un SUPERADMIN puede llegar a tener jamás, protegida a nivel de base de datos (`enforce_club_members_account_type_consistency`) a que `clubs.pending_claim=true` para ese club exacto
+* `platform_generate_club_claim_link(p_club_id, p_token_hash)` — genera (o regenera, revocando primero cualquier link `pending` previo de forma atómica) un link de reclamo de un solo uso; `platform_revoke_club_claim_link(p_club_id)` lo invalida manualmente. Token: `randomBytes(32)` base64url del lado del servidor, hasheado SHA-256 antes de persistirse (`club_claim_links.token_hash`) — el token en claro nunca se guarda
+* `get_club_claim_status(p_club_id)` (SUPERADMIN-only, `/platform/clubs/[clubId]` → `ClubClaimSection.tsx`) y `get_club_claim_preview(p_token_hash)` (`anon`+`authenticated`, vista previa pública del link en `/claim-club/[token]`)
+* `claim_club(p_token_hash, p_ip)` — el handoff atómico y de un solo uso: bloquea (`FOR UPDATE`) el link, el club y toda fila OWNER activa, en ese orden; exige que exista exactamente una OWNER activa y que sea la fila placeholder del SUPERADMIN; inserta al reclamante como OWNER real, desactiva la fila placeholder, y fija `pending_claim=false` de forma permanente — todo en una sola transacción. Rechaza reclamantes que sean ellos mismos `is_platform_admin` o cuyo `account_type` ya no sea compatible con volverse OWNER
+* Auditoría completa e inmutable en `club_claim_events` (generado/revocado/reclamado, con `previous_owner_id`)
+* UI: `/platform/clubs/create` (`PendingClubFields.tsx`), `/platform/clubs/[clubId]` (`ClubClaimSection.tsx`), `/claim-club/[token]` (`AcceptClaimCard.tsx`)
+
+## Acceso elevado ("Entrar al club")
+
+Mecanismo separado y distinto de Entrega de Club — aplica a cualquier club **ya reclamado y activo**, nunca a uno `pending_claim`, y nunca crea una fila `club_members`.
+
+* `is_superadmin_club_access(p_club_id)` — `true` cuando el caller es `is_platform_admin` y el club está `is_active=true`. Sin excepción para clubes archivados u OWNER-explícitamente-presente: solo determina si el bypass *podría* aplicar
+* `effective_club_role(p_club_id)` — `club_role(p_club_id)` si el caller tiene membresía real (de cualquier rol) en el club; si no, cae a `'OWNER'` sintético únicamente cuando `is_superadmin_club_access` es verdadero. Una membresía real siempre gana — el bypass solo cubre el caso de cero membresía
+* Aplicado de dos formas: (A) swap mecánico de `club_role()` por `effective_club_role()` en ~15 RPCs ya existentes (reservas, canchas, tarifas, jugadores, solicitudes de ingreso, noticias, ranking, y toda la familia de RPCs de Torneos); (B) políticas RLS aditivas sobre `clubs`, `club_members` (excluye explícitamente filas `role='OWNER'` — un SUPERADMIN nunca puede leer/tocar al OWNER real por esta vía), `courts`, `club_operating_hours`, `invitation_links`, `club_pricing_rules`, `club_news`, y lectura (`SELECT`) sobre `reservations`/`reservation_players`/`club_join_requests`/`tournaments`/`tournament_entries`/`tournament_entry_members`
+* `src/lib/clubAccess.ts` (`resolveClubAccess`) es el resolutor único: membresía real → `isSuperadminAccess:false`; sin membresía + `is_platform_admin` + club activo → `isSuperadminAccess:true, clubMemberId:null`. `[club]/dashboard/page.tsx` y el resto del layout ya lo usan en vez de una consulta cruda a `club_members`
+* UI: `SuperadminAccessBanner.tsx` — banner persistente ("Administrando como SUPERADMIN") en cada pantalla alcanzada por este camino, con link de regreso a `/platform/clubs/[clubId]` — nunca silencioso
+* Este bug de acceso elevado (la subconsulta `NOT EXISTS` sin alias sobre `club_members` que introdujo) es la causa raíz de toda la saga de columna ambigua documentada en Módulo de Torneos → Lecciones permanentes
+
+## Desactivar / Reactivar club
+
+* `platform_deactivate_club(p_club_id)` / `platform_reactivate_club(p_club_id)` — SUPERADMIN-only, alternan `clubs.is_active` + `deactivated_at`/`deactivated_by`/`reactivated_at`/`reactivated_by`. Primer uso real de `is_active`, columna que existía sin uso desde el esquema original
+* Ortogonal a `clubs.archived_at` (ver Archivado de Clubes): `is_active` es del SUPERADMIN y sí es reversible; `archived_at` es del OWNER y no lo es en el MVP
+* `_require_club_not_archived` se amplió para también rechazar `is_active=false` (mismo código `P0005`, mismo patrón de bloqueo — solo operaciones que crean un compromiso nuevo, nunca las que resuelven algo existente)
+* Todo miembro — OWNER, ADMIN o PLAYER — ve una pantalla completa "desactivado por la plataforma" (`ClubDeactivatedScreen.tsx`) en vez de su área operativa mientras el club está desactivado
+* De paso se cerró un gap real preexistente: `create_club_news` nunca había tenido el guard `_require_club_not_archived`; ahora lo tiene
+* UI: `DeactivateClubButton.tsx`/`ReactivateClubButton.tsx` en `/platform/clubs/[clubId]`
+
+---
+
 # Funcionalidades Pendientes de Alta Prioridad
 
 ## Owner Experience
@@ -953,6 +1040,8 @@ Validar completamente:
 5. Experiencia multi-club
 6. Página pública del club
 
-El módulo deportivo (ranking por categoría, con su UI administrativa/pública y exportaciones) y el módulo de Torneos (de punta a punta: inscripciones, cuadro, scheduling, resultados y premiación) ya están construidos y validados. Queda pendiente aplicar en producción las tres migraciones escritas y auditadas de esta fase (`20260919000001`, `20260920000001`, `20260921000001`) — la prioridad siguiente no es una nueva categoría de funcionalidad, sino aplicar esas migraciones y validar el flujo completo con datos reales.
+El módulo deportivo (ranking por categoría, con su UI administrativa/pública y exportaciones), el módulo de Torneos (de punta a punta sobre el modelo actual — inscripciones, duplas, clasificación por puntos, cierre y noticia asistida; sin cuadro/scheduling, retirados en la reconstrucción del núcleo) y el Panel de Plataforma SUPERADMIN (Entrega de Club, acceso elevado, desactivar/reactivar) ya están construidos. La nota histórica sobre `20260919000001`/`20260920000001`/`20260921000001` como "pendientes de aplicar" quedó obsoleta — más de 20 migraciones posteriores están confirmadas corriendo en vivo (ver Módulo de Torneos → Migraciones); solo `20260920000001` no se ha vuelto a verificar directamente.
 
-Antes de expandir el producto hacia rankings, torneos o funcionalidades sociales.
+La prioridad siguiente sigue siendo validar con datos reales, no una nueva categoría de funcionalidad — pendiente de notificaciones de eventos de Torneos (ver Funcionalidades Futuras).
+
+Antes de expandir el producto hacia funcionalidades sociales, clínicas o ladder.
