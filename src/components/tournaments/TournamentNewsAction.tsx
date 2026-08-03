@@ -14,7 +14,7 @@ import type { Tournament } from "@/types/database";
 interface TournamentNewsActionProps {
   clubId: string;
   clubSlug: string;
-  tournament: Pick<Tournament, "id" | "name" | "category" | "secondary_category" | "cover_image_url">;
+  tournament: Pick<Tournament, "id" | "name" | "category" | "secondary_category" | "cover_image_url" | "prize_description">;
   classification: TournamentClassificationRow[];
   // slug de la noticia YA publicada y asociada a este torneo
   // (tournament_id real en club_news), resuelta por el Server Component

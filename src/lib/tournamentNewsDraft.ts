@@ -16,7 +16,7 @@ export interface TournamentNewsDraft {
 // viaja aparte, como argumento del server action (ver CreateNewsModal/
 // createNews), nunca como parte del texto editable.
 export function buildTournamentNewsDraft(
-  tournament: Pick<Tournament, "name" | "category" | "secondary_category">,
+  tournament: Pick<Tournament, "name" | "category" | "secondary_category" | "prize_description">,
   classification: TournamentClassificationRow[]
 ): TournamentNewsDraft {
   const podium = classification.filter((row) => row.position <= 3);
@@ -41,6 +41,13 @@ export function buildTournamentNewsDraft(
   }
   if (thirdPlace.length > 0) {
     lines.push(`🥉 Tercer lugar: ${thirdPlace.map((row) => pairLabel(row.entry)).join(" y ")}.`);
+  }
+
+  // Premios reales del organizador, tal cual los escribió — nunca
+  // reformateados, solo insertados como su propio bloque tras el podio.
+  if (tournament.prize_description) {
+    lines.push("🏆 Premios otorgados");
+    lines.push(tournament.prize_description);
   }
 
   lines.push("¡Felicitaciones a todas las duplas por un gran torneo!");

@@ -21,7 +21,8 @@ export function ShareNewsButtons({ title, path }: ShareNewsButtonsProps) {
   }, []);
 
   const url = origin ? `${origin}${path}` : path;
-  const whatsappHref = `https://wa.me/?text=${encodeURIComponent(`${title} ${url}`)}`;
+  const whatsappMessage = `🏆 ${title}\n\nConoce todos los resultados aquí 👇\n\n${url}`;
+  const whatsappHref = `https://wa.me/?text=${encodeURIComponent(whatsappMessage)}`;
 
   function handleCopy() {
     navigator.clipboard.writeText(url).then(() => {

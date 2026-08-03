@@ -15,21 +15,56 @@ interface Props {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+const OG_DESCRIPTION_MAX = 200;
+
+// Solo para la meta description/Open Graph — nunca toca news.content
+// almacenado ni lo que se muestra en la página (whitespace-pre-line
+// conserva el contenido real tal cual el organizador lo escribió).
+// Colapsa saltos de línea/espacios repetidos a uno solo y corta en el
+// último espacio antes del límite para no partir una palabra a la mitad.
+function buildNewsDescription(content: string): string {
+  const flat = content.replace(/\s+/g, " ").trim();
+  if (flat.length <= OG_DESCRIPTION_MAX) return flat;
+  const cut = flat.slice(0, OG_DESCRIPTION_MAX);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${cut.slice(0, lastSpace > 0 ? lastSpace : OG_DESCRIPTION_MAX)}…`;
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug, newsSlug } = await params;
   const supabase = await createClient();
 
-  const { data: club } = await supabase.from("clubs").select("id").eq("slug", slug).eq("is_active", true).single();
+  const { data: club } = await supabase.from("clubs").select("id, slug").eq("slug", slug).eq("is_active", true).single();
   if (!club) return { title: "Noticia no encontrada | MiPadelClub" };
 
   const { data: news } = UUID_RE.test(newsSlug)
-    ? await supabase.from("club_news").select("title, content").eq("id", newsSlug).eq("club_id", club.id).single()
-    : await supabase.from("club_news").select("title, content").eq("slug", newsSlug).eq("club_id", club.id).single();
+    ? await supabase.from("club_news").select("title, content, image_url, slug").eq("id", newsSlug).eq("club_id", club.id).single()
+    : await supabase.from("club_news").select("title, content, image_url, slug").eq("slug", newsSlug).eq("club_id", club.id).single();
   if (!news) return { title: "Noticia no encontrada | MiPadelClub" };
 
+  const title = news.title;
+  const description = buildNewsDescription(news.content);
+  // Ruta relativa: Next la resuelve contra metadataBase (root layout,
+  // "https://mipadel.club" fijo) — nunca localhost, sin duplicar esa
+  // lógica de origen aquí.
+  const url = newsDetailPath(club.slug, news.slug);
+
   return {
-    title: `${news.title} | MiPadelClub`,
-    description: news.content.slice(0, 150),
+    title: `${title} | MiPadelClub`,
+    description,
+    openGraph: {
+      title,
+      description,
+      url,
+      type: "article",
+      images: news.image_url ? [{ url: news.image_url }] : undefined,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: news.image_url ? [news.image_url] : undefined,
+    },
   };
 }
 
