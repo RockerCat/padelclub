@@ -103,10 +103,32 @@ export function OnboardingWizard({
     ? COMPLETE_STEP
     : validSetupStep ?? firstIncompleteStep ?? COMPLETE_STEP;
 
+  // TEMP DEBUG — remove once root cause is found
+  console.log("[WIZARD-DEBUG] render", {
+    searchParams: searchParams.toString(),
+    validSetupStep,
+    firstIncompleteStep,
+    effectiveStep,
+    time: performance.now().toFixed(0),
+  });
+
+  useEffect(() => {
+    const onPopState = () => {
+      console.log("[WIZARD-DEBUG] popstate fired", {
+        location: window.location.href,
+        time: performance.now().toFixed(0),
+      });
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+  // END TEMP DEBUG
+
   const clearOnboardingParams = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
     for (const key of ONBOARDING_PARAMS) params.delete(key);
     const qs = params.toString();
+    console.trace("[WIZARD-DEBUG] clearOnboardingParams → router.push"); // TEMP DEBUG
     router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }, [pathname, router, searchParams]);
 
@@ -118,6 +140,7 @@ export function OnboardingWizard({
 
   const handleContinueSetup = useCallback(() => {
     if (firstIncompleteStep === null) return;
+    console.trace("[WIZARD-DEBUG] handleContinueSetup → router.push"); // TEMP DEBUG
     router.push(`${pathname}?setupStep=${firstIncompleteStep}`, { scroll: false });
   }, [firstIncompleteStep, pathname, router]);
 
@@ -133,6 +156,7 @@ export function OnboardingWizard({
       params.set("setupStep", String(step));
       params.delete("setupComplete");
     }
+    console.trace("[WIZARD-DEBUG] navigateToStep", step, "→ router.push"); // TEMP DEBUG
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   }, [pathname, router, searchParams]);
 

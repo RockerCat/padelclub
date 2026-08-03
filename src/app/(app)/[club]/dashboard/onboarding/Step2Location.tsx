@@ -54,8 +54,16 @@ export function Step2Location({ club, onNext, formId }: Step2Props) {
   const [isLocating, setIsLocating] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
 
+  // TEMP DEBUG — remove once root cause is found
+  console.log("[WIZARD-DEBUG] Step2Location render", {
+    formStateSuccess: formState.success,
+    time: performance.now().toFixed(0),
+  });
+  // END TEMP DEBUG
+
   useEffect(() => {
     if (formState.success) {
+      console.log("[WIZARD-DEBUG] formState.success effect → router.refresh + onNext"); // TEMP DEBUG
       router.refresh();
       onNextRef.current();
     }
