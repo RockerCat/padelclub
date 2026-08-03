@@ -55,9 +55,9 @@ export function ShareCardModal({ title, card, filenameParts, shareTitle, shareTe
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   // Calculado una sola vez en cliente (nunca en SSR — esta pieza es
-  // "use client" completa) — decide el COMPORTAMIENTO de "Compartir por
-  // WhatsApp" (adjuntar el archivo vía el selector nativo vs. descarga +
-  // WhatsApp Web), nunca si el botón existe: "Compartir por WhatsApp" y
+  // "use client" completa) — decide el COMPORTAMIENTO de "Compartir
+  // imagen" (adjuntar el archivo vía el selector nativo vs. descarga +
+  // WhatsApp Web), nunca si el botón existe: "Compartir imagen" y
   // "Descargar imagen" están siempre ambos presentes.
   const [canShareFiles] = useState(() => canShareImageFile());
 
@@ -276,10 +276,10 @@ export function ShareCardModal({ title, card, filenameParts, shareTitle, shareTe
                 onClick={handleShareWhatsapp}
                 disabled={status !== "ready"}
                 loading={actionPending}
-                aria-label="Compartir por WhatsApp"
+                aria-label="Compartir imagen"
               >
                 <MessageCircle className="w-4 h-4" aria-hidden="true" />
-                Compartir por WhatsApp
+                Compartir imagen
               </Button>
               <Button
                 type="button"

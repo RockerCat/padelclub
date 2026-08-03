@@ -231,6 +231,14 @@ export function RankingView({
   // tarjetas/filas simplemente no son interactivas para nadie fuera de
   // isAdmin, exactamente el mismo alcance que ya tenían los iconos.
   const isAdmin = !readOnly && (role === "OWNER" || role === "ADMIN");
+  // Bloque 3.9 — "Compartir Ranking" también para PLAYER: mismo botón,
+  // mismo modal, mismo generador de imagen, ninguna lógica nueva. Sigue
+  // siempre detrás de !readOnly — la ruta pública (/clubs/[slug]/ranking)
+  // nunca lo muestra, para ningún rol, sin cambios respecto a su
+  // comportamiento actual. Las acciones administrativas (Miembro del club,
+  // filas/tarjetas clicables) siguen exclusivamente detrás de isAdmin, sin
+  // tocar.
+  const canShareRanking = !readOnly && (isAdmin || role === "PLAYER");
   const memberModal = useMemberModal({
     clubId,
     // A diferencia de Torneos (cuyo `entries` prop reconcilia solo tras
@@ -302,11 +310,11 @@ export function RankingView({
           {showReady && ownRow && (
             <OwnPositionCard position={ownRow.ranking_position} total={sortedRows.length} points={ownRow.current_points} />
           )}
-          {/* Bloque 3.4 — exportación visual, únicamente OWNER/ADMIN en la
-              ruta autenticada (isAdmin ya es false en readOnly, incluyendo
-              la ruta pública) — opera siempre sobre la categoría ya
-              seleccionada, nunca pide elegirla de nuevo. */}
-          {isAdmin && category && showReady && (
+          {/* Bloque 3.4/3.9 — exportación visual, OWNER/ADMIN y PLAYER en
+              la ruta autenticada (canShareRanking ya es false en readOnly,
+              incluyendo la ruta pública) — opera siempre sobre la
+              categoría ya seleccionada, nunca pide elegirla de nuevo. */}
+          {canShareRanking && category && showReady && (
             <RankingExportButton
               clubName={clubName}
               clubSlug={clubSlug}

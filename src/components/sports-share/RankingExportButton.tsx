@@ -32,8 +32,8 @@ function formatGeneratedAt(): string {
   return `Generado el ${new Date().toLocaleDateString("es-MX", { day: "2-digit", month: "long", year: "numeric" })}`;
 }
 
-// Bloque 3.4 — botón "Compartir Ranking" (OWNER/ADMIN, ver gate en
-// RankingView vía isAdmin). Opera siempre sobre la categoría ya
+// Bloque 3.4/3.9 — botón "Compartir Ranking" (OWNER/ADMIN y PLAYER, ver
+// gate en RankingView vía canShareRanking). Opera siempre sobre la categoría ya
 // seleccionada, nunca pide elegirla de nuevo. Resuelve avatares a data URL
 // bajo demanda (solo al pulsar, nunca al cargar la página) antes de abrir
 // el modal — nunca bloquea la navegación principal mientras tanto (el
