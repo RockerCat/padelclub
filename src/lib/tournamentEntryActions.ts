@@ -247,7 +247,15 @@ export async function withdrawTournamentEntryAction(
     p_tournament_entry_id: tournamentEntryId,
   });
 
-  if (error) return { error: tournamentEntryErrorMessage(error) };
+  if (error) {
+    console.error("[DIAG withdraw_tournament_entry]", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+    });
+    return { error: tournamentEntryErrorMessage(error) };
+  }
 
   for (const path of revalidatePaths) revalidatePath(path);
   return { success: true, entry: data?.[0] };
