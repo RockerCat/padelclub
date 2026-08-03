@@ -18,6 +18,7 @@ import { Badge, Button } from "@/components/ui";
 import { ClubClaimSection, type ClubClaimStatus } from "./ClubClaimSection";
 import { DeactivateClubButton } from "./DeactivateClubButton";
 import { ReactivateClubButton } from "./ReactivateClubButton";
+import { ChangeSlugButton } from "./ChangeSlugButton";
 
 interface PageProps {
   params: Promise<{ clubId: string }>;
@@ -173,6 +174,7 @@ export default async function PlatformClubDetailPage({ params }: PageProps) {
             ) : (
               <ReactivateClubButton clubId={club.id} />
             )}
+            <ChangeSlugButton clubId={club.id} currentSlug={club.slug} />
             <SoonButton label="Cambiar Owner" Icon={UserCog} />
             {club.is_active ? (
               <Link

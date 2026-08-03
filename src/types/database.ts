@@ -2330,6 +2330,13 @@ export type Database = {
         Args: { p_club_id: string }
         Returns: boolean
       }
+      platform_update_club_slug: {
+        Args: { p_club_id: string; p_new_slug: string }
+        Returns: {
+          id: string
+          slug: string
+        }[]
+      }
       provision_club_member_sport_state: {
         Args: { p_club_member_id: string }
         Returns: string

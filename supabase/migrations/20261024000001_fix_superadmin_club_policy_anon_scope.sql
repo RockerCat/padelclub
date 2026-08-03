@@ -1,0 +1,38 @@
+-- ============================================================
+-- Fix: public club page 404 for a SUPERADMIN-created club
+-- Mi Pádel Club
+-- ============================================================
+-- clubs_select_superadmin (20261008000001) was created without a
+-- `TO authenticated` clause, unlike the sibling policy it was modeled
+-- after (clubs_select_own_member, 20260615000006, which is explicitly
+-- `TO authenticated`). Defaulting to PUBLIC means Postgres evaluates it
+-- for the `anon` role too when combining every permissive SELECT policy
+-- on clubs into a single OR — and anon was never granted EXECUTE on its
+-- underlying function (is_superadmin_club_access is `GRANT ... TO
+-- authenticated` only, correctly — an anonymous visitor can never be a
+-- platform admin, so there was never a reason to grant it execute).
+--
+-- (clubs_select_superadmin_pending, the other policy built on this same
+-- pattern, is not touched here — 20261005000001 already dropped it
+-- entirely along with the rest of the 20261004000001 bypass surface, once
+-- a pending club's SUPERADMIN got a real club_members OWNER row instead.)
+--
+-- A missing EXECUTE grant raises a hard 42501 permission error, not a
+-- false — so any anonymous request that reaches this clause in the
+-- combined OR blows up the entire query, even though clubs_select_active
+-- (is_active = true AND archived_at IS NULL, no role restriction) would
+-- independently have allowed the row. /(public)/[club]/page.tsx only
+-- destructures `data`, so the swallowed error surfaces as `clubData`
+-- being null → notFound() → a 404 indistinguishable from "club doesn't
+-- exist", for every club — but it's most visible on a SUPERADMIN's own
+-- club since that's the one actually exercising this extra policy.
+--
+-- Fix: scope the policy `TO authenticated`, exactly matching
+-- clubs_select_own_member's existing pattern — no new function, no new
+-- grant, no SUPERADMIN-specific carve-out. An anon caller now never
+-- evaluates this policy at all (skipped outright, same as it already
+-- skips clubs_select_own_member), and falls through cleanly to
+-- clubs_select_active exactly like every other public visitor.
+-- ============================================================
+
+ALTER POLICY "clubs_select_superadmin" ON public.clubs TO authenticated;
