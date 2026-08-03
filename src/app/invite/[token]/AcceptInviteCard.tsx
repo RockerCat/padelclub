@@ -20,6 +20,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   max_uses_reached: "Este link ya no está disponible.",
   not_authenticated: "Debes iniciar sesión para continuar.",
   club_archived: "Este club se encuentra archivado y ya no acepta nuevas invitaciones.",
+  admin_requires_no_history:
+    "Esta cuenta ya tuvo actividad previa en Mi Pádel Club (como jugador, administrador o propietario) y no puede aceptar una invitación de administrador. Inicia sesión con una cuenta que nunca haya pertenecido a un club, o crea una nueva.",
 };
 
 export function AcceptInviteCard({
