@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Download, Share2, X } from "lucide-react";
+import { Download, MessageCircle, X } from "lucide-react";
 import { Button, Spinner } from "@/components/ui";
 import {
   SHARE_CARD_HEIGHT,
@@ -238,10 +238,10 @@ export function ShareCardModal({ title, card, filenameParts, shareTitle, shareTe
                   onClick={handleShare}
                   disabled={status !== "ready"}
                   loading={actionPending}
-                  aria-label="Compartir imagen"
+                  aria-label="Compartir por WhatsApp"
                 >
-                  <Share2 className="w-4 h-4" aria-hidden="true" />
-                  Compartir
+                  <MessageCircle className="w-4 h-4" aria-hidden="true" />
+                  Compartir por WhatsApp
                 </Button>
               )}
               <Button
@@ -252,7 +252,7 @@ export function ShareCardModal({ title, card, filenameParts, shareTitle, shareTe
                 aria-label="Descargar imagen"
               >
                 <Download className="w-4 h-4" aria-hidden="true" />
-                Descargar
+                Descargar imagen
               </Button>
             </div>
           </div>

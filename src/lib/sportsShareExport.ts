@@ -1,4 +1,4 @@
-import { toBlob } from "html-to-image";
+import { toSvg } from "html-to-image";
 
 // Bloque 3.4 — utilidades puras de exportación visual (PNG) para Ranking y
 // Torneos. Nunca calcula ni toca datos deportivos: solo convierte un nodo ya
@@ -58,49 +58,115 @@ export async function resolveImageDataUrls(
   return Promise.all(urls.map(resolveImageDataUrl));
 }
 
-// Bloque 3.6 — CAUSA RAÍZ del bloqueo indefinido de "Compartir podio"
-// (confirmada leyendo el código fuente instalado de html-to-image, no por
-// especulación): toBlob()/toSvg() siempre intentan "incrustar" las fuentes
-// web usadas por el nodo (embedWebFonts → getWebFontCSS →
-// parseWebFontRules), y esa rutina escanea node.ownerDocument.styleSheets
-// COMPLETO — todas las hojas de estilo del documento, nunca solo las del
-// nodo capturado (html-to-image/lib/embed-webfonts.js:226). Si alguna hoja
-// no puede leerse de forma síncrona (p. ej. cssRules bloqueado por CORS),
-// cae a un fetch(sheet.href) de respaldo (embed-webfonts.js:178) que, junto
-// con fetchAsDataURL para cada recurso de fuente
-// (html-to-image/lib/dataurl.js:56/113), NO tiene ningún timeout ni
-// AbortController en ningún punto de la librería — si esa petición nunca
-// resuelve, toBlob() quedaba colgado para siempre, sin nunca resolver ni
-// rechazar, exactamente el síntoma reportado (spinner infinito, sin error).
-// Nuestras propias imágenes (avatar/logo) ya llegan como data URLs
-// resueltas por el caller, así que esto nunca dependía de ellas — dependía
-// de hojas de estilo ajenas al nodo, fuera de nuestro control directo.
+// Bloque 3.6 — primera causa raíz encontrada (fuentes web) del bloqueo
+// indefinido de "Compartir podio" (confirmada leyendo el código fuente
+// instalado de html-to-image, no por especulación): toBlob()/toSvg()
+// siempre intentan "incrustar" las fuentes web usadas por el nodo
+// (embedWebFonts → getWebFontCSS → parseWebFontRules), y esa rutina escanea
+// node.ownerDocument.styleSheets COMPLETO — todas las hojas de estilo del
+// documento, nunca solo las del nodo capturado
+// (html-to-image/lib/embed-webfonts.js:226). Si alguna hoja no puede leerse
+// de forma síncrona (p. ej. cssRules bloqueado por CORS), cae a un
+// fetch(sheet.href) de respaldo (embed-webfonts.js:178) que, junto con
+// fetchAsDataURL para cada recurso de fuente (html-to-image/lib/dataurl.js:
+// 56/113), no tiene ningún timeout ni AbortController — si esa petición
+// nunca resuelve, toBlob() quedaba colgado para siempre. `skipFonts: true`
+// (más abajo, en toSvg) sigue desactivando por completo esa rutina.
 //
-// Corrección mínima: `skipFonts: true` desactiva por completo esa rutina
-// (la librería expone esta opción exactamente para este caso, ver
-// html-to-image/lib/embed-webfonts.js:291). El texto capturado sigue
-// usando la fuente ya cargada/cacheada por el propio navegador para
-// renderizar la página (Geist, autoalojada por next/font/google) — sin
-// incrustarla explícitamente en el SVG, pero sin bloquear nunca la
-// generación. Además de esto, exportCardToPngBlob ya no es la única
-// barrera: ShareCardModal aplica un timeout global de generación (ver ese
-// archivo) como defensa adicional ante cualquier otro colgado imprevisto,
-// dentro o fuera de esta función.
-export async function exportCardToPngBlob(node: HTMLElement): Promise<Blob> {
-  // Doble rAF: dentro del modal, el nodo ya se montó con imágenes como data
-  // URLs (carga inmediata, sin red) — esto solo espera a que el navegador
-  // termine de pintar ese DOM antes de capturarlo, para nunca capturar un
-  // frame a medio pintar.
-  await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+// Bloque 3.7 — SEGUNDA causa raíz, la que seguía bloqueando la imagen del
+// nuevo diseño del póster aun con skipFonts:true (confirmada reproduciendo
+// la llamada real de toBlob()/toCanvas() fuera de React, en Chrome
+// headless, con avatares y logo reales embebidos — no por especulación):
+// tanto toCanvas() como toBlob() de html-to-image dependen internamente de
+// su propio createImage() (html-to-image/lib/util.js), que solo resuelve
+// tras encadenar `img.decode().then(() => requestAnimationFrame(() =>
+// resolve(img)))` — sin ningún `.catch()` en decode() y sin ningún timeout
+// en la espera de ese siguiente frame. En pruebas repetidas con la tarjeta
+// real (avatares/logo reales, más pesada visualmente que el diseño
+// anterior), esa cadena decode()+rAF quedó intermitentemente sin resolver
+// nunca — el mismo síntoma exacto reportado (spinner infinito, sin error),
+// mientras que llamar a toSvg() (que NO pasa por createImage/decode/rAF) y
+// rasterizar el resultado nosotros mismos, con onload/onerror explícitos y
+// timeout propio, nunca se colgó en ninguna prueba.
+//
+// Corrección: exportCardToPngBlob ya no usa toBlob()/toCanvas() de
+// html-to-image. Usa únicamente toSvg() (clonar nodo + incrustar
+// imágenes/fondos ya resueltos a data URL por el caller + serializar —
+// nunca depende de decode()/rAF) y luego rasteriza esa cadena por su cuenta
+// con un <img> propio, con onload/onerror explícitos y un timeout acotado —
+// ningún paso de esta función puede quedar pendiente para siempre. Además,
+// ShareCardModal sigue aplicando su propio timeout global de generación
+// (ver ese archivo) como defensa adicional ante cualquier otro colgado
+// imprevisto, dentro o fuera de esta función.
+const CARD_RASTER_TIMEOUT_MS = 8000;
 
-  const blob = await toBlob(node, {
+function rasterizeSvgDataUrl(svgDataUrl: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    let settled = false;
+
+    function cleanup() {
+      clearTimeout(timeoutId);
+      img.onload = null;
+      img.onerror = null;
+    }
+
+    const timeoutId = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      // Mismo mensaje que el timeout global de ShareCardModal — reutiliza
+      // el mapeo a copy ya existente ahí ("La generación está tardando
+      // demasiado. Intenta de nuevo."), sin necesitar un segundo caso.
+      reject(new Error("La generación tardó demasiado."));
+    }, CARD_RASTER_TIMEOUT_MS);
+
+    img.onload = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(img);
+    };
+    img.onerror = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error("No se pudo renderizar la imagen."));
+    };
+    img.decoding = "async";
+    img.src = svgDataUrl;
+  });
+}
+
+export async function exportCardToPngBlob(node: HTMLElement): Promise<Blob> {
+  // Espera a que el navegador termine de pintar el nodo (ya montado con
+  // imágenes como data URLs, carga inmediata sin red) antes de capturarlo
+  // — nunca captura un frame a medio pintar. Acotada con un timeout propio
+  // (nunca solo rAF sin límite — ver Bloque 3.7): si la pestaña queda en
+  // segundo plano justo aquí, rAF puede pausarse indefinidamente; a los
+  // 500ms se continúa de todas formas.
+  await Promise.race([
+    new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+    new Promise<void>((resolve) => setTimeout(resolve, 500)),
+  ]);
+
+  const svgDataUrl = await toSvg(node, {
     width: SHARE_CARD_WIDTH,
     height: SHARE_CARD_HEIGHT,
-    pixelRatio: 1,
     cacheBust: true,
     skipFonts: true,
   });
 
+  const img = await rasterizeSvgDataUrl(svgDataUrl);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = SHARE_CARD_WIDTH;
+  canvas.height = SHARE_CARD_HEIGHT;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("No se pudo generar la imagen.");
+  ctx.drawImage(img, 0, 0, SHARE_CARD_WIDTH, SHARE_CARD_HEIGHT);
+
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
   if (!blob) throw new Error("No se pudo generar la imagen.");
   return blob;
 }
