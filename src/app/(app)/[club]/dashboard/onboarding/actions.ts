@@ -18,6 +18,16 @@ async function requireOwner(clubId: string) {
   const supabase = await createClient();
   const access = await resolveClubAccess(supabase, clubId);
 
+  // TEMP DEBUG — remove once root cause is found
+  console.log("[VISIBILITY-DEBUG] resolveClubAccess", {
+    clubId,
+    authorized: access.authorized,
+    role: access.authorized ? access.role : undefined,
+    isSuperadminAccess: access.authorized ? access.isSuperadminAccess : undefined,
+    error: access.authorized ? undefined : access.error,
+  });
+  // END TEMP DEBUG
+
   if (!access.authorized || !["OWNER", "ADMIN"].includes(access.role)) {
     return { supabase: null, error: access.authorized ? "No tienes permiso para editar este club." : access.error };
   }
@@ -40,10 +50,25 @@ export async function updateClubIdentity(
   const rawVisibility = formData.get("visibility") as string | null;
   const visibility = rawVisibility === "private" ? "private" : "public";
 
-  const { error } = await supabase
+  // TEMP DEBUG — remove once root cause is found
+  console.log("[VISIBILITY-DEBUG] updateClubIdentity payload", { clubId, description, rawVisibility, visibility });
+  // END TEMP DEBUG
+
+  const { error, data, count, status, statusText } = await supabase
     .from("clubs")
     .update({ description, visibility })
-    .eq("id", clubId);
+    .eq("id", clubId)
+    .select("id, description, visibility");
+
+  // TEMP DEBUG — remove once root cause is found
+  console.log("[VISIBILITY-DEBUG] update result", {
+    error: error ? { code: error.code, message: error.message, details: error.details, hint: error.hint } : null,
+    data,
+    count,
+    status,
+    statusText,
+  });
+  // END TEMP DEBUG
 
   if (error) return { error: "Error al guardar. Intenta de nuevo." };
 
