@@ -49,6 +49,11 @@ function formatWallClockDisplay(value: string): string {
 export function TournamentForm({ clubId, tournament, categories, action, onSuccess, onCancel, minMaxPairs = 1 }: TournamentFormProps) {
   const [state, formAction, pending] = useActionState(action, initialState);
   const isEdit = !!tournament;
+  // Un torneo nunca debe permitir menos de 2 duplas de cupo — piso
+  // absoluto, independiente de minMaxPairs (que solo refleja duplas ya
+  // activas al editar).
+  const effectiveMinMaxPairs = Math.max(2, minMaxPairs);
+  const [maxPairsError, setMaxPairsError] = useState<string | null>(null);
   const structuralFieldsLocked =
     tournament?.status === "registration_open" || tournament?.status === "registration_closed";
 
@@ -166,8 +171,18 @@ export function TournamentForm({ clubId, tournament, categories, action, onSucce
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.success]);
 
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    const parsedMaxPairs = parseInt(maxPairsInput, 10);
+    if (!Number.isInteger(parsedMaxPairs) || parsedMaxPairs < 2) {
+      e.preventDefault();
+      setMaxPairsError("Un torneo debe permitir al menos 2 duplas.");
+      return;
+    }
+    setMaxPairsError(null);
+  }
+
   return (
-    <form action={formAction} className="flex flex-col gap-5">
+    <form action={formAction} onSubmit={handleSubmit} className="flex flex-col gap-5">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {/* Columna izquierda: identidad y configuración del evento */}
         <div className="flex flex-col gap-4 min-w-0">
@@ -272,11 +287,11 @@ export function TournamentForm({ clubId, tournament, categories, action, onSucce
             name="max_pairs"
             label="Cupo máximo de duplas"
             type="number"
-            min={minMaxPairs}
+            min={effectiveMinMaxPairs}
             step={1}
             value={maxPairsInput}
             onChange={(e) => handleMaxPairsChange(e.target.value)}
-            hint={isEdit ? `Mínimo permitido: ${minMaxPairs} duplas registradas actualmente.` : undefined}
+            hint={isEdit ? `Mínimo permitido: ${effectiveMinMaxPairs} duplas registradas actualmente.` : undefined}
             required
           />
         </div>
@@ -380,9 +395,9 @@ export function TournamentForm({ clubId, tournament, categories, action, onSucce
         </div>
       </div>
 
-      {state.error && (
+      {(maxPairsError || state.error) && (
         <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
-          {state.error}
+          {maxPairsError || state.error}
         </p>
       )}
 

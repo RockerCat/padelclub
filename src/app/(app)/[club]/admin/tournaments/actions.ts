@@ -105,7 +105,7 @@ function tournamentErrorMessage(error: { code?: string; message?: string }): str
       return "La combinación de categorías no es válida: la categoría principal debe ser superior a la secundaria.";
     }
     if (msg.includes("Invalid category")) return "Selecciona una categoría válida.";
-    if (msg.includes("Invalid max pairs")) return "El número máximo de duplas debe ser mayor a cero.";
+    if (msg.includes("Invalid max pairs")) return "Un torneo debe permitir al menos 2 duplas.";
     // El RPC interpola el conteo real de duplas activas directamente en el
     // mensaje ('max_pairs cannot be less than N active tournament
     // entries') — se extrae aquí en vez de recalcularlo con minMaxPairs en
@@ -168,8 +168,8 @@ function parseTournamentFields(formData: FormData) {
   if (secondaryCategory && secondaryCategory === category) {
     return { error: "La categoría secundaria debe ser distinta de la principal." } as const;
   }
-  if (!Number.isInteger(maxPairs) || maxPairs < 1) {
-    return { error: "El número máximo de duplas debe ser mayor a cero." } as const;
+  if (!Number.isInteger(maxPairs) || maxPairs < 2) {
+    return { error: "Un torneo debe permitir al menos 2 duplas." } as const;
   }
   if (!VISIBILITIES.includes(visibility)) return { error: "Selecciona una visibilidad válida." } as const;
   if (!Number.isInteger(estimatedDurationMinutes) || estimatedDurationMinutes < 1) {
