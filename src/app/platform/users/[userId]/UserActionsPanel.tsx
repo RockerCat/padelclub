@@ -2,13 +2,14 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { KeyRound, Mail, Power, Trash2, Lock, X } from "lucide-react";
+import { KeyRound, Mail, Power, Trash2, Lock, X, Link2, Copy, Check } from "lucide-react";
 import { Button, Input, ConfirmDialog, Toast } from "@/components/ui";
 import {
   updateUserName,
   updateUserEmail,
   updateUserPassword,
   sendPasswordRecovery,
+  generatePasswordRecoveryLink,
   setUserBanned,
 } from "./actions";
 
@@ -131,6 +132,85 @@ function PasswordModal({
   );
 }
 
+// Modal de solo lectura para el enlace de recuperación generado — nunca se
+// persiste (ni aquí ni en el servidor, ver generatePasswordRecoveryLink):
+// vive únicamente en el estado de UserActionsPanel mientras el modal está
+// abierto, y se descarta al cerrarlo. Nunca envía nada por sí mismo — el
+// equipo de soporte lo comparte manualmente (WhatsApp, etc.) con "Copiar
+// enlace".
+function RecoveryLinkModal({ link, onClose }: { link: string; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = "";
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onClose]);
+
+  function handleCopy() {
+    navigator.clipboard.writeText(link).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 bg-black/60 z-[400]"
+        style={{ backdropFilter: "blur(4px)" }}
+        onClick={onClose}
+        aria-hidden
+      />
+      <div className="fixed inset-x-0 bottom-0 md:inset-0 md:flex md:items-center md:justify-center z-[401] pointer-events-none">
+        <div
+          className="pointer-events-auto w-full md:w-[480px] bg-[#082735] border border-white/10 rounded-t-2xl md:rounded-2xl shadow-2xl flex flex-col"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-5 py-5 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold text-white">Enlace de recuperación</h2>
+              <button
+                type="button"
+                onClick={onClose}
+                className="text-brand-muted hover:text-white transition-colors"
+                aria-label="Cerrar"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-brand-muted">
+              Compártelo manualmente con el usuario (por ejemplo, por WhatsApp). Nunca se envía por
+              correo automáticamente.
+            </p>
+
+            <div className="text-xs text-white bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 break-all select-all">
+              {link}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 px-5 pb-5">
+            <Button type="button" variant="secondary" onClick={onClose}>
+              Cerrar
+            </Button>
+            <Button type="button" onClick={handleCopy}>
+              {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              {copied ? "Enlace copiado" : "Copiar enlace"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export function UserActionsPanel({
   userId,
   initialName,
@@ -148,16 +228,21 @@ export function UserActionsPanel({
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [recoveryError, setRecoveryError] = useState<string | null>(null);
+  const [recoveryLinkError, setRecoveryLinkError] = useState<string | null>(null);
   const [banError, setBanError] = useState<string | null>(null);
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [confirmBanOpen, setConfirmBanOpen] = useState(false);
+  // Nunca persistido — solo vive aquí mientras el modal está abierto (ver
+  // RecoveryLinkModal y generatePasswordRecoveryLink).
+  const [recoveryLink, setRecoveryLink] = useState<string | null>(null);
 
   const [savingName, startSavingName] = useTransition();
   const [savingEmail, startSavingEmail] = useTransition();
   const [savingPassword, startSavingPassword] = useTransition();
   const [sendingRecovery, startSendingRecovery] = useTransition();
+  const [generatingRecoveryLink, startGeneratingRecoveryLink] = useTransition();
   const [togglingBan, startTogglingBan] = useTransition();
 
   function handleSaveName() {
@@ -208,6 +293,18 @@ export function UserActionsPanel({
         return;
       }
       setToastMessage("Correo de recuperación enviado");
+    });
+  }
+
+  function handleGenerateRecoveryLink() {
+    setRecoveryLinkError(null);
+    startGeneratingRecoveryLink(async () => {
+      const result = await generatePasswordRecoveryLink(email);
+      if (result.error) {
+        setRecoveryLinkError(result.error);
+        return;
+      }
+      setRecoveryLink(result.link ?? null);
     });
   }
 
@@ -284,8 +381,17 @@ export function UserActionsPanel({
             <Mail className="w-4 h-4" />
             Enviar recuperación
           </Button>
+          <Button
+            variant="secondary"
+            loading={generatingRecoveryLink}
+            onClick={handleGenerateRecoveryLink}
+          >
+            <Link2 className="w-4 h-4" />
+            Generar enlace de recuperación
+          </Button>
         </div>
         {recoveryError && <p className="text-xs text-amber-300">{recoveryError}</p>}
+        {recoveryLinkError && <p className="text-xs text-amber-300">{recoveryLinkError}</p>}
 
         <div className="h-px bg-white/10" />
 
@@ -338,6 +444,10 @@ export function UserActionsPanel({
           pending={savingPassword}
           serverError={passwordError}
         />
+      )}
+
+      {recoveryLink && (
+        <RecoveryLinkModal link={recoveryLink} onClose={() => setRecoveryLink(null)} />
       )}
 
       <ConfirmDialog

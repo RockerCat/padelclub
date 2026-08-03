@@ -108,6 +108,35 @@ export async function sendPasswordRecovery(email: string): Promise<ActionResult>
   return {};
 }
 
+// ─── Generar enlace de recuperación — Admin API generateLink, nunca envía
+// correo (a diferencia de sendPasswordRecovery arriba) — el equipo de
+// soporte lo comparte manualmente. Nunca se persiste en ningún lado: se
+// devuelve directo al caller, que solo lo guarda en memoria del modal
+// mientras está abierto. Mismo redirectTo por defecto que
+// sendPasswordRecovery (ninguno explícito) — reutiliza exactamente el
+// flujo de restablecimiento ya configurado, nunca uno nuevo. ────────────────
+
+export async function generatePasswordRecoveryLink(
+  email: string
+): Promise<ActionResult & { link?: string }> {
+  const gate = await requirePlatformAdmin();
+  if (gate.error) return { error: gate.error };
+
+  const admin = createAdminClient();
+  if (!admin) return { error: ADMIN_API_NOT_CONFIGURED };
+
+  const { data, error } = await admin.auth.admin.generateLink({
+    type: "recovery",
+    email,
+  });
+
+  if (error || !data.properties?.action_link) {
+    return { error: "No se pudo generar el enlace de recuperación. Intenta de nuevo." };
+  }
+
+  return { link: data.properties.action_link };
+}
+
 // ─── Activar / Desactivar — official ban_duration mechanism, no data deleted ──
 
 export async function setUserBanned(userId: string, banned: boolean): Promise<ActionResult> {
