@@ -17,6 +17,7 @@ interface RankingExportRow {
 
 interface RankingExportButtonProps {
   clubName: string;
+  clubSlug: string;
   clubLogoUrl: string | null;
   accentColor: string;
   category: string;
@@ -37,7 +38,7 @@ function formatGeneratedAt(): string {
 // bajo demanda (solo al pulsar, nunca al cargar la página) antes de abrir
 // el modal — nunca bloquea la navegación principal mientras tanto (el
 // propio botón muestra su estado de carga).
-export function RankingExportButton({ clubName, clubLogoUrl, accentColor, category, rows }: RankingExportButtonProps) {
+export function RankingExportButton({ clubName, clubSlug, clubLogoUrl, accentColor, category, rows }: RankingExportButtonProps) {
   const [preparing, setPreparing] = useState(false);
   const [exportData, setExportData] = useState<{ logoDataUrl: string | null; rows: RankingShareRow[] } | null>(null);
   // Bloque 3.5 — fuerza un remount completo de ShareCardModal en cada
@@ -94,6 +95,7 @@ export function RankingExportButton({ clubName, clubLogoUrl, accentColor, catego
           filenameParts={["ranking", clubName, category]}
           shareTitle={`Ranking ${category} · ${clubName}`}
           shareText={`Ranking ${category} de ${clubName} — Mi Pádel Club`}
+          whatsappMessage={`🏆 Ranking ${category} — ${clubName}\n\nConsulta la clasificación completa aquí 👇\n\n${window.location.origin}/clubs/${clubSlug}/ranking`}
           onClose={() => setExportData(null)}
           card={
             <RankingShareCard

@@ -1,4 +1,4 @@
-import { toSvg } from "html-to-image";
+import { getFontEmbedCSS, toSvg } from "html-to-image";
 
 // Bloque 3.4 — utilidades puras de exportación visual (PNG) para Ranking y
 // Torneos. Nunca calcula ni toca datos deportivos: solo convierte un nodo ya
@@ -100,6 +100,43 @@ export async function resolveImageDataUrls(
 // imprevisto, dentro o fuera de esta función.
 const CARD_RASTER_TIMEOUT_MS = 8000;
 
+// Bloque 3.8 — CAUSA de que la tipografía exportada no coincidiera con la
+// de la app (confirmado inyectando html-to-image en la propia app real, vía
+// CDP, no por especulación): `skipFonts: true` evita el colgado de fuentes
+// del Bloque 3.6, pero también significa que la tarjeta serializada nunca
+// lleva ningún `@font-face` — el nombre "Geist" queda en el font-family
+// computado de cada nodo clonado, pero sin una regla `@font-face` DENTRO
+// del propio SVG serializado, ese nombre no resuelve a ningún recurso: el
+// <foreignObject> lo rasteriza con la fuente de reemplazo del sistema, no
+// con Geist. Confirmado con una prueba directa: toSvg(..., {skipFonts:
+// true}) nunca contiene "@font-face" en el SVG resultante.
+//
+// Corrección: en vez de dejar que html-to-image escanee TODO
+// document.styleSheets sin límite (la causa del Bloque 3.6), se llama una
+// sola vez a su propio getFontEmbedCSS(node, {}) — la misma rutina seria,
+// pero acotada aquí con nuestro propio timeout — y el resultado (la regla
+// @font-face real de Geist, con el .woff2 ya incrustado como data URI) se
+// pasa a toSvg vía la opción fontEmbedCSS, que hace que internamente omita
+// por completo su propio escaneo (ver embed-webfonts.js: "if
+// (options.fontEmbedCSS != null) usa ese valor directo"). Confirmado que
+// así sí queda un @font-face con "Geist" y el .woff2 embebido en el SVG
+// final, y que ese SVG rasteriza sin error. Si esta llamada tarda más de
+// lo razonable o falla, se degrada exactamente al comportamiento actual
+// (skipFonts: true, tipografía de reemplazo) — nunca bloquea la
+// generación por esto.
+const FONT_EMBED_TIMEOUT_MS = 4000;
+
+async function resolveCardFontEmbedCss(node: HTMLElement): Promise<string | null> {
+  try {
+    return await Promise.race([
+      getFontEmbedCSS(node, {}),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("font embed timeout")), FONT_EMBED_TIMEOUT_MS)),
+    ]);
+  } catch {
+    return null;
+  }
+}
+
 function rasterizeSvgDataUrl(svgDataUrl: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -150,11 +187,24 @@ export async function exportCardToPngBlob(node: HTMLElement): Promise<Blob> {
     new Promise<void>((resolve) => setTimeout(resolve, 500)),
   ]);
 
+  // La misma tipografía que la app real (Geist) — nunca la de reemplazo
+  // del sistema. document.fonts.ready ya resuelve por sí solo en cuanto
+  // termina la carga de fuentes (éxito o fallo, nunca queda pendiente para
+  // siempre por spec), pero se acota igual con un fallback de 1s por
+  // consistencia con el resto de esta función (ver Bloque 3.7/3.8: ningún
+  // paso depende de un recurso externo sin límite).
+  await Promise.race([
+    document.fonts.ready,
+    new Promise<void>((resolve) => setTimeout(resolve, 1000)),
+  ]);
+  const fontEmbedCSS = await resolveCardFontEmbedCss(node);
+
   const svgDataUrl = await toSvg(node, {
     width: SHARE_CARD_WIDTH,
     height: SHARE_CARD_HEIGHT,
     cacheBust: true,
-    skipFonts: true,
+    skipFonts: !fontEmbedCSS,
+    fontEmbedCSS: fontEmbedCSS ?? undefined,
   });
 
   const img = await rasterizeSvgDataUrl(svgDataUrl);

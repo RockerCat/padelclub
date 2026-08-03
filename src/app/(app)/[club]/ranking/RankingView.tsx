@@ -309,6 +309,7 @@ export function RankingView({
           {isAdmin && category && showReady && (
             <RankingExportButton
               clubName={clubName}
+              clubSlug={clubSlug}
               clubLogoUrl={clubLogoUrl}
               accentColor={accentColor}
               category={category}

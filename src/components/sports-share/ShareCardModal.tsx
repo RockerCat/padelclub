@@ -19,6 +19,11 @@ interface ShareCardModalProps {
   filenameParts: string[];
   shareTitle: string;
   shareText?: string;
+  // Texto para el fallback de escritorio (WhatsApp Web vía wa.me, ver
+  // handleShareWhatsapp) — nunca el mismo que shareText: este siempre debe
+  // incluir el enlace público, ya que en ese flujo nunca se adjunta el
+  // archivo (wa.me no lo permite), solo texto.
+  whatsappMessage: string;
   onClose: () => void;
 }
 
@@ -39,7 +44,7 @@ const GENERATION_TIMEOUT_MS = 15000;
 // la escala visualmente para el preview con transform:scale (nunca afecta
 // lo que realmente se captura, que siempre usa width/height explícitos), y
 // gestiona la generación del PNG + compartir/descargar.
-export function ShareCardModal({ title, card, filenameParts, shareTitle, shareText, onClose }: ShareCardModalProps) {
+export function ShareCardModal({ title, card, filenameParts, shareTitle, shareText, whatsappMessage, onClose }: ShareCardModalProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.28);
@@ -50,10 +55,11 @@ export function ShareCardModal({ title, card, filenameParts, shareTitle, shareTe
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   // Calculado una sola vez en cliente (nunca en SSR — esta pieza es
-  // "use client" completa) — decide si el botón "Compartir" existe en
-  // absoluto, nunca si se usa en vez de "Descargar": son dos acciones
-  // reales y separadas, nunca una sola con fallback silencioso.
-  const [canShare] = useState(() => canShareImageFile());
+  // "use client" completa) — decide el COMPORTAMIENTO de "Compartir por
+  // WhatsApp" (adjuntar el archivo vía el selector nativo vs. descarga +
+  // WhatsApp Web), nunca si el botón existe: "Compartir por WhatsApp" y
+  // "Descargar imagen" están siempre ambos presentes.
+  const [canShareFiles] = useState(() => canShareImageFile());
 
   // Escala del preview: el contenedor visible tiene su ancho real definido
   // por CSS (min(92vw, 380px), proporción 4:5) — el scale solo se deriva de
@@ -143,17 +149,50 @@ export function ShareCardModal({ title, card, filenameParts, shareTitle, shareTe
     };
   }, [onClose]);
 
-  async function handleShare() {
+  // Móvil con soporte real para compartir archivos (canShareFiles): adjunta
+  // el PNG mediante el selector nativo del sistema — el usuario elige
+  // WhatsApp ahí mismo, nunca un wa.me (que no puede adjuntar un archivo).
+  //
+  // Escritorio / sin ese soporte: nunca el selector genérico. En su lugar,
+  // descarga el PNG automáticamente y abre WhatsApp Web con el texto
+  // (nombre del club + categoría + enlace público, ver whatsappMessage) —
+  // window.open() se llama de forma síncrona, sin ningún await previo,
+  // para conservar el gesto real del click y no ser bloqueado como pop-up.
+  // Si esa apertura falla, la imagen ya quedó descargada de todas formas —
+  // nunca se pierde la única acción que sí puede completarse sola.
+  async function handleShareWhatsapp() {
     if (!blob || actionPending) return;
     setActionPending(true);
     setActionMessage(null);
     setActionError(null);
+
+    if (canShareFiles) {
+      try {
+        const filename = sanitizeExportFilename(filenameParts);
+        const result = await shareImagePng(blob, filename, shareTitle, shareText);
+        if (result === "shared") setActionMessage("Imagen compartida correctamente.");
+      } catch {
+        setActionError("No se pudo compartir la imagen. Intenta descargarla.");
+      } finally {
+        setActionPending(false);
+      }
+      return;
+    }
+
     try {
-      const filename = sanitizeExportFilename(filenameParts);
-      const result = await shareImagePng(blob, filename, shareTitle, shareText);
-      if (result === "shared") setActionMessage("Imagen compartida correctamente.");
+      downloadPngBlob(blob, sanitizeExportFilename(filenameParts));
+      const whatsappWindow = window.open(
+        `https://wa.me/?text=${encodeURIComponent(whatsappMessage)}`,
+        "_blank",
+        "noopener,noreferrer"
+      );
+      if (whatsappWindow) {
+        setActionMessage("La imagen fue descargada. Adjúntala en WhatsApp para compartirla.");
+      } else {
+        setActionError("No se pudo abrir WhatsApp Web. La imagen ya se descargó — adjúntala manualmente.");
+      }
     } catch {
-      setActionError("No se pudo compartir la imagen. Intenta descargarla.");
+      setActionError("No se pudo abrir WhatsApp Web. La imagen ya se descargó — adjúntala manualmente.");
     } finally {
       setActionPending(false);
     }
@@ -232,21 +271,19 @@ export function ShareCardModal({ title, card, filenameParts, shareTitle, shareTe
             )}
 
             <div className="w-full flex flex-col gap-2">
-              {canShare && (
-                <Button
-                  type="button"
-                  onClick={handleShare}
-                  disabled={status !== "ready"}
-                  loading={actionPending}
-                  aria-label="Compartir por WhatsApp"
-                >
-                  <MessageCircle className="w-4 h-4" aria-hidden="true" />
-                  Compartir por WhatsApp
-                </Button>
-              )}
               <Button
                 type="button"
-                variant={canShare ? "secondary" : "primary"}
+                onClick={handleShareWhatsapp}
+                disabled={status !== "ready"}
+                loading={actionPending}
+                aria-label="Compartir por WhatsApp"
+              >
+                <MessageCircle className="w-4 h-4" aria-hidden="true" />
+                Compartir por WhatsApp
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
                 onClick={handleDownload}
                 disabled={status !== "ready"}
                 aria-label="Descargar imagen"
