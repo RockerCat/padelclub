@@ -82,9 +82,14 @@ export function LocationMap({ lat, lng, onCoordinatesChange }: Props) {
   }, []);
 
   return (
+    // overscroll-contain: scrollWheelZoom is off, so Leaflet never attaches
+    // a wheel handler here — without this, a trackpad two-finger swipe (or
+    // an edge-swipe on touch) over the map is left completely unhandled and
+    // bubbles up as the browser's native swipe-to-navigate gesture, which
+    // silently goes back in history to the previous onboarding step.
     <div
       ref={containerRef}
-      className="w-full h-[220px] lg:h-[320px] rounded-xl overflow-hidden border border-white/10"
+      className="w-full h-[220px] lg:h-[320px] rounded-xl overflow-hidden border border-white/10 overscroll-contain"
     />
   );
 }
