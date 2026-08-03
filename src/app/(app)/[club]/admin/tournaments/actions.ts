@@ -363,7 +363,15 @@ export async function closeTournamentRegistration(
     p_tournament_id: tournamentId,
   });
 
-  if (error) return { error: tournamentErrorMessage(error) };
+  if (error) {
+    console.error("[DIAG close_tournament_registration]", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+    });
+    return { error: tournamentErrorMessage(error) };
+  }
 
   revalidatePath(`/${clubSlug}/admin/tournaments`);
   revalidatePath(`/${clubSlug}/tournaments/${tournamentSlug}`);
