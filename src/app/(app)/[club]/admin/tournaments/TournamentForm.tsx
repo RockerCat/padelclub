@@ -70,7 +70,12 @@ export function TournamentForm({ clubId, tournament, categories, action, onSucce
   const [nameInput, setNameInput] = useState(tournament?.name ?? "");
   const [descriptionInput, setDescriptionInput] = useState(tournament?.description ?? "");
   const [visibilityInput, setVisibilityInput] = useState(tournament?.visibility ?? "private");
-  const [prizeInput, setPrizeInput] = useState(tournament?.prize_description ?? "");
+  // Al crear: plantilla editable de premios, nunca sobreescrita si el
+  // usuario la borra o modifica. Al editar: siempre el valor guardado,
+  // nunca la plantilla.
+  const [prizeInput, setPrizeInput] = useState(() =>
+    isEdit ? tournament!.prize_description ?? "" : "🥇 1er lugar:\n🥈 2do lugar:"
+  );
 
   // Al crear: la hora local actual, calculada en el momento en que este
   // formulario se monta (nunca al momento del build, nunca una constante
