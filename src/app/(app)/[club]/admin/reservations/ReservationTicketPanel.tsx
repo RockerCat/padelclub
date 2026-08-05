@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition, type ReactNode } from "react";
-import { X, Pencil, XCircle, Check, Clock, Timer } from "lucide-react";
+import { X, Pencil, XCircle, Check, Clock, Timer, Lock, LockOpen } from "lucide-react";
 import {
   createReservation,
   updateReservation,
@@ -20,6 +20,13 @@ import { durationLabel } from "@/lib/durations";
 import { PlayerAvatar } from "@/components/players/PlayerAvatar";
 import type { CalendarReservation } from "./WeekCalendar";
 import type { PendingRequest } from "./PendingRequestsSection";
+import { getPendingReservationJoinRequests } from "@/lib/reservationJoinRequests";
+import type { PendingReservationJoinRequest } from "@/lib/reservationJoinRequests";
+import { buildReservationSlug } from "@/lib/reservationSlug";
+import { buildReservationShareMessage } from "@/lib/reservationShare";
+import { ReservationShareActions } from "@/components/reservations/ReservationShareActions";
+import { PendingJoinRequestsList } from "@/components/reservations/PendingJoinRequestsList";
+import { useReservationJoinManagement } from "./useReservationJoinManagement";
 
 // Agenda's reservation detail — a centered dialog (fullscreen on mobile)
 // used for the Agenda view only (WeekCalendar/Semana keeps its own
@@ -120,6 +127,8 @@ interface ReservationTicketPanelProps {
   panelState: TicketPanelState | null;
   clubId: string;
   clubSlug: string;
+  // Solo para el mensaje del botón "WhatsApp" (ReservationShareActions).
+  clubName: string;
   courts: Array<{ id: string; name: string }>;
   members: Array<{ profile_id: string; full_name: string | null; avatar_url: string | null }>;
   allowedDurations: number[];
@@ -133,6 +142,7 @@ export function ReservationTicketPanel({
   panelState,
   clubId,
   clubSlug,
+  clubName,
   courts,
   members,
   allowedDurations,
@@ -160,6 +170,42 @@ export function ReservationTicketPanel({
       ? `pending-${panelState.pending.id}`
       : panelState?.mode ?? null;
 
+  // Reservas Abiertas/Cerradas — badge, toggle y solicitudes pendientes
+  // (sección 11 del spec). pendingJoinRequests se recarga junto con
+  // editData cada vez que se abre un ticket en modo "view". El wiring de
+  // toggle/aprobar/rechazar vive en useReservationJoinManagement (compartido
+  // con ReservationShareView, el detalle compartido) — este panel solo es
+  // dueño de la lista en sí y de cuándo recargarla.
+  const [pendingJoinRequests, setPendingJoinRequests] = useState<PendingReservationJoinRequest[]>([]);
+  const {
+    togglingOpen,
+    toggleError: openStatusError,
+    handleToggleOpen,
+    resolvingRequestId,
+    resolvingJoinRequest,
+    joinRequestError,
+    handleApprove: handleApproveJoinRequest,
+    handleReject: handleRejectJoinRequest,
+  } = useReservationJoinManagement({
+    reservationId: panelState?.mode === "view" ? panelState.reservation.id : "",
+    clubSlug,
+    resetKey: panelKey ?? undefined,
+    setPendingRequests: setPendingJoinRequests,
+    onToggled: (nextIsOpen) => {
+      setEditData((prev) => (prev ? { ...prev, is_open: nextIsOpen, closed_reason: nextIsOpen ? null : "manual" } : prev));
+      onChanged();
+    },
+    onApproved: () => {
+      if (panelState?.mode !== "view") return;
+      // Una 4ta aprobación cierra la reserva automáticamente server-side —
+      // re-consultar ambos en vez de adivinar el nuevo is_open/closed_reason/
+      // lista de jugadores.
+      getReservationForEdit(clubId, panelState.reservation.id).then(setEditData);
+      getPendingReservationJoinRequests(panelState.reservation.id).then(setPendingJoinRequests);
+      onChanged();
+    },
+  });
+
   // Reset the sub-view (editing/confirming-cancel/errors) and the stale
   // fetched detail the moment a different ticket opens — plain local UI
   // state, so this is adjusted during render (React's documented
@@ -178,6 +224,7 @@ export function ReservationTicketPanel({
     setExtraTimeError(null);
     setEditData(null);
     setLoadingEdit(panelState?.mode === "view");
+    setPendingJoinRequests([]);
   }
 
   // Fetch the rich detail (notes/price/creator) whenever a confirmed
@@ -192,6 +239,7 @@ export function ReservationTicketPanel({
       setEditData(data);
       setLoadingEdit(false);
     });
+    getPendingReservationJoinRequests(panelState.reservation.id).then(setPendingJoinRequests);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelKey]);
 
@@ -209,6 +257,15 @@ export function ReservationTicketPanel({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!!panelState]);
+
+  // Hidratación segura para el enlace de compartir (mismo patrón que
+  // ShareNewsButtons.tsx): arranca null y sube a un origin real recién
+  // montado, nunca leído durante el render inicial.
+  const [origin, setOrigin] = useState<string | null>(null);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOrigin(window.location.origin);
+  }, []);
 
   if (!panelState) return null;
 
@@ -378,6 +435,11 @@ export function ReservationTicketPanel({
                     />
                     <Row label="Duración" value={durationLabel(panelState.pending.duration_minutes)} />
                     <Row label="Tipo" value="Partido" />
+                    <Row
+                      label="Jugadores iniciales"
+                      value={`${panelState.pending.playerCount} jugador${panelState.pending.playerCount === 1 ? "" : "es"}`}
+                    />
+                    <Row label="Acepta solicitudes de jugadores" value={panelState.pending.is_open ? "Sí" : "No"} />
                   </DetailCard>
 
                   {/* Same visual identity as a confirmed reservation's
@@ -460,6 +522,19 @@ export function ReservationTicketPanel({
                             </span>
                           }
                         />
+                        <Row
+                          label="Participación"
+                          value={
+                            <span
+                              className={`inline-flex items-center gap-1.5 ${
+                                editData.is_open ? "text-brand-primary" : "text-brand-muted"
+                              }`}
+                            >
+                              {editData.is_open ? <LockOpen className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+                              {editData.is_open ? "Abierta" : "Cerrada"}
+                            </span>
+                          }
+                        />
                         <Row label="Cancha" value={panelState.reservation.courtName} />
                         <Row label="Fecha" value={formatDate(panelState.reservation.date)} />
                         <Row
@@ -487,7 +562,7 @@ export function ReservationTicketPanel({
                           fallback (see above), so this renders identically
                           either way. */}
                       {jugadoresIds.length > 0 && (
-                        <DetailCard title="Jugadores">
+                        <DetailCard title={`Jugadores (${jugadoresIds.length})`}>
                           {jugadoresIds.map((id) => {
                             const member = members.find((m) => m.profile_id === id);
                             const fallbackName = id === editData.created_by ? editData.creator_name : null;
@@ -557,6 +632,24 @@ export function ReservationTicketPanel({
                       <p className="text-sm text-white whitespace-pre-line py-2.5">{editData.notes}</p>
                     </DetailCard>
                   )}
+
+                  {/* Solicitudes pendientes — creador/OWNER/ADMIN (sección 3
+                      del spec). El panel es siempre OWNER/ADMIN (solo se
+                      abre desde la Agenda), así que no hace falta un
+                      chequeo extra de "can_manage" aquí — la RPC igual
+                      re-valida todo server-side. */}
+                  {pendingJoinRequests.length > 0 && (
+                    <DetailCard title={`Solicitudes pendientes (${pendingJoinRequests.length})`}>
+                      <PendingJoinRequestsList
+                        requests={pendingJoinRequests}
+                        resolving={resolvingJoinRequest}
+                        resolvingRequestId={resolvingRequestId}
+                        onApprove={handleApproveJoinRequest}
+                        onReject={handleRejectJoinRequest}
+                        error={joinRequestError}
+                      />
+                    </DetailCard>
+                  )}
                 </div>
               ) : (
                 <p className="text-sm text-brand-muted py-8 text-center">No se pudo cargar la reserva.</p>
@@ -589,15 +682,50 @@ export function ReservationTicketPanel({
             </div>
           )}
 
-          {panelState.mode === "view" && !loadingEdit && !editing && editData && (
-            <div className="shrink-0 border-t border-white/10 px-5 py-4 flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={() => setExtraTimeModalOpen(true)}
-                className="flex items-center justify-center gap-1.5 h-10 rounded-xl border border-white/15 text-sm font-medium text-white/90 hover:border-white/30 hover:bg-white/5 transition-colors"
-              >
-                <Timer className="w-3.5 h-3.5" />
-                Agregar tiempo extra
+          {panelState.mode === "view" && !loadingEdit && !editing && editData && (() => {
+            // Mismo slug corto/mensaje que ReservationShareView y
+            // PlayerActivity — una sola función para el texto (@/lib/
+            // reservationShare), un solo componente para las acciones
+            // (@/components/reservations/ReservationShareActions).
+            const sharePath = `/${clubSlug}/reservations/${buildReservationSlug({
+              creatorName: editData.creator_name,
+              date: panelState.reservation.date,
+              startTime: editData.start_time,
+            })}`;
+            const shareUrl = origin ? `${origin}${sharePath}` : sharePath;
+            const shareMessage = buildReservationShareMessage({
+              clubName,
+              creatorName: editData.creator_name,
+              date: panelState.reservation.date,
+              startTime: editData.start_time,
+              durationMinutes: editData.duration_minutes,
+              courtName: panelState.reservation.courtName,
+              isOpen: editData.is_open,
+              playerCount: editData.player_count,
+              url: shareUrl,
+            });
+
+            return (
+              <div className="shrink-0 border-t border-white/10 px-5 py-4 flex flex-col gap-2">
+                {openStatusError && <p className="text-xs text-red-400">{openStatusError}</p>}
+                <ReservationShareActions url={shareUrl} message={shareMessage} />
+                <button
+                  type="button"
+                  onClick={() => handleToggleOpen(!editData.is_open)}
+                  disabled={togglingOpen}
+                  className="flex items-center justify-center gap-1.5 h-10 rounded-xl border border-white/15 text-sm font-medium text-white/90 hover:border-white/30 hover:bg-white/5 transition-colors disabled:opacity-40"
+                >
+                  {editData.is_open ? <Lock className="w-3.5 h-3.5" /> : <LockOpen className="w-3.5 h-3.5" />}
+                  {togglingOpen ? "Guardando…" : editData.is_open ? "Cerrar reserva" : "Abrir reserva"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setExtraTimeModalOpen(true)}
+                  className="flex items-center justify-center gap-1.5 h-10 rounded-xl border border-white/15 text-sm font-medium text-white/90 hover:border-white/30 hover:bg-white/5 transition-colors"
+                >
+                  <Timer className="w-3.5 h-3.5" />
+                  Agregar tiempo extra
               </button>
 
               {confirmingCancel ? (
@@ -643,8 +771,9 @@ export function ReservationTicketPanel({
                   </button>
                 </div>
               )}
-            </div>
-          )}
+              </div>
+            );
+          })()}
         </div>
       </div>
 

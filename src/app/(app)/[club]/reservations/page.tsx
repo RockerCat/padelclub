@@ -353,6 +353,7 @@ export default async function PlayerReservationsPage({
           todayHref={`/${slug}/reservations`}
           clubId={club.id}
           clubSlug={slug}
+          clubName={club.name}
           playerId={user.id}
           defaultSelectedDate={defaultSelectedDate}
           allowedDurations={allowedDurations}

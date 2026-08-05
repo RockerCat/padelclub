@@ -3,6 +3,7 @@
 import { useState, useEffect, useActionState, useCallback, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronUp, ChevronDown, X, Check, CalendarOff } from "lucide-react";
+import { Switch } from "@/components/ui";
 import { requestReservation, updateMyReservation, getReservationPriceQuote } from "./actions";
 import type { RequestFormState } from "./actions";
 import type { ResolveReservationPriceResult } from "@/lib/reservationPricing";
@@ -13,6 +14,7 @@ import type { ContextRange } from "@/components/courts/CourtAvailabilityTimeline
 import { DayRangeNav } from "@/components/courts/DayRangeNav";
 import type { DayRangeDay, DayRangeBlock } from "@/components/courts/DayRangeNav";
 import { timeToMins, addMinutes, buildDayGrid } from "@/lib/courtAvailability";
+import { buildReservationSlug } from "@/lib/reservationSlug";
 import {
   ActivityList,
   sortBookingsByProximity,
@@ -61,6 +63,7 @@ interface PlayerAvailabilityCalendarProps {
   todayHref: string;
   clubId: string;
   clubSlug: string;
+  clubName?: string;
   // Scopes the SidePanels expand/collapse localStorage preference to this
   // player, alongside clubId — never sent anywhere, purely a local key.
   playerId: string;
@@ -179,6 +182,7 @@ function SidePanels({
   myBookings,
   myReservations,
   clubSlug,
+  clubName,
   viewerId,
   selectedId,
   dismissedIds,
@@ -191,6 +195,7 @@ function SidePanels({
   myBookings: MyReservation[];
   myReservations: MyReservation[];
   clubSlug: string;
+  clubName?: string;
   viewerId: string;
   selectedId: string | null;
   dismissedIds: Set<string>;
@@ -228,6 +233,7 @@ function SidePanels({
           <ActivityList
             reservations={visibleRequests}
             clubSlug={clubSlug}
+            clubName={clubName}
             viewerId={viewerId}
             selectedId={selectedId}
             onDismiss={onDismiss}
@@ -247,6 +253,7 @@ function SidePanels({
           <ActivityList
             reservations={visibleBookings}
             clubSlug={clubSlug}
+            clubName={clubName}
             viewerId={viewerId}
             selectedId={selectedId}
             onDismiss={onDismiss}
@@ -287,6 +294,10 @@ function RequestModal({
   const durations = durationOptions(allowedDurations);
   const [duration, setDuration] = useState(initialDuration ?? allowedDurations[0] ?? 60);
   const isEditMode = !!editingReservationId;
+  // Reservas Abiertas/Cerradas — solo al crear (updateMyReservation nunca
+  // toca is_open, igual que su contraparte OWNER/ADMIN). Sin selector de
+  // jugadores en este formulario, así que el tope de 4 nunca aplica aquí.
+  const [isOpen, setIsOpen] = useState(false);
   const [state, formAction, pending] = useActionState<RequestFormState, FormData>(
     isEditMode
       ? updateMyReservation.bind(null, editingReservationId!, clubSlug)
@@ -445,6 +456,26 @@ function RequestModal({
             )}
           </div>
 
+          {/* Aceptar solicitudes de jugadores (is_open internamente) — solo
+              al crear. El PLAYER nunca agrega jugadores acá (siempre crea
+              solo para sí mismo), así que "Reserva abierta/cerrada" no es
+              un modelo mental claro — el switch describe la consecuencia
+              real (otros podrán solicitar unirse), nunca ese término. */}
+          {!isEditMode && (
+            <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-white/10 bg-white/5">
+              <div className="flex flex-col pr-2">
+                <span className="text-sm text-white font-medium">Aceptar solicitudes de jugadores</span>
+                <span className="text-xs text-brand-muted">
+                  {isOpen
+                    ? "Otros jugadores del club podrán solicitar unirse una vez la reserva sea aprobada. Tú decidirás si aceptarlos."
+                    : "Solo tú podrás participar inicialmente en esta reserva."}
+                </span>
+              </div>
+              <Switch checked={isOpen} onChange={setIsOpen} label="Aceptar solicitudes de jugadores" />
+              {isOpen && <input type="hidden" name="is_open" value="true" />}
+            </div>
+          )}
+
           {state?.error && (
             <p className="text-sm text-red-400 text-center bg-red-400/5 border border-red-400/20 rounded-xl px-3 py-2">
               {state.error}
@@ -542,6 +573,7 @@ export function PlayerAvailabilityCalendar({
   todayHref,
   clubId,
   clubSlug,
+  clubName,
   playerId,
   defaultSelectedDate,
   allowedDurations,
@@ -749,6 +781,18 @@ export function PlayerAvailabilityCalendar({
     return ranges;
   }
 
+  // Which (if any) of the player's own CONFIRMED reservations occupies this
+  // exact court/date/time — same match rule generalContextRangesFor already
+  // uses for myBookings, reused here so an occupied tick that's the
+  // player's own reservation can open its detail page. Only ever matches
+  // myBookings (never myReservations/pending-rejected — clicking those
+  // isn't part of this fix, "Mis solicitudes" keeps its existing behavior),
+  // and never reveals anything about a tick that ISN'T the player's own —
+  // onSelectOccupied below simply no-ops when this returns null.
+  function myBookingAt(courtId: string, startTime: string): MyReservation | null {
+    return myBookings.find((r) => r.court_id === courtId && r.date === selectedDate && r.start_time.slice(0, 5) === startTime) ?? null;
+  }
+
   return (
     <div className="flex flex-col lg:flex-row lg:items-start gap-6">
       {/* Main column — calendar/availability stays first and largest, the
@@ -860,6 +904,17 @@ export function PlayerAvailabilityCalendar({
                         if (archived) return; // server (create_reservation_player/update_reservation) is the real guard — this only stops the affordance
                         setModalSlot({ courtId: court.id, courtName: court.name, date: selectedDate, startTime, duration: selectedDuration });
                       }}
+                      onSelectOccupied={(startTime) => {
+                        const mine = myBookingAt(court.id, startTime);
+                        if (!mine) return;
+                        // Slug corto legible (@/lib/reservationSlug) — sin
+                        // nombre del creador acá (no está cargado en este
+                        // componente); la página resuelve igual por
+                        // club+fecha+hora y se auto-corrige al slug con
+                        // nombre completo al cargar.
+                        const slug = buildReservationSlug({ creatorName: null, date: mine.date, startTime: mine.start_time });
+                        router.push(`/${clubSlug}/reservations/${slug}`);
+                      }}
                     />
                   </div>
                 ))}
@@ -877,6 +932,7 @@ export function PlayerAvailabilityCalendar({
           myBookings={myBookings}
           myReservations={myReservations}
           clubSlug={clubSlug}
+          clubName={clubName}
           viewerId={playerId}
           selectedId={focusReservation?.id ?? null}
           dismissedIds={dismissedIds}

@@ -148,7 +148,9 @@ export default async function AdminReservationsPage({
       .eq("is_active", true),
     supabase
       .from("reservations")
-      .select("id, date, start_time, duration_minutes, court_id, created_by, price_amount, price_currency, courts(name)")
+      .select(
+        "id, date, start_time, duration_minutes, court_id, created_by, price_amount, price_currency, is_open, reservation_players(profile_id), courts(name)"
+      )
       .eq("club_id", club.id)
       .eq("status", "pending")
       .gte("date", todayStr)
@@ -179,6 +181,12 @@ export default async function AdminReservationsPage({
     created_by: string;
     price_amount: number | null;
     price_currency: string | null;
+    is_open: boolean;
+    // A pending reservation only ever comes from create_reservation_player
+    // (a PLAYER's own request, which has no player-selector) — this is
+    // always empty today, but read generically rather than hardcoded so it
+    // stays correct if that ever changes.
+    reservation_players: Array<{ profile_id: string }>;
     courts: { name: string } | null;
   };
   type RawRejected = {
@@ -225,6 +233,12 @@ export default async function AdminReservationsPage({
     playerName: profileMap.get(r.created_by) ?? null,
     price_amount: r.price_amount,
     price_currency: r.price_currency,
+    is_open: r.is_open,
+    // Fallback to 1 (the requester themselves) mirrors the same rule
+    // already used elsewhere for a confirmed reservation's "Jugadores"
+    // (ReservationTicketPanel/getReservationForEdit) — a pending request's
+    // creator is always a PLAYER, never OWNER/ADMIN.
+    playerCount: r.reservation_players.length > 0 ? r.reservation_players.length : 1,
   }));
   const rejectedReservations: RejectedReservation[] = rawRejected.map((r) => ({
     id: r.id,
@@ -424,6 +438,7 @@ export default async function AdminReservationsPage({
           members,
           clubId: club.id,
           clubSlug: slug,
+          clubName: club.name,
           allowedDurations,
           availability,
           openingMinsByDate,

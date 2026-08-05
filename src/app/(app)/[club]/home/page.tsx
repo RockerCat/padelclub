@@ -82,6 +82,7 @@ export default async function PlayerHomePage({ params }: PlayerHomePageProps) {
       <PlayerHomeActivity
         clubId={club.id}
         clubSlug={slug}
+        clubName={club.name}
         playerId={user.id}
         myBookings={myBookings}
         myReservations={myReservations}

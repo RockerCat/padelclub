@@ -31,7 +31,17 @@ export type PendingReservationDetail = {
   rejection_reason: string | null;
   rejected_at: string | null;
   rejectedByName: string | null;
+  // Read-only — never editable from this screen. The real is_open value
+  // and the actual player count the reservation would start with if
+  // approved as-is (reservations.is_open / reservation_players, see
+  // 20261031000001_reservation_open_join_requests.sql).
+  is_open: boolean;
+  playerCount: number;
 };
+
+function playerCountLabel(n: number): string {
+  return `${n} jugador${n === 1 ? "" : "es"}`;
+}
 
 function formatCurrency(amount: number, currency: string): string {
   return new Intl.NumberFormat("es-CO", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
@@ -55,6 +65,14 @@ const STATUS_LABEL: Record<string, { label: string; className: string }> = {
   confirmed: { label: "Confirmada", className: "bg-[#00FF00]/10 border-[#00FF00]/20 text-[#00FF00]" },
   cancelled: { label: "Cancelada", className: "bg-white/[0.03] border-white/5 text-brand-muted" },
   rejected: { label: "Rechazada", className: "bg-red-400/10 border-red-400/20 text-red-400" },
+};
+
+// Badge for is_open — deliberately a different color family (brand-primary
+// cyan / neutral gray) from STATUS_LABEL's amber "Pendiente de aprobación"
+// above, so the two pills never blend together or compete for attention.
+const OPEN_STATUS_LABEL: Record<"open" | "closed", { label: string; className: string }> = {
+  open: { label: "Abierta", className: "bg-brand-primary/10 border-brand-primary/25 text-brand-primary" },
+  closed: { label: "Cerrada", className: "bg-white/[0.05] border-white/10 text-brand-muted" },
 };
 
 // "Ya fue procesada" is returned verbatim by approvePendingReservation/
@@ -99,6 +117,7 @@ export function PendingReservationReview({
   const end = addMinutes(start, reservation.duration_minutes);
   const requestedRange = { startTime: start, duration: reservation.duration_minutes };
   const statusCfg = STATUS_LABEL[reservation.status] ?? STATUS_LABEL.pending;
+  const openStatusCfg = OPEN_STATUS_LABEL[reservation.is_open ? "open" : "closed"];
 
   function handleApprove() {
     setError(null);
@@ -169,6 +188,16 @@ export function PendingReservationReview({
           <div className="flex justify-between text-sm gap-4">
             <span className="text-brand-muted">Duración</span>
             <span className="text-white font-medium text-right">{durationLabel(reservation.duration_minutes)}</span>
+          </div>
+          <div className="flex justify-between text-sm gap-4">
+            <span className="text-brand-muted">Jugadores iniciales</span>
+            <span className="text-white font-medium text-right">{playerCountLabel(reservation.playerCount)}</span>
+          </div>
+          <div className="flex justify-between items-center text-sm gap-4">
+            <span className="text-brand-muted">Tipo de reserva</span>
+            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${openStatusCfg.className}`}>
+              {openStatusCfg.label}
+            </span>
           </div>
           {reservation.price_amount != null && reservation.price_currency && (
             <div className="flex justify-between text-sm gap-4">

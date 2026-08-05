@@ -2,7 +2,7 @@
 
 import { useActionState, useState, useEffect } from "react";
 import Link from "next/link";
-import { Button } from "@/components/ui";
+import { Button, Switch } from "@/components/ui";
 import { getAvailableSlots } from "./actions";
 import type { ReservationFormState } from "./actions";
 import { durationOptions } from "@/lib/durations";
@@ -168,6 +168,11 @@ export function ReservationForm({
   const [checkedPlayers, setCheckedPlayers] = useState<Set<string>>(
     () => new Set(initialValues?.player_ids ?? [])
   );
+  // Reservas Abiertas/Cerradas — solo tiene sentido al crear (editar nunca
+  // toca is_open, ver update_reservation / set_reservation_open_status por
+  // separado). 4+ jugadores fuerza Cerrada tanto aquí (UX) como en
+  // create_reservation_admin (autoridad real, servidor).
+  const [isOpen, setIsOpen] = useState(false);
 
   // Available time slots
   const [slots, setSlots] = useState<string[]>([]);
@@ -392,6 +397,34 @@ export function ReservationForm({
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Aceptar solicitudes de jugadores (is_open internamente) — solo al
+          crear (nunca en edición: is_open se cambia aparte, desde el
+          detalle). Mismo switch y mismo lenguaje que el formulario del
+          PLAYER — nunca "Reserva abierta/cerrada" como etiqueta. 4+
+          jugadores fuerza Cerrada, igual que create_reservation_admin
+          re-decide en el servidor. */}
+      {!editingReservationId && type !== "block" && (
+        <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-white/10 bg-white/5">
+          <div className="flex flex-col pr-2">
+            <span className="text-sm text-white font-medium">Aceptar solicitudes de jugadores</span>
+            <span className="text-xs text-brand-muted">
+              {checkedPlayers.size >= 4
+                ? "4 o más jugadores siempre queda Cerrada."
+                : isOpen
+                ? "Otros jugadores del club podrán solicitar unirse a esta reserva."
+                : "Solo los jugadores que agregues aquí participarán en esta reserva."}
+            </span>
+          </div>
+          <Switch
+            checked={isOpen && checkedPlayers.size < 4}
+            onChange={(next) => { setIsOpen(next); markDirty(); }}
+            disabled={checkedPlayers.size >= 4}
+            label="Aceptar solicitudes de jugadores"
+          />
+          {isOpen && checkedPlayers.size < 4 && <input type="hidden" name="is_open" value="true" />}
         </div>
       )}
 

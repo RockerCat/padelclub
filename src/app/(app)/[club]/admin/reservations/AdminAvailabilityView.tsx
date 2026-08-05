@@ -36,6 +36,9 @@ interface AdminAvailabilityViewProps {
   members: Array<{ profile_id: string; full_name: string | null; avatar_url: string | null }>;
   clubId: string;
   clubSlug: string;
+  // Solo para el mensaje del botón "WhatsApp" del detalle
+  // (ReservationShareActions) — nunca usado para lógica ni permisos.
+  clubName: string;
   allowedDurations: number[];
   availability: Record<string, Record<string, string[]>>;
   openingMinsByDate: Record<string, number>;
@@ -142,6 +145,7 @@ export function AdminAvailabilityView({
   members,
   clubId,
   clubSlug,
+  clubName,
   allowedDurations,
   availability,
   openingMinsByDate,
@@ -461,6 +465,7 @@ export function AdminAvailabilityView({
         panelState={panelState}
         clubId={clubId}
         clubSlug={clubSlug}
+        clubName={clubName}
         courts={formCourts}
         members={members}
         allowedDurations={allowedDurations}

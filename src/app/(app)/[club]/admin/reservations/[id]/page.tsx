@@ -29,6 +29,7 @@ type ReservationDetail = {
   rejection_reason: string | null;
   rejected_at: string | null;
   rejected_by: string | null;
+  is_open: boolean;
   courts: { name: string; surface: string | null; is_indoor: boolean | null } | null;
   reservation_players: Array<{ profile_id: string }>;
 };
@@ -73,6 +74,7 @@ export default async function EditReservationPage({
       id, court_id, date, start_time, duration_minutes, type, title, notes, status, created_at, created_by,
       price_amount, price_currency,
       rejection_reason, rejected_at, rejected_by,
+      is_open,
       courts(name, surface, is_indoor),
       reservation_players(profile_id)
     `
@@ -125,6 +127,13 @@ export default async function EditReservationPage({
           rejection_reason: reservation.rejection_reason,
           rejected_at: reservation.rejected_at,
           rejectedByName: rejectedByProfile?.full_name ?? null,
+          is_open: reservation.is_open,
+          // Same fallback rule used everywhere else in the module — a
+          // pending/rejected reservation only ever comes from
+          // create_reservation_player (no player-selector), so
+          // reservation_players is always empty today; read generically
+          // rather than hardcoded.
+          playerCount: reservation.reservation_players.length > 0 ? reservation.reservation_players.length : 1,
         }}
         court={{
           id: reservation.court_id,

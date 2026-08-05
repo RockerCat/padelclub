@@ -42,8 +42,12 @@ function parseFormData(formData: FormData) {
   const title = (formData.get("title") as string | null)?.trim() || null;
   const notes = (formData.get("notes") as string | null)?.trim() || null;
   const playerIds = formData.getAll("players") as string[];
+  // Checkbox convention: present ("on"/"true") = checked, absent = unchecked
+  // — a plain FormData.get returns null when the box was never rendered
+  // checked, never a literal "false".
+  const isOpen = formData.get("is_open") != null;
 
-  return { courtId, date, startTime, durationMinutes, type, title, notes, playerIds };
+  return { courtId, date, startTime, durationMinutes, type, title, notes, playerIds, isOpen };
 }
 
 // ─── createReservation ────────────────────────────────────────────────────────
@@ -65,11 +69,14 @@ export async function createReservation(
   const { supabase, error: authError } = await requireAdminRole(clubId);
   if (authError || !supabase) return { error: authError! };
 
-  const { courtId, date, startTime, durationMinutes, type, title, notes, playerIds } =
+  const { courtId, date, startTime, durationMinutes, type, title, notes, playerIds, isOpen } =
     parseFormData(formData);
 
   if (!courtId || !date || !startTime) return { error: "Datos incompletos." };
 
+  // p_player_count lets create_reservation_admin itself enforce "4+
+  // jugadores siempre fuerza Cerrada" — never trusted purely from isOpen,
+  // the RPC re-decides the real is_open/closed_reason server-side.
   const { data: reservationId, error } = await supabase.rpc("create_reservation_admin", {
     p_club_id: clubId,
     p_court_id: courtId,
@@ -79,6 +86,8 @@ export async function createReservation(
     p_type: type,
     p_title: title,
     p_notes: notes,
+    p_is_open: isOpen,
+    p_player_count: playerIds.length,
   });
 
   if (error) {
@@ -312,6 +321,14 @@ export type ReservationEditData = {
   extra_minutes: number;
   extra_amount: number;
   extra_currency: string | null;
+  // Reservas Abiertas/Cerradas — is_open nunca representa si la reserva
+  // está confirmada/pagada (eso sigue siendo status), solo si acepta
+  // solicitudes. closed_reason distingue cierre manual de automático (ver
+  // 20261031000001) — el panel lo usa para decidir si mostrar "Reabrir"
+  // como una acción con sentido o no.
+  is_open: boolean;
+  closed_reason: string | null;
+  player_count: number;
 };
 
 // ─── Pending reservation approval / rejection ─────────────────────────────────
@@ -400,6 +417,24 @@ export async function approvePendingReservation(
     });
   }
 
+  // Fix: this was the missing notification TO the player — resolving
+  // shared state above only ever updates the OWNER/ADMIN-facing
+  // reservation_request_created rows, it never creates one for the
+  // requester. Same best-effort convention as every other notify_* call in
+  // this module: the reservation is already confirmed and must never be
+  // rolled back over a notification-only failure.
+  const { error: notifyError } = await supabase.rpc("notify_reservation_approved", {
+    p_reservation_id: reservationId,
+  });
+  if (notifyError) {
+    console.error("[approvePendingReservation] notify_reservation_approved failed:", {
+      reservationId,
+      clubId,
+      code: notifyError.code,
+      message: notifyError.message,
+    });
+  }
+
   return { success: true };
 }
 
@@ -483,7 +518,7 @@ export async function getReservationForEdit(
   const { data } = await supabase
     .from("reservations")
     .select(
-      "court_id, date, start_time, duration_minutes, type, title, notes, status, created_by, price_amount, price_currency, extra_minutes, extra_amount, extra_currency, reservation_players(profile_id)"
+      "court_id, date, start_time, duration_minutes, type, title, notes, status, created_by, price_amount, price_currency, extra_minutes, extra_amount, extra_currency, is_open, closed_reason, reservation_players(profile_id)"
     )
     .eq("id", reservationId)
     .eq("club_id", clubId)
@@ -501,6 +536,11 @@ export async function getReservationForEdit(
       .maybeSingle(),
   ]);
 
+  const playerIds = (data.reservation_players as unknown as Array<{ profile_id: string }>).map(
+    (rp) => rp.profile_id
+  );
+  const creatorIsPlayer = creatorMembership?.role === "PLAYER";
+
   return {
     court_id: data.court_id,
     date: data.date,
@@ -509,17 +549,21 @@ export async function getReservationForEdit(
     type: data.type,
     title: data.title ?? null,
     notes: data.notes ?? null,
-    player_ids: (data.reservation_players as unknown as Array<{ profile_id: string }>).map(
-      (rp) => rp.profile_id
-    ),
+    player_ids: playerIds,
     price_amount: data.price_amount,
     price_currency: data.price_currency,
     created_by: data.created_by,
     creator_name: creatorProfile?.full_name ?? null,
-    creator_is_player: creatorMembership?.role === "PLAYER",
+    creator_is_player: creatorIsPlayer,
     extra_minutes: data.extra_minutes,
     extra_amount: data.extra_amount,
     extra_currency: data.extra_currency,
+    is_open: data.is_open,
+    closed_reason: data.closed_reason,
+    // Misma regla de fallback que _reservation_effective_player_count en
+    // SQL (20261031000001): reservation_players, o 1 si el creador es
+    // PLAYER y todavía no tiene fila propia ahí.
+    player_count: playerIds.length > 0 ? playerIds.length : creatorIsPlayer ? 1 : 0,
   };
 }
 

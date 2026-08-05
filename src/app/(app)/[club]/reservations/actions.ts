@@ -72,6 +72,8 @@ export async function requestReservation(
   const date = formData.get("date") as string;
   const startTime = formData.get("start_time") as string;
   const durationMinutes = parseInt(formData.get("duration_minutes") as string, 10);
+  // Checkbox convention: present = checked, absent = unchecked.
+  const isOpen = formData.get("is_open") != null;
 
   if (!courtId || !date || !startTime) {
     return { error: "Datos incompletos." };
@@ -83,6 +85,7 @@ export async function requestReservation(
     p_date: date,
     p_start_time: startTime.length === 5 ? `${startTime}:00` : startTime,
     p_duration_minutes: durationMinutes,
+    p_is_open: isOpen,
   });
 
   if (error) {

@@ -1109,6 +1109,71 @@ export type Database = {
           },
         ]
       }
+      reservation_join_requests: {
+        Row: {
+          club_id: string
+          created_at: string
+          id: string
+          profile_id: string
+          rejection_reason: string | null
+          reservation_id: string
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+        }
+        Insert: {
+          club_id: string
+          created_at?: string
+          id?: string
+          profile_id: string
+          rejection_reason?: string | null
+          reservation_id: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+        }
+        Update: {
+          club_id?: string
+          created_at?: string
+          id?: string
+          profile_id?: string
+          rejection_reason?: string | null
+          reservation_id?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reservation_join_requests_club_id_fkey"
+            columns: ["club_id"]
+            isOneToOne: false
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservation_join_requests_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservation_join_requests_reservation_id_fkey"
+            columns: ["reservation_id"]
+            isOneToOne: false
+            referencedRelation: "reservations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservation_join_requests_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reservation_players: {
         Row: {
           created_at: string | null
@@ -1149,6 +1214,7 @@ export type Database = {
         Row: {
           cancelled_at: string | null
           cancelled_by: string | null
+          closed_reason: string | null
           club_id: string
           court_id: string
           created_at: string | null
@@ -1159,6 +1225,7 @@ export type Database = {
           extra_currency: string | null
           extra_minutes: number
           id: string
+          is_open: boolean
           notes: string | null
           price_amount: number | null
           price_calculated_at: string | null
@@ -1177,6 +1244,7 @@ export type Database = {
         Insert: {
           cancelled_at?: string | null
           cancelled_by?: string | null
+          closed_reason?: string | null
           club_id: string
           court_id: string
           created_at?: string | null
@@ -1187,6 +1255,7 @@ export type Database = {
           extra_currency?: string | null
           extra_minutes?: number
           id?: string
+          is_open?: boolean
           notes?: string | null
           price_amount?: number | null
           price_calculated_at?: string | null
@@ -1205,6 +1274,7 @@ export type Database = {
         Update: {
           cancelled_at?: string | null
           cancelled_by?: string | null
+          closed_reason?: string | null
           club_id?: string
           court_id?: string
           created_at?: string | null
@@ -1215,6 +1285,7 @@ export type Database = {
           extra_currency?: string | null
           extra_minutes?: number
           id?: string
+          is_open?: boolean
           notes?: string | null
           price_amount?: number | null
           price_calculated_at?: string | null
@@ -1713,6 +1784,22 @@ export type Database = {
         Args: { p_court_id: string; p_date: string }
         Returns: undefined
       }
+      _maybe_reopen_reservation: {
+        Args: { p_reservation_id: string }
+        Returns: undefined
+      }
+      _reject_pending_reservation_join_requests: {
+        Args: {
+          p_actor_id: string
+          p_reason_text: string
+          p_reservation_id: string
+        }
+        Returns: undefined
+      }
+      _reservation_effective_player_count: {
+        Args: { p_reservation_id: string }
+        Returns: number
+      }
       _my_reservations: {
         Args: { p_account_type: string }
         Returns: {
@@ -1841,8 +1928,32 @@ export type Database = {
           visibility: string
         }[]
       }
+      approve_reservation_join_request: {
+        Args: { p_request_id: string }
+        Returns: undefined
+      }
       cancel_reservation: {
         Args: { p_reservation_id: string }
+        Returns: undefined
+      }
+      get_reservation_share_detail: {
+        Args: { p_reservation_id: string }
+        Returns: Json
+      }
+      reject_reservation_join_request: {
+        Args: { p_request_id: string }
+        Returns: undefined
+      }
+      request_to_join_reservation: {
+        Args: { p_reservation_id: string }
+        Returns: string
+      }
+      resolve_reservation_slug: {
+        Args: { p_club_id: string; p_date: string; p_name_slug: string; p_start_time: string }
+        Returns: string
+      }
+      set_reservation_open_status: {
+        Args: { p_is_open: boolean; p_reservation_id: string }
         Returns: undefined
       }
       cancel_tournament: {
@@ -2018,7 +2129,9 @@ export type Database = {
           // title when p_type = 'block' (checked in-function, not via NOT
           // NULL). Same generator gap as create_club_news.p_tournament_id
           // above; re-apply after regenerating.
+          p_is_open?: boolean
           p_notes: string | null
+          p_player_count?: number
           p_start_time: string
           p_title: string | null
           p_type: string
@@ -2031,6 +2144,7 @@ export type Database = {
           p_court_id: string
           p_date: string
           p_duration_minutes: number
+          p_is_open?: boolean
           p_start_time: string
         }
         Returns: string
@@ -2259,6 +2373,10 @@ export type Database = {
       }
       join_public_club: { Args: { p_club_id: string }; Returns: undefined }
       leave_club: { Args: { p_club_id: string }; Returns: undefined }
+      notify_reservation_approved: {
+        Args: { p_reservation_id: string }
+        Returns: undefined
+      }
       notify_reservation_cancelled: {
         Args: { p_reservation_id: string }
         Returns: undefined

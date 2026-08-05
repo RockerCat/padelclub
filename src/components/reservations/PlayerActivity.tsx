@@ -10,6 +10,9 @@ import { durationLabel } from "@/lib/durations";
 import type { MyReservation } from "@/lib/playerReservations";
 import { cancelMyReservation } from "@/app/(app)/[club]/reservations/actions";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { buildReservationSlug } from "@/lib/reservationSlug";
+import { buildReservationShareMessage } from "@/lib/reservationShare";
+import { ReservationShareActions } from "@/components/reservations/ReservationShareActions";
 
 // Every surface that shows a player's own reservations/requests (the
 // Reservations page's side panel, the player home page) shares this exact
@@ -268,12 +271,17 @@ export const ACTIVITY_STATUS: Record<
 export function ActivityCard({
   reservation,
   clubSlug,
+  clubName,
   viewerId,
   isSelected,
   onDismiss,
 }: {
   reservation: MyReservation;
   clubSlug: string;
+  // Solo para el mensaje del botón "WhatsApp" — opcional porque no
+  // todos los callers de este componente tienen el nombre real a mano;
+  // cae de vuelta al slug del club si falta, sin romper nada.
+  clubName?: string;
   // The signed-in player's own id — only the creator may edit (being a
   // reservation_players participant grants no edit permission, Phase 7),
   // so this card needs to know who's viewing it, not just whose list it's
@@ -299,6 +307,45 @@ export function ActivityCard({
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  // A confirmed reservation ("Mis reservas") now opens its real detail page
+  // — the same one Compartir/the Agenda ticket panel already link to.
+  // Pending/rejected ("Mis solicitudes") keep the existing
+  // activityHref/calendar-context-switch behavior untouched. Slug corto
+  // legible (@/lib/reservationSlug) sin el nombre del creador — este
+  // componente no lo tiene cargado — pero eso nunca rompe nada: la página
+  // resuelve igual por club+fecha+hora y se auto-corrige al slug con
+  // nombre completo en cuanto carga.
+  const shareSlug = buildReservationSlug({ creatorName: null, date: reservation.date, startTime: reservation.start_time });
+  const cardHref =
+    reservation.status === "confirmed"
+      ? `/${clubSlug}/reservations/${shareSlug}`
+      : activityHref(clubSlug, reservation.id);
+
+  // Hidratación segura (mismo patrón que ShareNewsButtons.tsx) — el mensaje
+  // de WhatsApp y el enlace copiado siempre usan una URL absoluta real.
+  const [origin, setOrigin] = useState<string | null>(null);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOrigin(window.location.origin);
+  }, []);
+  const shareUrl = `${origin ?? ""}/${clubSlug}/reservations/${shareSlug}`;
+  // El botón "WhatsApp" solo se muestra cuando isCreator es true (ver
+  // return más abajo) — en ese momento el visor SIEMPRE es el creador, y un
+  // creador PLAYER autoregistrado nunca tiene su propia fila en
+  // reservation_players (ver Reservation Editing Principles), así que el
+  // conteo real siempre es reservation_players_count + 1.
+  const shareMessage = buildReservationShareMessage({
+    clubName: clubName ?? clubSlug,
+    creatorName: reservation.creator_name,
+    date: reservation.date,
+    startTime: reservation.start_time,
+    durationMinutes: reservation.duration_minutes,
+    courtName: reservation.courtName,
+    isOpen: reservation.is_open,
+    playerCount: reservation.reservation_players_count + (isCreator ? 1 : 0),
+    url: shareUrl,
+  });
+
   function handleConfirmCancel() {
     setCancelError(null);
     startTransition(async () => {
@@ -315,7 +362,7 @@ export function ActivityCard({
   return (
     <>
       <Link
-        href={activityHref(clubSlug, reservation.id)}
+        href={cardHref}
         className={`relative block rounded-lg border px-3 py-2.5 pr-7 transition-colors ${
           isSelected
             ? "border-brand-primary bg-brand-primary/5"
@@ -404,6 +451,16 @@ export function ActivityCard({
             )}
           </div>
         )}
+
+        {/* Compartir — único lugar donde un creador PLAYER puede obtener el
+            enlace de su propia reserva (el botón del panel de Agenda es
+            solo OWNER/ADMIN). Funciona sin importar la ventana de 2 horas —
+            compartir no cancela ni edita nada. */}
+        {isCreator && reservation.status === "confirmed" && (
+          <div className="mt-2 pt-2 border-t border-white/5">
+            <ReservationShareActions url={shareUrl} message={shareMessage} compact />
+          </div>
+        )}
       </Link>
 
       <ConfirmDialog
@@ -433,6 +490,7 @@ export function ActivityCard({
 export function ActivityList({
   reservations,
   clubSlug,
+  clubName,
   viewerId,
   selectedId,
   onDismiss,
@@ -440,6 +498,7 @@ export function ActivityList({
 }: {
   reservations: MyReservation[];
   clubSlug: string;
+  clubName?: string;
   viewerId: string;
   selectedId: string | null;
   onDismiss: (id: string) => void;
@@ -460,6 +519,7 @@ export function ActivityList({
           key={r.id}
           reservation={r}
           clubSlug={clubSlug}
+          clubName={clubName}
           viewerId={viewerId}
           isSelected={r.id === selectedId}
           onDismiss={onDismiss}

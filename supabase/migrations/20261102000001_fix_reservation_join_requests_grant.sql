@@ -1,0 +1,46 @@
+-- ============================================================
+-- Fix: reservation_join_requests_select nunca se ejecutaba — faltaba el
+-- GRANT SELECT base para authenticated
+-- Mi Pádel Club
+-- ============================================================
+-- Causa real, confirmada contra el proyecto real (REST directo con la
+-- anon key): toda consulta a public.reservation_join_requests fallaba con
+--   {"code":"42501","message":"permission denied for table
+--   reservation_join_requests", "hint":"Grant the required privileges..."}
+-- — para CUALQUIER llamador, incluso uno que la policy de RLS debería
+-- dejar pasar. En Postgres, una policy de RLS solo se evalúa si el rol ya
+-- tiene el privilegio base (GRANT) sobre la tabla; sin ese GRANT, Postgres
+-- rechaza la consulta antes de llegar a evaluar la policy — por eso el
+-- error nunca tuvo relación con la policy en sí (reservation_join_requests_
+-- select, verificada íntegra y correcta) ni con la relación embebida hacia
+-- profiles (el FK usado en el hint también existe, verificado).
+--
+-- Causa de fondo: pg_default_acl de este proyecto define privilegios por
+-- defecto DISTINTOS según qué rol CREA el objeto —
+--   supabase_admin (el rol que usan el Dashboard/CLI push normales)
+--     otorga SELECT/INSERT/UPDATE/DELETE a anon/authenticated
+--     automáticamente en cualquier tabla nueva;
+--   postgres (la única conexión disponible para aplicar
+--     20261031000001_reservation_open_join_requests.sql, vía
+--     `supabase db query -f ... --linked` — este proyecto nunca tuvo
+--     poblada su tabla de historial de migraciones, así que `db push` no
+--     era viable, ver auditoría de esa sesión) NO otorga esos privilegios
+--     por defecto.
+-- reservation_join_requests fue la única tabla nueva de esa migración —
+-- cada RPC nueva sí llevaba su propio REVOKE ALL/GRANT EXECUTE explícito
+-- (nunca dependió de un default), así que ninguna otra quedó afectada;
+-- confirmado consultando pg_default_acl y los grants reales de
+-- reservations/reservation_players (ambas con SELECT ya otorgado, creadas
+-- por el flujo normal del proyecto) contra reservation_join_requests (sin
+-- ningún grant para anon/authenticated).
+--
+-- Fix mínimo: un solo GRANT SELECT. Nunca INSERT/UPDATE/DELETE — esas
+-- operaciones siguen sin ninguna policy de RLS que las cubra (deniegan por
+-- defecto) y deben seguir pasando exclusivamente por las RPCs SECURITY
+-- DEFINER (request_to_join_reservation, approve_reservation_join_request,
+-- reject_reservation_join_request), exactamente como quedó documentado en
+-- 20261031000001. Ninguna policy, tabla, columna ni regla de negocio
+-- cambia en este archivo.
+-- ============================================================
+
+GRANT SELECT ON public.reservation_join_requests TO authenticated;

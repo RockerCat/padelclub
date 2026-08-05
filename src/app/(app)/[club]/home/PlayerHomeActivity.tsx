@@ -24,12 +24,14 @@ import {
 export function PlayerHomeActivity({
   clubId,
   clubSlug,
+  clubName,
   playerId,
   myBookings,
   myReservations,
 }: {
   clubId: string;
   clubSlug: string;
+  clubName?: string;
   playerId: string;
   myBookings: MyReservation[];
   myReservations: MyReservation[];
@@ -68,6 +70,7 @@ export function PlayerHomeActivity({
                 key={r.id}
                 reservation={r}
                 clubSlug={clubSlug}
+                clubName={clubName}
                 viewerId={playerId}
                 isSelected={false}
                 onDismiss={dismiss}
@@ -87,6 +90,7 @@ export function PlayerHomeActivity({
           <ActivityList
             reservations={visibleRequests}
             clubSlug={clubSlug}
+            clubName={clubName}
             viewerId={playerId}
             selectedId={null}
             onDismiss={dismiss}

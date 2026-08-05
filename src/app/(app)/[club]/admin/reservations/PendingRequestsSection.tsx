@@ -35,6 +35,12 @@ export type PendingRequest = {
   // pricing engine or with no tariff applicable at request time.
   price_amount: number | null;
   price_currency: string | null;
+  // Read-only summary info (never editable from this screen) — the real
+  // is_open value and the actual player count the reservation would start
+  // with if approved as-is, same underlying columns/formula used
+  // everywhere else in the module (ReservationTicketPanel, getReservationForEdit).
+  is_open: boolean;
+  playerCount: number;
 };
 
 const WEEKDAY = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];

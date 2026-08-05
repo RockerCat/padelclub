@@ -30,6 +30,18 @@ export type MyReservation = {
   // shown to OWNER/ADMIN, never a second/different message.
   rejection_reason: string | null;
   rejected_at: string | null;
+  // Solo para el mensaje de "WhatsApp" (buildReservationShareMessage, ver
+  // @/lib/reservationShare) — nunca leídos en ninguna otra parte de este
+  // panel.
+  is_open: boolean;
+  creator_name: string | null;
+  // Conteo RAW de reservation_players — nunca incluye al creador cuando es
+  // PLAYER autoregistrado (approve_reservation_join_request nunca le crea
+  // una fila propia, ver Reservation Editing Principles). El único caller
+  // que arma el mensaje (PlayerActivity, siempre con isCreator === true en
+  // ese momento) le suma 1 él mismo, el mismo criterio que
+  // _reservation_effective_player_count ya usa en SQL.
+  reservation_players_count: number;
 };
 
 // Shared row shape for the focused-reservation lookup (Reservations page),
@@ -49,6 +61,9 @@ export type RawReservationRow = {
   rejection_reason: string | null;
   rejected_at: string | null;
   courts: { name: string } | null;
+  is_open: boolean;
+  profiles: { full_name: string | null } | null;
+  reservation_players: Array<{ count: number }> | null;
 };
 
 export function toMyReservation(r: RawReservationRow): MyReservation {
@@ -65,6 +80,9 @@ export function toMyReservation(r: RawReservationRow): MyReservation {
     price_currency: r.price_currency,
     rejection_reason: r.rejection_reason,
     rejected_at: r.rejected_at,
+    is_open: r.is_open,
+    creator_name: r.profiles?.full_name ?? null,
+    reservation_players_count: r.reservation_players?.[0]?.count ?? 0,
   };
 }
 
@@ -79,8 +97,14 @@ export interface PlayerReservations {
   myBookings: MyReservation[];
 }
 
+// profiles!reservations_created_by_fkey — reservations tiene 3 FKs a
+// profiles (created_by, cancelled_by, rejected_by), así que el embed
+// necesita el nombre explícito del constraint para no ser ambiguo (mismo
+// patrón que profiles!reservation_join_requests_profile_id_fkey en
+// reservationJoinRequests.ts). reservation_players(count) es un conteo
+// embebido — nunca una fila real — mismo costo que ya paga esta consulta.
 const RESERVATION_SELECT =
-  "id, date, start_time, duration_minutes, status, court_id, created_by, price_amount, price_currency, rejection_reason, rejected_at, courts(name)";
+  "id, date, start_time, duration_minutes, status, court_id, created_by, price_amount, price_currency, rejection_reason, rejected_at, is_open, courts(name), profiles!reservations_created_by_fkey(full_name), reservation_players(count)";
 
 // Fetches both "Mis solicitudes" and "Mis reservas" for one player in one
 // club, `todayStr` scoping both to today-forward (the panel never shows
