@@ -111,6 +111,7 @@ export default async function TournamentDetailPage({ params }: TournamentDetailP
         categories={sportCategories ?? []}
         clubSlug={slug}
         clubId={club.id}
+        clubName={club.name}
         entries={entries}
         entriesError={entriesError}
         capacity={capacity}

@@ -27,14 +27,19 @@ import {
   tournamentVisibilityLabel,
 } from "@/lib/tournamentLabels";
 import { EntriesSection } from "@/components/tournaments/EntriesSection";
-import { ClassificationSection } from "@/components/tournaments/ClassificationSection";
+import { ClassificationSection, pairLabel } from "@/components/tournaments/ClassificationSection";
 import { ClassificationSkeleton } from "@/components/tournaments/ClassificationSkeleton";
 import { TournamentPodium } from "@/components/tournaments/TournamentPodium";
 import { TournamentConfetti } from "@/components/tournaments/TournamentConfetti";
 import { TournamentNewsAction } from "@/components/tournaments/TournamentNewsAction";
 import { ImagePreviewModal } from "@/components/tournaments/ImagePreviewModal";
 import { WithdrawnEntriesAccordion } from "@/components/tournaments/WithdrawnEntriesAccordion";
-import { computeTournamentClassification, type TournamentEntriesCapacity, type TournamentEntryWithMembers } from "@/lib/tournamentEntries";
+import {
+  computeTournamentClassification,
+  type TournamentClassificationRow,
+  type TournamentEntriesCapacity,
+  type TournamentEntryWithMembers,
+} from "@/lib/tournamentEntries";
 import { useMemberModal } from "@/app/(app)/[club]/admin/players/useMemberModal";
 import { MemberModalHost } from "@/app/(app)/[club]/admin/players/MemberModalHost";
 import type { Tournament, SportCategory } from "@/types/database";
@@ -49,6 +54,10 @@ interface TournamentDetailViewProps {
   categories: SportCategory[];
   clubSlug: string;
   clubId: string;
+  // Únicamente para construir el mensaje de "Compartir por WhatsApp" según
+  // el estado del torneo (ver buildWhatsappShareMessage) — nunca usado
+  // para ninguna otra decisión de negocio en este componente.
+  clubName: string;
   entries: TournamentEntryWithMembers[];
   entriesError: string | null;
   capacity: TournamentEntriesCapacity;
@@ -68,6 +77,60 @@ interface TournamentDetailViewProps {
   // Server Component padre. null cuando todavía no existe ninguna.
   // Irrelevante para cualquier otro estado del torneo.
   existingNewsSlug?: string | null;
+}
+
+// Mensaje de "Compartir por WhatsApp" — construido según el estado real del
+// torneo (registration_open/registration_closed/in_progress; completed y
+// cualquier otro estado nunca llegan aquí, ver canShareWhatsApp). Recibe la
+// misma `classification` ya calculada más arriba en el componente (mismo
+// computeTournamentClassification, duplas confirmadas únicamente — mismo
+// criterio ya usado por ClassificationSection/capacity.confirmed) — nunca
+// una consulta ni un cálculo paralelo. Cada bloque (descripción, premios,
+// inscripción, duplas) se omite por completo si no hay dato real, nunca
+// deja un título de sección vacío.
+function buildWhatsappShareMessage(
+  tournament: Tournament,
+  clubName: string,
+  classification: TournamentClassificationRow[],
+  tournamentUrl: string
+): string {
+  const isOpen = tournament.status === "registration_open";
+  const pairLines = classification.map((row) =>
+    tournament.status === "in_progress" ? `${pairLabel(row.entry)} — ${row.entry.points} pts` : pairLabel(row.entry)
+  );
+
+  const blocks: string[] = [];
+
+  if (isOpen) {
+    blocks.push(`Ya puedes inscribirte al nuevo torneo en ${clubName}: ${tournament.name}.`);
+    blocks.push("No te quedes por fuera.");
+  } else {
+    // registration_closed | in_progress — mismo encabezado para ambos.
+    blocks.push(`Mira cómo va el nuevo torneo en ${clubName}: ${tournament.name}.`);
+  }
+
+  if (tournament.description) blocks.push(tournament.description);
+  if (tournament.prize_description) blocks.push(`Premios:\n${tournament.prize_description}`);
+
+  if (isOpen) {
+    const feeLabel =
+      tournament.entry_fee_amount <= 0
+        ? "Gratis"
+        : new Intl.NumberFormat("es-CO", {
+            style: "currency",
+            currency: "COP",
+            maximumFractionDigits: 0,
+          }).format(tournament.entry_fee_amount);
+    blocks.push(`Inscripción: ${feeLabel}`);
+  }
+
+  if (pairLines.length > 0) {
+    blocks.push(`Duplas registradas:\n${pairLines.join("\n")}`);
+  }
+
+  blocks.push(tournamentUrl);
+
+  return blocks.join("\n\n");
 }
 
 function formatDateTime(iso: string | null): string {
@@ -97,6 +160,7 @@ export function TournamentDetailView({
   categories,
   clubSlug,
   clubId,
+  clubName,
   entries,
   entriesError,
   capacity,
@@ -414,7 +478,7 @@ export function TournamentDetailView({
 
   const tournamentUrl = `${origin ?? ""}/${clubSlug}/tournaments/${tournament.slug}`;
   const whatsappShareHref = `https://wa.me/?text=${encodeURIComponent(
-    [`🏆 ${tournament.name}`, ...(tournament.description ? ["", tournament.description] : []), "", "Inscríbete aquí:", tournamentUrl].join("\n")
+    buildWhatsappShareMessage(tournament, clubName, classification, tournamentUrl)
   )}`;
 
   function handleEditSuccess(updated: Tournament | undefined) {

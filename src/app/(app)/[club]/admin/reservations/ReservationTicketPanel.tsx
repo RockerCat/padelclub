@@ -21,10 +21,9 @@ import { PlayerAvatar } from "@/components/players/PlayerAvatar";
 import type { CalendarReservation } from "./WeekCalendar";
 import type { PendingRequest } from "./PendingRequestsSection";
 
-// Agenda's "Ticket Preview" panel — a JIRA-style right-side (desktop) /
-// near-fullscreen sheet (mobile) drawer that replaces the old centered
-// ReservationModal for the Agenda view only (WeekCalendar/Semana keeps its
-// own ReservationModal instance untouched). Every action inside reuses the
+// Agenda's reservation detail — a centered dialog (fullscreen on mobile)
+// used for the Agenda view only (WeekCalendar/Semana keeps its own
+// ReservationModal instance untouched). Every action inside reuses the
 // exact same Server Actions and ReservationForm the rest of the module
 // already uses — this is a new container, never a new editing/approval
 // system.
@@ -67,6 +66,20 @@ function Row({ label, value }: { label: string; value: ReactNode }) {
     <div className="flex flex-col gap-0.5 py-2.5 border-b border-white/5 last:border-0">
       <span className="text-[11px] uppercase tracking-wider text-brand-muted/50 font-medium">{label}</span>
       <span className="text-sm text-white">{value}</span>
+    </div>
+  );
+}
+
+// Groups a handful of Rows into one visually distinct block — the two-column
+// desktop layout below is built entirely out of these instead of one long
+// vertical list.
+function DetailCard({ title, children }: { title?: string; children: ReactNode }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-1">
+      {title && (
+        <h3 className="text-[11px] uppercase tracking-wider text-brand-muted/50 font-medium pt-3 pb-1">{title}</h3>
+      )}
+      <div className="flex flex-col">{children}</div>
     </div>
   );
 }
@@ -297,105 +310,265 @@ export function ReservationTicketPanel({
       {/* Backdrop */}
       <div className="fixed inset-0 bg-black/60 z-[400]" style={{ backdropFilter: "blur(4px)" }} onClick={onClose} aria-hidden />
 
-      {/* Panel — near-fullscreen sheet on mobile, right slide-over on desktop (never a centered modal) */}
-      <div
-        className="fixed z-[401] inset-x-0 bottom-0 top-[8%] rounded-t-2xl sm:rounded-none sm:top-0 sm:inset-x-auto sm:right-0 sm:bottom-0 sm:w-[420px] bg-[#082735] border-t sm:border-t-0 sm:border-l border-white/10 shadow-2xl flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 shrink-0">
-          <h2 className="text-base font-semibold text-white">{title}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-brand-muted hover:text-white hover:bg-white/10 transition-colors"
-            aria-label="Cerrar"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+      {/* Centered dialog on desktop (~860px, capped to the viewport height);
+          fullscreen sheet on mobile — never a side drawer. */}
+      <div className="fixed inset-0 z-[401] sm:flex sm:items-center sm:justify-center sm:p-6 pointer-events-none">
+        <div
+          className="pointer-events-auto isolate w-full h-[100dvh] sm:h-auto sm:max-h-[90dvh] sm:w-[860px] sm:max-w-[92vw] bg-[#082735] border border-white/10 sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 shrink-0">
+            <h2 className="text-base font-semibold text-white">{title}</h2>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-brand-muted hover:text-white hover:bg-white/10 transition-colors"
+              aria-label="Cerrar"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
 
-        <div className="overflow-y-auto flex-1 px-5 py-5">
-          {panelState.mode === "create" && (
-            <ReservationForm
-              key={`create-${panelState.initialCourtId}-${panelState.initialDate}-${panelState.initialStartTime}`}
-              action={createReservation.bind(null, clubId, clubSlug, true)}
-              courts={courts}
-              members={members}
-              defaultDate={panelState.initialDate}
-              clubId={clubId}
-              allowedDurations={allowedDurations}
-              initialValues={{
-                court_id: panelState.initialCourtId,
-                date: panelState.initialDate,
-                start_time: panelState.initialStartTime,
-              }}
-              submitLabel="Crear reserva"
-              cancelHref={`/${clubSlug}/admin/reservations`}
-              onSuccess={() => {
-                onChanged();
-                onClose();
-              }}
-              inModal
-              clubSlug={clubSlug}
-            />
-          )}
+          <div className="overflow-y-auto flex-1 px-5 py-5">
+            {panelState.mode === "create" && (
+              <div className="mx-auto w-full max-w-lg">
+                <ReservationForm
+                  key={`create-${panelState.initialCourtId}-${panelState.initialDate}-${panelState.initialStartTime}`}
+                  action={createReservation.bind(null, clubId, clubSlug, true)}
+                  courts={courts}
+                  members={members}
+                  defaultDate={panelState.initialDate}
+                  clubId={clubId}
+                  allowedDurations={allowedDurations}
+                  initialValues={{
+                    court_id: panelState.initialCourtId,
+                    date: panelState.initialDate,
+                    start_time: panelState.initialStartTime,
+                  }}
+                  submitLabel="Crear reserva"
+                  cancelHref={`/${clubSlug}/admin/reservations`}
+                  onSuccess={() => {
+                    onChanged();
+                    onClose();
+                  }}
+                  inModal
+                  clubSlug={clubSlug}
+                />
+              </div>
+            )}
 
-          {panelState.mode === "pending" && (
-            <div className="flex flex-col gap-1">
-              <Row
-                label="Estado"
-                value={
-                  <span className="inline-flex items-center gap-1.5 text-amber-400">
-                    <Clock className="w-3.5 h-3.5" />
-                    Pendiente
-                  </span>
-                }
-              />
-              <Row label="Cancha" value={panelState.pending.courtName} />
-              <Row label="Fecha" value={formatDate(panelState.pending.date)} />
-              <Row
-                label="Hora"
-                value={`${fmt(panelState.pending.start_time)} – ${endTime(panelState.pending.start_time, panelState.pending.duration_minutes)}`}
-              />
-              <Row label="Duración" value={durationLabel(panelState.pending.duration_minutes)} />
-              <Row label="Tipo" value="Partido" />
-
-              {/* Same visual identity as a confirmed reservation's
-                  participants (point 2 of the spec) — the requester is a
-                  real relationship (reservations.created_by, always the
-                  requesting player for a self-requested pending
-                  reservation), never a manually built string. */}
-              {panelState.pending.playerId && (
-                <div className="py-2.5 border-b border-white/5">
-                  <span className="text-[11px] uppercase tracking-wider text-brand-muted/50 font-medium">
-                    Jugadores
-                  </span>
-                  <div className="flex flex-col mt-1">
-                    <ParticipantRow
-                      profileId={panelState.pending.playerId}
-                      fullName={
-                        members.find((m) => m.profile_id === panelState.pending.playerId)?.full_name ??
-                        panelState.pending.playerName
+            {panelState.mode === "pending" && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                <div className="flex flex-col gap-4">
+                  <DetailCard>
+                    <Row
+                      label="Estado"
+                      value={
+                        <span className="inline-flex items-center gap-1.5 text-amber-400">
+                          <Clock className="w-3.5 h-3.5" />
+                          Pendiente
+                        </span>
                       }
-                      avatarUrl={members.find((m) => m.profile_id === panelState.pending.playerId)?.avatar_url ?? null}
                     />
-                  </div>
+                    <Row label="Cancha" value={panelState.pending.courtName} />
+                    <Row label="Fecha" value={formatDate(panelState.pending.date)} />
+                    <Row
+                      label="Hora"
+                      value={`${fmt(panelState.pending.start_time)} – ${endTime(panelState.pending.start_time, panelState.pending.duration_minutes)}`}
+                    />
+                    <Row label="Duración" value={durationLabel(panelState.pending.duration_minutes)} />
+                    <Row label="Tipo" value="Partido" />
+                  </DetailCard>
+
+                  {/* Same visual identity as a confirmed reservation's
+                      participants (point 2 of the spec) — the requester is a
+                      real relationship (reservations.created_by, always the
+                      requesting player for a self-requested pending
+                      reservation), never a manually built string. */}
+                  {panelState.pending.playerId && (
+                    <DetailCard title="Jugadores">
+                      <ParticipantRow
+                        profileId={panelState.pending.playerId}
+                        fullName={
+                          members.find((m) => m.profile_id === panelState.pending.playerId)?.full_name ??
+                          panelState.pending.playerName
+                        }
+                        avatarUrl={members.find((m) => m.profile_id === panelState.pending.playerId)?.avatar_url ?? null}
+                      />
+                    </DetailCard>
+                  )}
                 </div>
-              )}
 
-              <Row
-                label="Precio"
-                value={
-                  panelState.pending.price_amount != null && panelState.pending.price_currency
-                    ? formatCurrency(panelState.pending.price_amount, panelState.pending.price_currency)
-                    : null
-                }
-              />
-              <Row label="Origen" value="Solicitud de jugador" />
+                <div className="flex flex-col gap-4">
+                  {panelState.pending.price_amount != null && panelState.pending.price_currency && (
+                    <DetailCard title="Cobro">
+                      <Row label="Precio" value={formatCurrency(panelState.pending.price_amount, panelState.pending.price_currency)} />
+                    </DetailCard>
+                  )}
+                  <DetailCard>
+                    <Row label="Origen" value="Solicitud de jugador" />
+                  </DetailCard>
+                </div>
+              </div>
+            )}
 
-              {pendingError && <p className="mt-3 text-xs text-red-400">{pendingError}</p>}
+            {panelState.mode === "view" &&
+              (loadingEdit ? (
+                <div className="py-16 text-center text-sm text-brand-muted">Cargando reserva…</div>
+              ) : editing && editData ? (
+                <div className="mx-auto w-full max-w-lg">
+                  <ReservationForm
+                    key={`edit-${panelState.reservation.id}`}
+                    action={updateReservation.bind(null, clubId, clubSlug, panelState.reservation.id, true)}
+                    courts={courts}
+                    members={members}
+                    defaultDate={editData.date}
+                    clubId={clubId}
+                    allowedDurations={allowedDurations}
+                    initialValues={{
+                      court_id: editData.court_id,
+                      date: editData.date,
+                      start_time: editData.start_time.slice(0, 5),
+                      duration_minutes: editData.duration_minutes,
+                      type: editData.type,
+                      title: editData.title ?? undefined,
+                      notes: editData.notes ?? undefined,
+                      player_ids: editData.player_ids,
+                    }}
+                    submitLabel="Guardar cambios"
+                    cancelHref={`/${clubSlug}/admin/reservations`}
+                    onSuccess={() => {
+                      onChanged();
+                      onClose();
+                    }}
+                    inModal
+                    editingReservationId={panelState.reservation.id}
+                    clubSlug={clubSlug}
+                  />
+                </div>
+              ) : editData ? (
+                <div className="flex flex-col gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                    <div className="flex flex-col gap-4">
+                      <DetailCard>
+                        <Row
+                          label="Estado"
+                          value={
+                            <span className="inline-flex items-center gap-1.5 text-[#00FF00]">
+                              <Check className="w-3.5 h-3.5" />
+                              Confirmada
+                            </span>
+                          }
+                        />
+                        <Row label="Cancha" value={panelState.reservation.courtName} />
+                        <Row label="Fecha" value={formatDate(panelState.reservation.date)} />
+                        <Row
+                          label="Hora"
+                          value={`${fmt(editData.start_time)} – ${endTime(editData.start_time, editData.duration_minutes)}`}
+                        />
+                        <Row
+                          label="Duración"
+                          value={
+                            editData.extra_minutes > 0
+                              ? `${durationLabel(editData.duration_minutes)} (incluye ${editData.extra_minutes} min extra)`
+                              : durationLabel(editData.duration_minutes)
+                          }
+                        />
+                        <Row label="Tipo" value={TYPE_LABELS[panelState.reservation.type] ?? panelState.reservation.type} />
+                        <Row label="Título" value={panelState.reservation.title} />
+                      </DetailCard>
 
-              <div className="flex gap-2 mt-5">
+                      {/* One compact row per participant (never concatenated
+                          into a single line, never hidden behind "+N" — that
+                          summary is only for the Agenda's small ticks, point 7
+                          of the spec) — resolved by id against `members` so
+                          each row gets the real avatar, not just a name.
+                          jugadoresIds already resolves the approved-request
+                          fallback (see above), so this renders identically
+                          either way. */}
+                      {jugadoresIds.length > 0 && (
+                        <DetailCard title="Jugadores">
+                          {jugadoresIds.map((id) => {
+                            const member = members.find((m) => m.profile_id === id);
+                            const fallbackName = id === editData.created_by ? editData.creator_name : null;
+                            return (
+                              <ParticipantRow
+                                key={id}
+                                profileId={id}
+                                fullName={member?.full_name ?? fallbackName}
+                                avatarUrl={member?.avatar_url ?? null}
+                              />
+                            );
+                          })}
+                        </DetailCard>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col gap-4">
+                      {/* Cobro — Total always shown alongside the base price
+                          (never just when extra time exists) so it always
+                          has the strongest visual weight in this card; extra
+                          time/amount rows stay conditional on
+                          extra_minutes > 0, exactly like before. */}
+                      {(editData.price_amount != null || editData.extra_minutes > 0) && (
+                        <DetailCard title="Cobro">
+                          <Row
+                            label="Precio base"
+                            value={
+                              editData.price_amount != null && editData.price_currency
+                                ? formatCurrency(editData.price_amount, editData.price_currency)
+                                : null
+                            }
+                          />
+                          {editData.extra_minutes > 0 && (
+                            <>
+                              <Row label="Tiempo extra" value={`${editData.extra_minutes} min`} />
+                              <Row
+                                label="Valor extra"
+                                value={formatCurrency(editData.extra_amount, editData.extra_currency ?? "COP")}
+                              />
+                            </>
+                          )}
+                          {editData.price_amount != null && (
+                            <div className="flex items-center justify-between pt-3 pb-2">
+                              <span className="text-xs uppercase tracking-wider text-brand-muted/60 font-semibold">
+                                Total
+                              </span>
+                              <span className="text-xl font-bold text-brand-primary">
+                                {formatCurrency(
+                                  (editData.price_amount ?? 0) + editData.extra_amount,
+                                  editData.price_currency ?? editData.extra_currency ?? "COP"
+                                )}
+                              </span>
+                            </div>
+                          )}
+                        </DetailCard>
+                      )}
+
+                      <DetailCard>
+                        <Row label="Creada por" value={editData.creator_name} />
+                        <Row label="Origen" value={editData.creator_is_player ? "Solicitud aprobada" : "Creada por el club"} />
+                      </DetailCard>
+                    </div>
+                  </div>
+
+                  {editData.notes && (
+                    <DetailCard title="Notas">
+                      <p className="text-sm text-white whitespace-pre-line py-2.5">{editData.notes}</p>
+                    </DetailCard>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-brand-muted py-8 text-center">No se pudo cargar la reserva.</p>
+              ))}
+          </div>
+
+          {/* Footer — actions live here instead of inline in the scrollable
+              body, so they stay reachable regardless of content height. */}
+          {panelState.mode === "pending" && (
+            <div className="shrink-0 border-t border-white/10 px-5 py-4">
+              {pendingError && <p className="mb-3 text-xs text-red-400">{pendingError}</p>}
+              <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setRejectModalOpen(true)}
@@ -416,186 +589,62 @@ export function ReservationTicketPanel({
             </div>
           )}
 
-          {panelState.mode === "view" &&
-            (loadingEdit ? (
-              <div className="py-16 text-center text-sm text-brand-muted">Cargando reserva…</div>
-            ) : editing && editData ? (
-              <ReservationForm
-                key={`edit-${panelState.reservation.id}`}
-                action={updateReservation.bind(null, clubId, clubSlug, panelState.reservation.id, true)}
-                courts={courts}
-                members={members}
-                defaultDate={editData.date}
-                clubId={clubId}
-                allowedDurations={allowedDurations}
-                initialValues={{
-                  court_id: editData.court_id,
-                  date: editData.date,
-                  start_time: editData.start_time.slice(0, 5),
-                  duration_minutes: editData.duration_minutes,
-                  type: editData.type,
-                  title: editData.title ?? undefined,
-                  notes: editData.notes ?? undefined,
-                  player_ids: editData.player_ids,
-                }}
-                submitLabel="Guardar cambios"
-                cancelHref={`/${clubSlug}/admin/reservations`}
-                onSuccess={() => {
-                  onChanged();
-                  onClose();
-                }}
-                inModal
-                editingReservationId={panelState.reservation.id}
-                clubSlug={clubSlug}
-              />
-            ) : editData ? (
-              <div className="flex flex-col gap-1">
-                <Row
-                  label="Estado"
-                  value={
-                    <span className="inline-flex items-center gap-1.5 text-[#00FF00]">
-                      <Check className="w-3.5 h-3.5" />
-                      Confirmada
-                    </span>
-                  }
-                />
-                <Row label="Cancha" value={panelState.reservation.courtName} />
-                <Row label="Fecha" value={formatDate(panelState.reservation.date)} />
-                <Row
-                  label="Hora"
-                  value={`${fmt(editData.start_time)} – ${endTime(editData.start_time, editData.duration_minutes)}`}
-                />
-                <Row
-                  label="Duración"
-                  value={
-                    editData.extra_minutes > 0
-                      ? `${durationLabel(editData.duration_minutes)} (incluye ${editData.extra_minutes} min extra)`
-                      : durationLabel(editData.duration_minutes)
-                  }
-                />
-                <Row label="Tipo" value={TYPE_LABELS[panelState.reservation.type] ?? panelState.reservation.type} />
-                <Row label="Título" value={panelState.reservation.title} />
+          {panelState.mode === "view" && !loadingEdit && !editing && editData && (
+            <div className="shrink-0 border-t border-white/10 px-5 py-4 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => setExtraTimeModalOpen(true)}
+                className="flex items-center justify-center gap-1.5 h-10 rounded-xl border border-white/15 text-sm font-medium text-white/90 hover:border-white/30 hover:bg-white/5 transition-colors"
+              >
+                <Timer className="w-3.5 h-3.5" />
+                Agregar tiempo extra
+              </button>
 
-                {/* One compact row per participant (never concatenated into
-                    a single line, never hidden behind "+N" — that summary
-                    is only for the Agenda's small ticks, point 7 of the
-                    spec) — resolved by id against `members` so each row
-                    gets the real avatar, not just a name. jugadoresIds
-                    already resolves the approved-request fallback (see
-                    above), so this renders identically either way. */}
-                {jugadoresIds.length > 0 && (
-                  <div className="py-2.5 border-b border-white/5">
-                    <span className="text-[11px] uppercase tracking-wider text-brand-muted/50 font-medium">
-                      Jugadores
-                    </span>
-                    <div className="flex flex-col mt-1">
-                      {jugadoresIds.map((id) => {
-                        const member = members.find((m) => m.profile_id === id);
-                        const fallbackName = id === editData.created_by ? editData.creator_name : null;
-                        return (
-                          <ParticipantRow
-                            key={id}
-                            profileId={id}
-                            fullName={member?.full_name ?? fallbackName}
-                            avatarUrl={member?.avatar_url ?? null}
-                          />
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                <Row label="Notas" value={editData.notes} />
-                <Row
-                  label="Precio"
-                  value={
-                    editData.price_amount != null && editData.price_currency
-                      ? formatCurrency(editData.price_amount, editData.price_currency)
-                      : null
-                  }
-                />
-                {/* Extra-time breakdown — only once at least one extension
-                    has been applied ("nunca reemplaza" el precio original,
-                    solo lo complementa: price_amount arriba nunca se toca
-                    por esta acción). */}
-                {editData.extra_minutes > 0 && (
-                  <>
-                    <Row
-                      label="Tiempo extra agregado"
-                      value={`${editData.extra_minutes} min`}
-                    />
-                    <Row
-                      label="Valor extra"
-                      value={formatCurrency(editData.extra_amount, editData.extra_currency ?? "COP")}
-                    />
-                    <Row
-                      label="Total"
-                      value={formatCurrency(
-                        (editData.price_amount ?? 0) + editData.extra_amount,
-                        editData.price_currency ?? editData.extra_currency ?? "COP"
-                      )}
-                    />
-                  </>
-                )}
-                <Row label="Creada por" value={editData.creator_name} />
-                <Row label="Origen" value={editData.creator_is_player ? "Solicitud aprobada" : "Creada por el club"} />
-
-                <button
-                  type="button"
-                  onClick={() => setExtraTimeModalOpen(true)}
-                  className="flex items-center justify-center gap-1.5 h-10 mt-5 rounded-xl border border-white/15 text-sm font-medium text-white/90 hover:border-white/30 hover:bg-white/5 transition-colors"
-                >
-                  <Timer className="w-3.5 h-3.5" />
-                  Agregar tiempo extra
-                </button>
-
-                {confirmingCancel ? (
-                  <div className="mt-5 rounded-xl border border-red-500/30 bg-red-500/5 p-4">
-                    <p className="text-sm text-white font-medium mb-1">¿Cancelar esta reserva?</p>
-                    <p className="text-xs text-brand-muted mb-3">Esta acción liberará el horario de la cancha.</p>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setConfirmingCancel(false)}
-                        disabled={cancelPending}
-                        className="flex-1 h-9 rounded-lg border border-white/15 text-xs text-brand-muted hover:text-white transition-colors disabled:opacity-40"
-                      >
-                        Volver
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleCancelConfirm}
-                        disabled={cancelPending}
-                        className="flex-1 h-9 rounded-lg border border-red-500/30 bg-red-500/10 text-xs font-medium text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-40"
-                      >
-                        {cancelPending ? "Cancelando…" : "Confirmar"}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex gap-2 mt-5">
+              {confirmingCancel ? (
+                <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4">
+                  <p className="text-sm text-white font-medium mb-1">¿Cancelar esta reserva?</p>
+                  <p className="text-xs text-brand-muted mb-3">Esta acción liberará el horario de la cancha.</p>
+                  <div className="flex gap-2">
                     <button
                       type="button"
-                      onClick={() => setConfirmingCancel(true)}
-                      className="flex-1 h-10 rounded-xl border border-red-500/20 text-sm font-medium text-red-400 hover:bg-red-500/10 hover:border-red-500/40 transition-colors flex items-center justify-center gap-1.5"
+                      onClick={() => setConfirmingCancel(false)}
+                      disabled={cancelPending}
+                      className="flex-1 h-9 rounded-lg border border-white/15 text-xs text-brand-muted hover:text-white transition-colors disabled:opacity-40"
                     >
-                      <XCircle className="w-3.5 h-3.5" />
-                      Cancelar
+                      Volver
                     </button>
                     <button
                       type="button"
-                      onClick={() => setEditing(true)}
-                      className="flex-1 h-10 rounded-xl bg-brand-primary text-brand-bg text-sm font-semibold hover:brightness-110 transition-all flex items-center justify-center gap-1.5"
+                      onClick={handleCancelConfirm}
+                      disabled={cancelPending}
+                      className="flex-1 h-9 rounded-lg border border-red-500/30 bg-red-500/10 text-xs font-medium text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-40"
                     >
-                      <Pencil className="w-3.5 h-3.5" />
-                      Editar
+                      {cancelPending ? "Cancelando…" : "Confirmar"}
                     </button>
                   </div>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-brand-muted py-8 text-center">No se pudo cargar la reserva.</p>
-            ))}
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingCancel(true)}
+                    className="flex-1 h-10 rounded-xl border border-red-500/20 text-sm font-medium text-red-400 hover:bg-red-500/10 hover:border-red-500/40 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <XCircle className="w-3.5 h-3.5" />
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditing(true)}
+                    className="flex-1 h-10 rounded-xl bg-brand-primary text-brand-bg text-sm font-semibold hover:brightness-110 transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    Editar
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

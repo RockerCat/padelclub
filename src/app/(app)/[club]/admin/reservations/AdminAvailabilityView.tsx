@@ -21,9 +21,9 @@ import type { RejectedReservation } from "./RejectedReservationsSection";
 // component built for the player (CourtAvailabilityCard, @/components/
 // courts/CourtAvailabilityTimeline) instead of a second grid
 // implementation. Unlike the player, occupied ticks here ARE interactive
-// (onSelectOccupied) — clicking one opens the "Ticket Preview" side panel
-// (ReservationTicketPanel) instead of a centered modal, reusing the exact
-// same edit/approve/reject/cancel actions the Semana view already has.
+// (onSelectOccupied) — clicking one opens the reservation detail dialog
+// (ReservationTicketPanel), reusing the exact same edit/approve/reject/
+// cancel actions the Semana view already has.
 
 interface AdminAvailabilityViewProps {
   weekDays: DayRangeDay[];
@@ -209,9 +209,9 @@ export function AdminAvailabilityView({
     setPanelState({ mode: "create", initialDate: selectedDate, initialCourtId: courtId, initialStartTime: startTime });
   }
 
-  // Confirmed → Ticket Preview in view mode (same edit/cancel actions the
+  // Confirmed → detail dialog in view mode (same edit/cancel actions the
   // Semana view already has). Pending (no confirmed reservation on that
-  // tick) → Ticket Preview in pending mode (same approve/reject actions
+  // tick) → detail dialog in pending mode (same approve/reject actions
   // "Solicitudes pendientes" already has) — never a new detail screen.
   function handleSelectOccupied(courtId: string, startTime: string) {
     const confirmed = findConfirmed(courtId, startTime);
@@ -455,8 +455,8 @@ export function AdminAvailabilityView({
         </div>
       )}
 
-      {/* Ticket Preview panel — reuses the exact same create/edit/approve/
-          reject/cancel actions the rest of the module already has. */}
+      {/* Reservation detail dialog — reuses the exact same create/edit/
+          approve/reject/cancel actions the rest of the module already has. */}
       <ReservationTicketPanel
         panelState={panelState}
         clubId={clubId}
