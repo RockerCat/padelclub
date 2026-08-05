@@ -65,18 +65,30 @@ export function slugifyNamePart(value: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-/** Construye el slug corto y estable para compartir: nombre del creador
- *  (o "reserva" si no está disponible) + fecha y hora de inicio en
- *  YYYYMMDDHHmm. Nunca incluye el uuid — la reserva se resuelve server-side
- *  (uuid si el segmento lo trae, o resolve_reservation_slug si no). */
+/** Construye el slug corto y estable para compartir: nombre del creador +
+ *  fecha y hora de inicio en YYYYMMDDHHmm. resolve_reservation_slug exige
+ *  una coincidencia EXACTA de nombre (club + fecha + hora + nombre
+ *  normalizado) — sin un nombre real, ningún nombre normalizado puede
+ *  matchear jamás, así que un placeholder tipo "reserva-YYYYMMDDHHmm"
+ *  queda permanentemente sin resolver (bug real, confirmado contra la base
+ *  enlazada: resolve_reservation_slug devuelve 0 coincidencias para el
+ *  placeholder "reserva", nunca "se autocorrige" como asumía el código
+ *  anterior). Por eso, sin nombre real disponible, el fallback incrusta el
+ *  uuid real (`id`) en vez de un nombre inventado — extractReservationId lo
+ *  encuentra con su regex desde cualquier parte del texto, así que
+ *  page.tsx resuelve por la vía 1 (uuid embebido) sin depender de ningún
+ *  nombre ni de resolve_reservation_slug, y la página se autocorrige al
+ *  slug legible en cuanto carga el nombre real del creador. */
 export function buildReservationSlug(params: {
   creatorName?: string | null;
   date: string; // YYYY-MM-DD
   startTime: string; // "HH:MM" o "HH:MM:SS"
+  id: string;
 }): string {
   const namePart = params.creatorName ? slugifyNamePart(params.creatorName) : "";
+  if (!namePart) return `reserva-${params.id}`;
   const [y, m, d] = params.date.split("-");
   const [h, mi] = params.startTime.split(":");
   const digits = `${y}${m}${d}${h}${mi}`;
-  return `${namePart || "reserva"}-${digits}`;
+  return `${namePart}-${digits}`;
 }

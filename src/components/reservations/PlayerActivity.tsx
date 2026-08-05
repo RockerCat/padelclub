@@ -94,8 +94,11 @@ export function filterVisibleRequests(myReservations: MyReservation[], dismissed
 // are ever cancellable by a PLAYER (rejected/cancelled are terminal
 // states); the actual creator-or-participant check also happens
 // server-side, since this component never receives who's related to a
-// reservation, only that it's one of the viewer's own.
-export function canPlayerCancelReservation(r: MyReservation): boolean {
+// reservation, only that it's one of the viewer's own. Takes a Pick (not
+// the full MyReservation) so ReservationShareView's own reservation shape
+// — different fields, same status/date/start_time — can reuse this exact
+// gate instead of a second copy of the 2-hour rule.
+export function canPlayerCancelReservation(r: Pick<MyReservation, "status" | "date" | "start_time">): boolean {
   if (r.status !== "pending" && r.status !== "confirmed") return false;
   const startDate = new Date(`${r.date}T${r.start_time.slice(0, 5)}:00`);
   return startDate.getTime() - Date.now() >= 2 * 60 * 60 * 1000;
@@ -307,17 +310,23 @@ export function ActivityCard({
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  // A confirmed reservation ("Mis reservas") now opens its real detail page
-  // — the same one Compartir/the Agenda ticket panel already link to.
-  // Pending/rejected ("Mis solicitudes") keep the existing
-  // activityHref/calendar-context-switch behavior untouched. Slug corto
-  // legible (@/lib/reservationSlug) sin el nombre del creador — este
-  // componente no lo tiene cargado — pero eso nunca rompe nada: la página
-  // resuelve igual por club+fecha+hora y se auto-corrige al slug con
-  // nombre completo en cuanto carga.
-  const shareSlug = buildReservationSlug({ creatorName: null, date: reservation.date, startTime: reservation.start_time });
+  // Una reserva confirmada o pendiente ("Mis reservas"/"Mis solicitudes")
+  // abre su detalle real — la misma página que Compartir/el panel de la
+  // Agenda ya enlazan, ahora también para una solicitud aún sin aprobar
+  // (antes solo confirmada; get_reservation_share_detail nunca filtró por
+  // status, el hueco era puramente de navegación acá). Rechazada/cancelada
+  // mantienen el activityHref/calendar-context-switch existente. Slug
+  // corto legible (@/lib/reservationSlug) sin el nombre del creador — este
+  // componente no lo tiene cargado, así que buildReservationSlug incrusta
+  // el uuid real (reservation.id) en vez de un placeholder de nombre:
+  // resolve_reservation_slug exige una coincidencia EXACTA de nombre y
+  // nunca resuelve un placeholder inventado, así que sin el uuid este
+  // enlace quedaba permanentemente en 404 (bug real, confirmado contra la
+  // base). La página se autocorrige al slug legible en cuanto carga el
+  // nombre real del creador.
+  const shareSlug = buildReservationSlug({ creatorName: null, date: reservation.date, startTime: reservation.start_time, id: reservation.id });
   const cardHref =
-    reservation.status === "confirmed"
+    reservation.status === "confirmed" || reservation.status === "pending"
       ? `/${clubSlug}/reservations/${shareSlug}`
       : activityHref(clubSlug, reservation.id);
 

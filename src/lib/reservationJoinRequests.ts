@@ -196,6 +196,11 @@ export type ReservationShareDetail = {
     created_by: string;
     creator_name: string | null;
     is_creator: boolean;
+    // Solo para mostrar "Valor" en el detalle — nunca recalculado acá,
+    // exactamente lo que ya persiste reservations.price_amount/currency
+    // (ver Reservation Pricing Principles).
+    price_amount: number | null;
+    price_currency: string | null;
   };
   club: { id: string; name: string; slug: string };
   can_manage: boolean;

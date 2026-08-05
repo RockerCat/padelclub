@@ -118,6 +118,7 @@ export default async function ReservationSharePage({ params }: ReservationShareP
     creatorName: detail.reservation.creator_name,
     date: detail.reservation.date,
     startTime: detail.reservation.start_time,
+    id: detail.reservation.id,
   });
   if (rawParam !== canonicalSlug) {
     redirect(`/${slug}/reservations/${canonicalSlug}`);

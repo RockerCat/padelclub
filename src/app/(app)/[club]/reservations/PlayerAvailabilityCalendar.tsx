@@ -781,16 +781,26 @@ export function PlayerAvailabilityCalendar({
     return ranges;
   }
 
-  // Which (if any) of the player's own CONFIRMED reservations occupies this
-  // exact court/date/time — same match rule generalContextRangesFor already
-  // uses for myBookings, reused here so an occupied tick that's the
-  // player's own reservation can open its detail page. Only ever matches
-  // myBookings (never myReservations/pending-rejected — clicking those
-  // isn't part of this fix, "Mis solicitudes" keeps its existing behavior),
-  // and never reveals anything about a tick that ISN'T the player's own —
-  // onSelectOccupied below simply no-ops when this returns null.
+  // Which (if any) of the player's own CONFIRMED or PENDING reservations
+  // occupies this exact court/date/time — same match rule
+  // generalContextRangesFor already uses, reused here so an occupied tick
+  // that's the player's own reservation (approved, or still awaiting the
+  // club's approval) can open its detail page — the share detail page
+  // already supports a pending reservation, this was purely a navigation
+  // gap. Rejected/cancelled are excluded on purpose (a rejected tick isn't
+  // rendered as "occupied" at all — the slot is free again — and clicking
+  // one was never part of this fix; "Mis solicitudes" keeps its existing
+  // behavior for those). Never reveals anything about a tick that ISN'T
+  // the player's own — onSelectOccupied below simply no-ops when this
+  // returns null.
   function myBookingAt(courtId: string, startTime: string): MyReservation | null {
-    return myBookings.find((r) => r.court_id === courtId && r.date === selectedDate && r.start_time.slice(0, 5) === startTime) ?? null;
+    const booking = myBookings.find((r) => r.court_id === courtId && r.date === selectedDate && r.start_time.slice(0, 5) === startTime);
+    if (booking) return booking;
+    return (
+      myReservations.find(
+        (r) => r.status === "pending" && r.court_id === courtId && r.date === selectedDate && r.start_time.slice(0, 5) === startTime
+      ) ?? null
+    );
   }
 
   return (
@@ -909,10 +919,16 @@ export function PlayerAvailabilityCalendar({
                         if (!mine) return;
                         // Slug corto legible (@/lib/reservationSlug) — sin
                         // nombre del creador acá (no está cargado en este
-                        // componente); la página resuelve igual por
-                        // club+fecha+hora y se auto-corrige al slug con
-                        // nombre completo al cargar.
-                        const slug = buildReservationSlug({ creatorName: null, date: mine.date, startTime: mine.start_time });
+                        // componente), así que buildReservationSlug incrusta
+                        // el uuid real (mine.id) en vez de un placeholder de
+                        // nombre inventado — resolve_reservation_slug exige
+                        // una coincidencia EXACTA de nombre y nunca resuelve
+                        // un placeholder, así que sin el uuid este enlace
+                        // quedaba permanentemente en 404 (bug real,
+                        // confirmado contra la base). La página se
+                        // autocorrige al slug legible en cuanto carga el
+                        // nombre real del creador.
+                        const slug = buildReservationSlug({ creatorName: null, date: mine.date, startTime: mine.start_time, id: mine.id });
                         router.push(`/${clubSlug}/reservations/${slug}`);
                       }}
                     />

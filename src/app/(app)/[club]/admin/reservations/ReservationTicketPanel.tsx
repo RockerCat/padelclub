@@ -691,6 +691,7 @@ export function ReservationTicketPanel({
               creatorName: editData.creator_name,
               date: panelState.reservation.date,
               startTime: editData.start_time,
+              id: panelState.reservation.id,
             })}`;
             const shareUrl = origin ? `${origin}${sharePath}` : sharePath;
             const shareMessage = buildReservationShareMessage({

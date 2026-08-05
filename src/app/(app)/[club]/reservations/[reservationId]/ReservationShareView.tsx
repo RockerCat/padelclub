@@ -13,6 +13,8 @@ import { buildReservationSlug } from "@/lib/reservationSlug";
 import { buildReservationShareMessage } from "@/lib/reservationShare";
 import { requestToJoinReservation, getPendingReservationJoinRequests } from "@/lib/reservationJoinRequests";
 import type { ReservationShareDetail, PendingReservationJoinRequest } from "@/lib/reservationJoinRequests";
+import { cancelMyReservation } from "@/app/(app)/[club]/reservations/actions";
+import { canPlayerCancelReservation, activityHref } from "@/components/reservations/PlayerActivity";
 import { useReservationJoinManagement } from "@/app/(app)/[club]/admin/reservations/useReservationJoinManagement";
 import { ReservationForm } from "@/app/(app)/[club]/admin/reservations/ReservationForm";
 import { RejectReservationModal } from "@/app/(app)/[club]/admin/reservations/RejectReservationModal";
@@ -73,6 +75,11 @@ function endTime(start: string, mins: number): string {
   const [h, m] = start.split(":").map(Number);
   const total = h * 60 + m + mins;
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
+// Idéntico a formatCurrency en ReservationTicketPanel.tsx.
+function formatCurrency(amount: number, currency: string): string {
+  return new Intl.NumberFormat("es-CO", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
 }
 
 // Idéntico a Row en ReservationTicketPanel.tsx — misma tipografía,
@@ -253,6 +260,29 @@ export function ReservationShareView({
     });
   }
 
+  // ─── Cancelar/Editar — creador PLAYER (nunca OWNER/ADMIN, que ya tiene su
+  // propio conjunto de acciones arriba) ───────────────────────────────────
+  // Mismas Server Actions y misma regla de 2 horas que ya usan las
+  // tarjetas de "Mis solicitudes"/"Mis reservas" (PlayerActivity) y el
+  // flujo de edición del calendario — nunca una segunda implementación.
+  // Editar reutiliza el mismo punto de entrada que esas tarjetas ya usan
+  // (activityHref + &edit=1), en vez de un formulario nuevo en esta página.
+  const [confirmingMyCancel, setConfirmingMyCancel] = useState(false);
+  const [cancelMyPending, startCancelMyTransition] = useTransition();
+  const [cancelMyError, setCancelMyError] = useState<string | null>(null);
+
+  function handleCancelMyReservation() {
+    setCancelMyError(null);
+    startCancelMyTransition(async () => {
+      const result = await cancelMyReservation(reservation.id, clubSlug);
+      if (result.success) {
+        router.refresh();
+      } else {
+        setCancelMyError(result.error ?? "Error al cancelar la reserva.");
+      }
+    });
+  }
+
   // Mismo patrón "hidratación segura" que ShareNewsButtons.tsx: arranca con
   // la ruta relativa (coincide con el SSR) y sube a una URL absoluta recién
   // montado, para que WhatsApp/portapapeles siempre reciban un enlace real.
@@ -280,7 +310,13 @@ export function ReservationShareView({
   const timeRange = `${fmt(reservation.start_time)} – ${endTime(reservation.start_time, reservation.duration_minutes)}`;
   const statusCfg = STATUS_LABEL[reservation.status] ?? STATUS_LABEL.pending;
   const StatusIcon = statusCfg.icon;
-  const isOpenBadgeActive = reservation.status === "confirmed" && reservation.is_open;
+  // Antes solo se mostraba el valor real de is_open cuando la reserva ya
+  // estaba confirmada (forzando "Cerrada" para cualquier otro estado,
+  // incluso cuando is_open era true) — pendiente necesita mostrar el valor
+  // real ("si acepta solicitudes de jugadores"), así que ahora también
+  // cuenta. Cancelada/rechazada quedan igual que antes (siempre "Cerrada"),
+  // fuera del alcance de este ajuste.
+  const isOpenBadgeActive = (reservation.status === "confirmed" || reservation.status === "pending") && reservation.is_open;
 
   // Mismo slug corto que ya muestra la barra de direcciones (page.tsx ya
   // canonizó la URL antes de montar este componente) — reconstruido acá
@@ -289,6 +325,7 @@ export function ReservationShareView({
     creatorName: reservation.creator_name,
     date: reservation.date,
     startTime: reservation.start_time,
+    id: reservation.id,
   })}`;
   const shareUrl = origin ? `${origin}${sharePath}` : sharePath;
   // Categoría del creador — ya viene en `players` (get_reservation_share_detail
@@ -350,10 +387,28 @@ export function ReservationShareView({
   const showPendingApproval = isOwnerOrAdmin && reservation.status === "pending";
   const showConfirmedAdminActions = isOwnerOrAdmin && reservation.status === "confirmed" && !!editData;
 
+  // Cancelar/Editar — creador PLAYER de una solicitud aún pendiente (nunca
+  // OWNER/ADMIN, que ya tiene showPendingApproval arriba). Antes esta
+  // página nunca era alcanzable para una reserva pendiente, así que estas
+  // acciones nunca tenían dónde vivir — canPlayerCancelReservation es la
+  // misma regla de 2 horas que ya rige "Mis solicitudes"/"Mis reservas".
+  const showPlayerPendingActions = reservation.status === "pending" && reservation.is_creator && !isOwnerOrAdmin;
+  const canPlayerActNow = canPlayerCancelReservation({
+    status: reservation.status as "pending" | "confirmed" | "cancelled" | "rejected",
+    date: reservation.date,
+    start_time: reservation.start_time,
+  });
+
   // Divisor de acciones (criterio de aceptación: acciones separadas del
   // contenido) — solo aparece si hay algo que mostrar debajo.
   const hasActionsSection =
-    !!primary || showJoinCta || justRequested || showPendingRequests || showPendingApproval || showConfirmedAdminActions;
+    !!primary ||
+    showJoinCta ||
+    justRequested ||
+    showPendingRequests ||
+    showPendingApproval ||
+    showConfirmedAdminActions ||
+    showPlayerPendingActions;
 
   // Regla "no repetir al creador" — players ya incluye al creador cuando es
   // PLAYER (ver get_reservation_share_detail), así que un array de longitud
@@ -472,6 +527,14 @@ export function ReservationShareView({
             <Row label="Hora" value={timeRange} />
             <Row label="Duración" value={durationLabel(reservation.duration_minutes)} />
             <Row label="Tipo" value={TYPE_LABELS[reservation.type] ?? reservation.type} />
+            <Row
+              label="Valor"
+              value={
+                reservation.price_amount != null
+                  ? formatCurrency(reservation.price_amount, reservation.price_currency ?? "COP")
+                  : null
+              }
+            />
           </DetailCard>
 
           <DetailCard>
@@ -575,6 +638,63 @@ export function ReservationShareView({
                     {approvingPending ? "Confirmando…" : "Confirmar"}
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* Cancelar/Editar — creador PLAYER de una solicitud pendiente.
+                Mismas Server Actions/regla de 2 horas que "Mis solicitudes"
+                (PlayerActivity) y el flujo de edición del calendario —
+                Editar reutiliza ese mismo punto de entrada en vez de un
+                formulario nuevo acá. */}
+            {showPlayerPendingActions && (
+              <div className="flex flex-col gap-2">
+                {cancelMyError && <p className="text-xs text-red-400">{cancelMyError}</p>}
+                {confirmingMyCancel ? (
+                  <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4">
+                    <p className="text-sm text-white font-medium mb-1">¿Cancelar esta solicitud?</p>
+                    <p className="text-xs text-brand-muted mb-3">Esta acción no se puede deshacer.</p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setConfirmingMyCancel(false)}
+                        disabled={cancelMyPending}
+                        className="flex-1 h-9 rounded-lg border border-white/15 text-xs text-brand-muted hover:text-white transition-colors disabled:opacity-40"
+                      >
+                        Volver
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCancelMyReservation}
+                        disabled={cancelMyPending}
+                        className="flex-1 h-9 rounded-lg border border-red-500/30 bg-red-500/10 text-xs font-medium text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-40"
+                      >
+                        {cancelMyPending ? "Cancelando…" : "Confirmar"}
+                      </button>
+                    </div>
+                  </div>
+                ) : canPlayerActNow ? (
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setConfirmingMyCancel(true)}
+                      className="flex-1 h-10 rounded-xl border border-red-500/20 text-sm font-medium text-red-400 hover:bg-red-500/10 hover:border-red-500/40 transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <XCircle className="w-3.5 h-3.5" />
+                      Cancelar
+                    </button>
+                    <Link
+                      href={`${activityHref(clubSlug, reservation.id)}&edit=1`}
+                      className="flex-1 h-10 rounded-xl bg-brand-primary text-brand-bg text-sm font-semibold hover:brightness-110 transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      Editar
+                    </Link>
+                  </div>
+                ) : (
+                  <p className="text-xs text-brand-muted/60">
+                    Ya no se puede editar ni cancelar (faltan menos de 2 horas)
+                  </p>
+                )}
               </div>
             )}
 
