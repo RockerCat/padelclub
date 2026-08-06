@@ -22,7 +22,12 @@ export function ShareNewsButtons({ title, path }: ShareNewsButtonsProps) {
 
   const url = origin ? `${origin}${path}` : path;
   const whatsappMessage = `🏆 ${title}\n\nConoce todos los resultados aquí 👇\n\n${url}`;
-  const whatsappHref = `https://wa.me/?text=${encodeURIComponent(whatsappMessage)}`;
+  // whatsappMessage llega como string Unicode normal (emojis/tildes/saltos
+  // de línea sin escapar) y se codifica UNA sola vez acá. api.whatsapp.com/
+  // send (a diferencia de wa.me/?text=, cuyo redirect puede mostrar "�" en
+  // algunos clientes) decodifica UTF-8 de forma consistente en todas las
+  // plataformas — mismo fix aplicado a ReservationShareActions.tsx.
+  const whatsappHref = `https://api.whatsapp.com/send?text=${encodeURIComponent(whatsappMessage)}`;
 
   function handleCopy() {
     navigator.clipboard.writeText(url).then(() => {

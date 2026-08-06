@@ -477,7 +477,13 @@ export function TournamentDetailView({
     canRestore;
 
   const tournamentUrl = `${origin ?? ""}/${clubSlug}/tournaments/${tournament.slug}`;
-  const whatsappShareHref = `https://wa.me/?text=${encodeURIComponent(
+  // buildWhatsappShareMessage devuelve un string Unicode normal (emojis/
+  // tildes/símbolos monetarios/saltos de línea sin escapar), codificado UNA
+  // sola vez acá. api.whatsapp.com/send (a diferencia de wa.me/?text=, cuyo
+  // redirect puede mostrar "�" en algunos clientes) decodifica UTF-8 de
+  // forma consistente en todas las plataformas — mismo fix aplicado a
+  // ReservationShareActions.tsx/ShareNewsButtons.tsx.
+  const whatsappShareHref = `https://api.whatsapp.com/send?text=${encodeURIComponent(
     buildWhatsappShareMessage(tournament, clubName, classification, tournamentUrl)
   )}`;
 
