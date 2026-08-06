@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Lock, LockOpen, AlertTriangle, Check, Clock, X as XIcon, Ban, Pencil, XCircle, Timer } from "lucide-react";
+import { ArrowLeft, Lock, LockOpen, AlertTriangle, Check, Clock, X as XIcon, Ban, Pencil, XCircle, Timer, Hourglass } from "lucide-react";
 import { Switch } from "@/components/ui";
 import { PlayerSportAvatar } from "@/components/players/PlayerSportAvatar";
 import { ReservationShareActions } from "@/components/reservations/ReservationShareActions";
@@ -59,6 +59,10 @@ const STATUS_LABEL: Record<string, { label: string; icon: typeof Check; classNam
   pending: { label: "Pendiente de aprobación", icon: Clock, className: "text-amber-400" },
   rejected: { label: "Rechazada", icon: XIcon, className: "text-red-400" },
   cancelled: { label: "Cancelada", icon: Ban, className: "text-brand-muted" },
+  // Nunca resuelta a tiempo por el club — badge propio (naranja), distinto
+  // de Rechazada (roja, una decisión real del club) y de Cancelada (gris,
+  // una reserva que sí llegó a existir).
+  expired: { label: "Expirada", icon: Hourglass, className: "text-orange-400" },
 };
 
 function formatDate(dateStr: string): string {
@@ -353,6 +357,8 @@ export function ReservationShareView({
     primary = { kind: "warning", text: "Reserva cancelada." };
   } else if (reservation.status === "rejected") {
     primary = { kind: "warning", text: "Esta solicitud de reserva fue rechazada por el club." };
+  } else if (reservation.status === "expired") {
+    primary = { kind: "warning", text: "Esta solicitud expiró porque el club no la aprobó antes del horario programado." };
   } else if (reservation.status === "pending") {
     primary = { kind: "info", text: "Esta reserva está pendiente de aprobación por el club." };
   } else if (can_manage) {

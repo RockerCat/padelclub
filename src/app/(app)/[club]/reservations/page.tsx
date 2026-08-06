@@ -188,6 +188,15 @@ export default async function PlayerReservationsPage({
   const rangeStartStr = toDateStr(anchorStart);
   const rangeEndStr = toDateStr(addDays(anchorStart, DAY_RANGE_MAX - 1));
 
+  // Resuelve, de forma perezosa, cualquier solicitud 'pending' de este club
+  // cuyo horario ya pasó — antes de la consulta de disponibilidad de abajo
+  // (que solo bloquea confirmed+pending), para que un horario recién
+  // expirado se libere en esta misma carga en vez de seguir mostrándose
+  // como ocupado. Secuencial (no en el Promise.all) precisamente para
+  // garantizar ese orden — getPlayerReservations ya la vuelve a llamar
+  // internamente, pero es idempotente y barata, nunca duplica nada.
+  await supabase.rpc("expire_pending_reservations", { p_club_id: club.id });
+
   // ─── Fetch data in parallel ───────────────────────────────────────────────────
   // Privacy-safe: no player names, titles, notes in any of these queries.
   // Blocking query includes CONFIRMED + PENDING so occupied slots are hidden

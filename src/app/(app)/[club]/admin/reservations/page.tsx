@@ -97,6 +97,12 @@ export default async function AdminReservationsPage({
   const agendaAnchorStart = weekParam ? new Date(`${weekParam}T00:00:00`) : getWeekMonday(now);
   const agendaRangeEndStr = toDateStr(addDays(agendaAnchorStart, DAY_RANGE_MAX - 1));
 
+  // Resuelve, de forma perezosa, cualquier solicitud 'pending' de este club
+  // cuyo horario ya pasó — antes de las consultas de abajo (pendientes +
+  // disponibilidad), para que ni el listado de solicitudes ni el calendario
+  // sigan mostrando algo que nunca fue aprobado ni rechazado a tiempo.
+  await supabase.rpc("expire_pending_reservations", { p_club_id: club.id });
+
   // ─── Fetch courts + reservations in parallel ─────────────────────────────────
   type RawRow = {
     id: string;

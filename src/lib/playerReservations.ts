@@ -13,7 +13,7 @@ export type MyReservation = {
   date: string;
   start_time: string;
   duration_minutes: number;
-  status: "pending" | "confirmed" | "cancelled" | "rejected";
+  status: "pending" | "confirmed" | "cancelled" | "rejected" | "expired";
   court_id: string;
   courtName: string;
   // Who created it — being a reservation_players participant never grants
@@ -117,13 +117,20 @@ export async function getPlayerReservations(
   playerId: string,
   todayStr: string
 ): Promise<PlayerReservations> {
+  // Resuelve, de forma perezosa, cualquier solicitud 'pending' de este club
+  // cuyo horario ya pasó (nunca fue aprobada ni rechazada) — la misma
+  // función SQL centralizada que approve_pending_reservation/
+  // get_reservation_share_detail ya llaman, para que "Mis solicitudes"
+  // nunca muestre una 'pending' obsoleta como si aún pudiera resolverse.
+  await supabase.rpc("expire_pending_reservations", { p_club_id: clubId });
+
   const [myReservationsRes, myOwnBookingsRes, myParticipantBookingsRes] = await Promise.all([
     supabase
       .from("reservations")
       .select(RESERVATION_SELECT)
       .eq("club_id", clubId)
       .eq("created_by", playerId)
-      .in("status", ["pending", "rejected"])
+      .in("status", ["pending", "rejected", "expired"])
       .gte("date", todayStr)
       .order("created_at", { ascending: false })
       .limit(30),
@@ -147,11 +154,13 @@ export async function getPlayerReservations(
       .limit(30),
   ]);
 
-  // Pending first, then rejected — each group keeps the created_at DESC
-  // order the query already fetched them in ("más recientes primero").
+  // Pending first, luego expirada, luego rechazada — cada grupo conserva
+  // el orden created_at DESC que la consulta ya trajo ("más recientes
+  // primero").
   const rawMyReservations = ((myReservationsRes.data ?? []) as unknown as RawReservationRow[]).map(toMyReservation);
   const myReservations: MyReservation[] = [
     ...rawMyReservations.filter((r) => r.status === "pending"),
+    ...rawMyReservations.filter((r) => r.status === "expired"),
     ...rawMyReservations.filter((r) => r.status === "rejected"),
   ];
 

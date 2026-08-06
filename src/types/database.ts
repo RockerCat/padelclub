@@ -1936,6 +1936,10 @@ export type Database = {
         Args: { p_reservation_id: string }
         Returns: undefined
       }
+      expire_pending_reservations: {
+        Args: { p_club_id?: string | null }
+        Returns: undefined
+      }
       get_reservation_share_detail: {
         Args: { p_reservation_id: string }
         Returns: Json

@@ -66,6 +66,11 @@ export default async function EditReservationPage({
     redirect(`/${slug}`);
   }
 
+  // Resuelve, de forma perezosa, cualquier solicitud 'pending' de este club
+  // cuyo horario ya pasó — antes de leer ESTA reserva, para que la revisión
+  // dedicada nunca muestre Aprobar/Rechazar sobre algo ya vencido.
+  await supabase.rpc("expire_pending_reservations", { p_club_id: club.id });
+
   // Fetch the reservation with its players
   const { data: rawReservation } = await supabase
     .from("reservations")
@@ -98,8 +103,11 @@ export default async function EditReservationPage({
   // rejected request reuses the same read-only detail (no action footer,
   // reservation.status !== "pending") so the reason/traceability stays
   // visible to OWNER/ADMIN after the fact — the notification's destination
-  // never changes once resolved.
-  if (reservation.status === "pending" || reservation.status === "rejected") {
+  // never changes once resolved. An expired one (never approved nor
+  // rejected before its own start time — expire_pending_reservations above
+  // already resolved it) reuses the exact same read-only treatment,
+  // never the generic edit form below.
+  if (reservation.status === "pending" || reservation.status === "rejected" || reservation.status === "expired") {
     const [{ data: playerProfile }, { data: rejectedByProfile }, availableSlots] = await Promise.all([
       supabase.from("profiles").select("full_name").eq("id", reservation.created_by).maybeSingle(),
       reservation.rejected_by

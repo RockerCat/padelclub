@@ -267,6 +267,11 @@ export const ACTIVITY_STATUS: Record<
   // reservation can later be cancelled by an admin — kept visible (never
   // silently dropped) rather than crashing on an unhandled status.
   cancelled: { label: "Cancelada", dot: "bg-red-400/60", text: "text-brand-muted", bg: "bg-white/[0.03] border-white/5" },
+  // Nunca resuelta a tiempo por el club — deliberadamente distinta tanto de
+  // "Rechazada" (una decisión real del club) como de "Cancelada" (una
+  // reserva que sí llegó a existir): un tono naranja propio, no reusado en
+  // ningún otro estado.
+  expired: { label: "Expirada", dot: "bg-orange-400", text: "text-orange-400", bg: "bg-orange-400/10 border-orange-400/20" },
 };
 
 // ─── Cards ──────────────────────────────────────────────────────────────────
@@ -325,8 +330,11 @@ export function ActivityCard({
   // base). La página se autocorrige al slug legible en cuanto carga el
   // nombre real del creador.
   const shareSlug = buildReservationSlug({ creatorName: null, date: reservation.date, startTime: reservation.start_time, id: reservation.id });
+  // "Expirada" también abre el detalle real — únicamente para consultar qué
+  // ocurrió (el detalle ya no muestra ninguna acción para este estado), no
+  // para reintentar nada.
   const cardHref =
-    reservation.status === "confirmed" || reservation.status === "pending"
+    reservation.status === "confirmed" || reservation.status === "pending" || reservation.status === "expired"
       ? `/${clubSlug}/reservations/${shareSlug}`
       : activityHref(clubSlug, reservation.id);
 

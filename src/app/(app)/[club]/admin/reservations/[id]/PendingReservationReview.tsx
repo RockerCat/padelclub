@@ -65,6 +65,9 @@ const STATUS_LABEL: Record<string, { label: string; className: string }> = {
   confirmed: { label: "Confirmada", className: "bg-[#00FF00]/10 border-[#00FF00]/20 text-[#00FF00]" },
   cancelled: { label: "Cancelada", className: "bg-white/[0.03] border-white/5 text-brand-muted" },
   rejected: { label: "Rechazada", className: "bg-red-400/10 border-red-400/20 text-red-400" },
+  // Nunca resuelta a tiempo por el club — badge propio (naranja), distinto
+  // de Rechazada (una decisión real del club).
+  expired: { label: "Expirada", className: "bg-orange-400/10 border-orange-400/20 text-orange-400" },
 };
 
 // Badge for is_open — deliberately a different color family (brand-primary
@@ -227,6 +230,14 @@ export function PendingReservationReview({
           <p className="text-xs text-brand-muted mt-1">
             {reservation.rejectedByName ?? "Un administrador"}
             {reservation.rejected_at ? ` · ${formatCreatedAt(reservation.rejected_at)}` : ""}
+          </p>
+        </div>
+      )}
+
+      {reservation.status === "expired" && (
+        <div className="mb-6 rounded-2xl border border-orange-400/20 bg-orange-400/5 p-4">
+          <p className="text-sm text-white">
+            Esta solicitud expiró porque el club no la aprobó antes del horario programado.
           </p>
         </div>
       )}
