@@ -169,6 +169,36 @@ body {
   }
 }
 
+/* Barra de progreso fina en la parte superior durante una navegación mobile
+   iniciada desde la tab bar (ver NavProgressBar en AppNav.tsx) — un
+   indicador indeterminado, nunca un porcentaje real, porque el App Router
+   no expone progreso de carga granular. El contenedor exterior fija ancho
+   100%; `.nav-progress-fill` es el segmento que recorre de -35% a 100% en
+   traslado horizontal puro, así que nunca cambia el layout de nada debajo. */
+@keyframes nav-progress-sweep {
+  0% {
+    transform: translateX(-100%) scaleX(0.4);
+  }
+  60% {
+    transform: translateX(60%) scaleX(0.7);
+  }
+  100% {
+    transform: translateX(220%) scaleX(0.4);
+  }
+}
+
+.nav-progress-fill {
+  animation: nav-progress-sweep 0.85s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-progress-fill {
+    animation: none;
+    transform: none;
+    width: 100%;
+  }
+}
+
 @supports (animation-timeline: view()) {
   .scroll-fade {
     animation: fade-in-up linear both;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import {
@@ -259,9 +259,17 @@ function getTabBarItems(navItems: NavItem[], role: AppNavProps["role"]): NavItem
 function MobileTabBarItem({
   item,
   isActive,
+  isPending,
+  onTap,
 }: {
   item: NavItem;
   isActive: boolean;
+  // True only for the single item the user just tapped, while its
+  // navigation is still in flight (see pendingHref in AppNav) — drives the
+  // subtle pulse below, distinct from isActive (which already reflects the
+  // tap immediately, before navigation even settles).
+  isPending: boolean;
+  onTap: (e: React.MouseEvent<HTMLAnchorElement>) => void;
 }) {
   const Icon = item.icon;
   const accent = item.color === "secondary" ? "var(--club-secondary)" : "var(--club-primary)";
@@ -269,7 +277,7 @@ function MobileTabBarItem({
   const inner = (
     <>
       <span
-        className="w-8 h-8 flex items-center justify-center rounded-xl transition-colors"
+        className={cn("w-8 h-8 flex items-center justify-center rounded-xl transition-colors", isPending && "animate-pulse")}
         style={{
           backgroundColor: isActive
             ? `color-mix(in srgb, ${accent} 18%, transparent)`
@@ -298,10 +306,35 @@ function MobileTabBarItem({
   return (
     <Link
       href={item.href!}
-      className="flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 min-w-0"
+      onClick={onTap}
+      className="flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 min-w-0 transition-transform duration-150 active:scale-[0.96]"
     >
       {inner}
     </Link>
+  );
+}
+
+// Barra fina de progreso durante una navegación de la tab bar mobile —
+// indeterminada (el App Router no expone un porcentaje real de carga), se
+// monta/desmonta con `active` en vez de solo cambiar opacity, para que la
+// animación (nav-progress-sweep, ver globals.css) siempre reinicie limpia
+// en cada navegación en vez de continuar desde donde iba la anterior.
+// Fixed + z-[60]: por encima del top bar mobile sticky (z-50) y de la tab
+// bar (z-40), pero muy por debajo de cualquier modal real (z-[400]+).
+function NavProgressBar({ active }: { active: boolean }) {
+  if (!active) return null;
+  return (
+    <div
+      className="md:hidden fixed inset-x-0 z-[60] h-[3px] overflow-hidden bg-white/10"
+      style={{ top: "env(safe-area-inset-top)" }}
+      role="progressbar"
+      aria-label="Cargando"
+    >
+      <div
+        className="nav-progress-fill h-[3px] w-1/3 rounded-full"
+        style={{ backgroundColor: "var(--club-primary)" }}
+      />
+    </div>
   );
 }
 
@@ -541,6 +574,67 @@ export function AppNav({
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuTriggerRef = useRef<HTMLButtonElement>(null);
 
+  // Feedback de navegación de la tab bar mobile — el href recién tocado,
+  // mientras su navegación sigue en curso. Impulsa tres cosas a la vez: (1)
+  // el tab destino se ve "activo" al instante (ver effectiveNavPath más
+  // abajo), sin esperar a que pathname realmente cambie; (2) la barra de
+  // progreso superior (NavProgressBar); (3) bloquear un segundo tap al
+  // mismo destino mientras el primero sigue en curso (ver handleTabTap).
+  // Se limpia solo cuando pathname efectivamente cambia (la navegación ya
+  // se resolvió, sea al destino tocado o a cualquier otro — atrás del
+  // navegador incluido) — y, como red de seguridad ante una navegación que
+  // nunca resuelve (error, fetch colgado), con un timeout corto para que la
+  // barra y el estado "activo" nunca queden pegados indefinidamente.
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const pendingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Reset pendingHref the moment pathname actually changes — the
+  // React-recommended "adjusting state when a prop changes" pattern (calling
+  // setState directly during render, not inside a useEffect), since this is
+  // a pure render-time derivation from pathname, not a sync with an external
+  // system. A stray leftover safety-net timeout (see handleTabTap below)
+  // later calling setPendingHref(null) again is harmless once this already
+  // ran — never touches a newer pendingHref, since handleTabTap always
+  // clears/replaces pendingTimeoutRef.current before setting a new one.
+  const [prevPathname, setPrevPathname] = useState(pathname);
+  if (pathname !== prevPathname) {
+    setPrevPathname(pathname);
+    setPendingHref(null);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (pendingTimeoutRef.current) clearTimeout(pendingTimeoutRef.current);
+    };
+  }, []);
+
+  const handleTabTap = useCallback(
+    (href: string) => (e: React.MouseEvent<HTMLAnchorElement>) => {
+      // Clic modificado (abrir en pestaña nueva, etc.) — dejar el
+      // comportamiento nativo del navegador intacto, sin estado propio.
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+      // Ya estamos en ese destino — Link no dispara una navegación real,
+      // así que no hay nada que reflejar como pendiente.
+      if (href === pathname) return;
+      // Segundo tap al mismo destino mientras el primero sigue en curso —
+      // ignorarlo, nunca disparar una segunda navegación duplicada.
+      if (pendingHref === href) {
+        e.preventDefault();
+        return;
+      }
+      setPendingHref(href);
+      if (pendingTimeoutRef.current) clearTimeout(pendingTimeoutRef.current);
+      pendingTimeoutRef.current = setTimeout(() => setPendingHref(null), 8000);
+    },
+    [pathname, pendingHref]
+  );
+
+  // Con una navegación en curso, el tab tocado debe leerse "activo" de
+  // inmediato aunque pathname todavía no haya cambiado — nunca se
+  // recalcula isNavItemActive contra pathname directamente en la tab bar
+  // mobile mientras hay un pendingHref.
+  const effectiveNavPath = pendingHref ?? pathname;
+
   // "Cambiar de club" / "Crear otro club" — ambos OWNER-only (ver CLAUDE.md
   // → Role Philosophy: OWNER es el único rol que puede pertenecer a varios
   // clubes como propietario). Un único estado (nunca dos booleanos
@@ -611,6 +705,10 @@ export function AppNav({
           own list, when that's the active route) live for OWNER/ADMIN.
           PLAYER never sees that badge, so it doesn't need the subscription. */}
       {role !== "PLAYER" && <JoinRequestsListener clubId={club.id} />}
+
+      {/* Barra global de progreso de navegación — un único punto de montaje
+          para los tres roles, ver NavProgressBar arriba. */}
+      <NavProgressBar active={pendingHref !== null} />
 
       {/* Desktop sidebar — unchanged for every role */}
       <aside className="hidden md:flex flex-col w-64 shrink-0 bg-brand-surface border-r border-white/10 h-screen sticky top-0">
@@ -765,7 +863,9 @@ export function AppNav({
               <MobileTabBarItem
                 key={item.label}
                 item={item}
-                isActive={item.href ? isNavItemActive(pathname, item.href) : false}
+                isActive={item.href ? isNavItemActive(effectiveNavPath, item.href) : false}
+                isPending={pendingHref !== null && item.href === pendingHref}
+                onTap={item.href ? handleTabTap(item.href) : () => {}}
               />
             ))}
           </nav>
@@ -929,7 +1029,9 @@ export function AppNav({
               <MobileTabBarItem
                 key={item.label}
                 item={item}
-                isActive={item.href ? isNavItemActive(pathname, item.href) : false}
+                isActive={item.href ? isNavItemActive(effectiveNavPath, item.href) : false}
+                isPending={pendingHref !== null && item.href === pendingHref}
+                onTap={item.href ? handleTabTap(item.href) : () => {}}
               />
             ))}
           </nav>
