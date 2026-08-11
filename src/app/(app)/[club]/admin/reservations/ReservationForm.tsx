@@ -6,6 +6,7 @@ import { Button, Switch } from "@/components/ui";
 import { getAvailableSlots } from "./actions";
 import type { ReservationFormState } from "./actions";
 import { durationOptions } from "@/lib/durations";
+import { getReservationAdminEditPolicyNow } from "../../../../../../shared/reservations/editPolicy";
 
 type Court = { id: string; name: string };
 type Member = { profile_id: string; full_name: string | null };
@@ -61,6 +62,7 @@ function TimeSlotPicker({
   loading,
   closed,
   hasCourtAndDate,
+  disabled,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -68,13 +70,16 @@ function TimeSlotPicker({
   loading: boolean;
   closed: boolean;
   hasCourtAndDate: boolean;
+  disabled?: boolean;
 }) {
   return (
     <div>
       {/* Always render hidden input so formData always has start_time */}
       <input type="hidden" name="start_time" value={value} />
 
-      {!hasCourtAndDate ? (
+      {disabled ? (
+        <div className={inputClass + " flex items-center opacity-60 cursor-not-allowed"}>{value || "—"}</div>
+      ) : !hasCourtAndDate ? (
         <p className="text-sm text-brand-muted/50 py-2">
           Selecciona cancha y fecha para ver horarios disponibles
         </p>
@@ -181,9 +186,23 @@ export function ReservationForm({
   );
   const [slotsClosed, setSlotsClosed] = useState(false);
 
+  // Política de edición por estado temporal (shared/reservations/editPolicy.ts)
+  // — solo aplica en modo editar; crear siempre exige un horario futuro (la
+  // propia RPC lo rechaza si no), así que nunca hay nada que restringir ahí.
+  // Calculada una sola vez desde los valores REALES de la reserva
+  // (initialValues), nunca desde el estado local editable — para una
+  // reserva pasada, cancha/fecha/hora/duración/tipo quedan congelados sin
+  // importar qué intente tipear el usuario en los campos ya deshabilitados.
+  const editPolicy =
+    editingReservationId && initialValues?.date && initialValues?.start_time && initialValues?.duration_minutes != null
+      ? getReservationAdminEditPolicyNow(initialValues.date, initialValues.start_time, initialValues.duration_minutes)
+      : null;
+  const scheduleLocked = !!editPolicy && !editPolicy.fields.court;
+  const typeLocked = !!editPolicy && !editPolicy.fields.type;
+
   // Refetch slots whenever court, date, or duration changes
   useEffect(() => {
-    if (!courtId || !date) {
+    if (!courtId || !date || scheduleLocked) {
       setSlots([]);
       setSlotsLoading(false);
       setSlotsClosed(false);
@@ -202,7 +221,7 @@ export function ReservationForm({
       }
     );
     return () => { cancelled = true; };
-  }, [courtId, date, duration, clubId, editingReservationId]);
+  }, [courtId, date, duration, clubId, editingReservationId, scheduleLocked]);
 
   function markDirty() { onDirtyChange?.(true); }
 
@@ -226,9 +245,16 @@ export function ReservationForm({
       {/* Cancha */}
       <div className="flex flex-col gap-1.5">
         <label className={labelClass}>Cancha</label>
+        {/* Un <select disabled> nunca se incluye en FormData al enviar el
+            form — congelado (reserva pasada) necesita este input paralelo,
+            siempre habilitado, para que court_id igual llegue al servidor.
+            Mismo patrón que el input oculto de TimeSlotPicker para
+            start_time, ya correcto. */}
+        {scheduleLocked && <input type="hidden" name="court_id" value={courtId} />}
         <select
           name="court_id"
           required
+          disabled={scheduleLocked}
           value={courtId}
           onChange={(e) => { setCourtId(e.target.value); markDirty(); }}
           className={selectClass}
@@ -247,10 +273,12 @@ export function ReservationForm({
       {/* Fecha */}
       <div className="flex flex-col gap-1.5">
         <label className={labelClass}>Fecha</label>
+        {scheduleLocked && <input type="hidden" name="date" value={date} />}
         <input
           type="date"
           name="date"
           required
+          disabled={scheduleLocked}
           min={localToday}
           value={date}
           onChange={(e) => { setDate(e.target.value); markDirty(); }}
@@ -268,6 +296,7 @@ export function ReservationForm({
           loading={slotsLoading}
           closed={slotsClosed}
           hasCourtAndDate={!!(courtId && date)}
+          disabled={scheduleLocked}
         />
       </div>
 
@@ -275,9 +304,11 @@ export function ReservationForm({
       <div className="grid grid-cols-2 gap-4">
         <div className="flex flex-col gap-1.5">
           <label className={labelClass}>Duración</label>
+          {scheduleLocked && <input type="hidden" name="duration_minutes" value={duration} />}
           <select
             name="duration_minutes"
             required
+            disabled={scheduleLocked}
             value={duration}
             onChange={(e) => { setDuration(e.target.value); markDirty(); }}
             className={selectClass}
@@ -291,10 +322,11 @@ export function ReservationForm({
         </div>
         <div className="flex flex-col gap-1.5">
           <label className={labelClass}>Tipo</label>
+          {typeLocked && <input type="hidden" name="type" value={type} />}
           <select
             name="type"
             required
-            disabled={!!editingReservationId}
+            disabled={typeLocked}
             value={type}
             onChange={(e) => { setType(e.target.value); markDirty(); }}
             className={selectClass}
@@ -320,7 +352,6 @@ export function ReservationForm({
           type="text"
           name="title"
           required={type === "block"}
-          disabled={!!editingReservationId}
           value={title}
           onChange={(e) => { setTitle(e.target.value); markDirty(); }}
           placeholder={type === "block" ? "Ej: Mantenimiento" : "Ej: Liga de verano"}
@@ -336,7 +367,6 @@ export function ReservationForm({
         <textarea
           name="notes"
           rows={2}
-          disabled={!!editingReservationId}
           value={notes}
           onChange={(e) => { setNotes(e.target.value); markDirty(); }}
           placeholder="Información adicional..."
@@ -344,9 +374,9 @@ export function ReservationForm({
         />
       </div>
 
-      {editingReservationId && (
+      {scheduleLocked && (
         <p className="text-xs text-brand-muted/70 -mt-2">
-          Tipo, título, notas y jugadores no se pueden editar por ahora — solo cancha, fecha, hora y duración.
+          Esta reserva ya pasó — cancha, fecha, hora, duración y tipo quedan congelados. Solo puedes editar título, notas y jugadores.
         </p>
       )}
 
@@ -387,8 +417,7 @@ export function ReservationForm({
                     value={m.profile_id}
                     checked={checkedPlayers.has(m.profile_id)}
                     onChange={() => togglePlayer(m.profile_id)}
-                    disabled={!!editingReservationId}
-                    className="w-4 h-4 rounded accent-brand-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                    className="w-4 h-4 rounded accent-brand-primary cursor-pointer"
                   />
                   <span className="text-sm text-white">
                     {m.full_name ?? "Sin nombre"}

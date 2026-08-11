@@ -1,10 +1,25 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
 import { bogotaWallClockToISO } from "@/lib/utils/bogotaDatetime";
 import { resolveClubAccess } from "@/lib/clubAccess";
+import {
+  type CreateTournamentFields,
+  createTournament as sharedCreateTournament,
+  updateTournament as sharedUpdateTournament,
+  updateTournamentCoverImage as sharedUpdateTournamentCoverImage,
+  runTournamentTransition,
+} from "../../../../../../shared/tournaments/actions";
 import type { Tournament } from "@/types/database";
+
+// El cómputo real (validación + los 11 RPCs de nivel torneo: create/
+// update/cover + las 8 transiciones de ciclo de vida) ya NO vive aquí —
+// está en shared/tournaments/actions.ts, la misma fuente que mobile
+// llama directo. Este archivo solo aporta lo específico de Next.js:
+// requireAdminRole (sesión + rol vía cookies), el parseo de FormData (los
+// inputs del formulario nunca llegan como objeto plano) y revalidatePath
+// después de cada mutación exitosa.
 
 export type TournamentActionState = {
   success?: boolean;
@@ -17,8 +32,6 @@ export type TournamentFinalizeState = {
   error?: string;
   alreadyFinalized?: boolean;
 };
-
-const VISIBILITIES = ["public", "private"];
 
 // ─── Shared permission guard ─────────────────────────────────────────────────
 // Mirrors requireAdminRole in courts/players actions.ts — the RPCs themselves
@@ -37,176 +50,38 @@ async function requireAdminRole(clubId: string) {
   return { supabase, error: null };
 }
 
-// ─── Shared error translation ────────────────────────────────────────────────
-// Every real code/message here comes directly from the tournament lifecycle
-// RPCs (núcleo reconstruido) — never invented.
+// ─── FormData parsing (específico de Next.js) ────────────────────────────────
+// Solo extrae/convierte los campos del formulario a la forma que
+// shared/tournaments/actions.ts espera — la validación de esos campos
+// (obligatorios, rangos, combinaciones válidas) vive en
+// validateCreateTournamentFields, llamada internamente por
+// createTournament/updateTournament (shared), nunca duplicada aquí.
 
-function tournamentErrorMessage(error: { code?: string; message?: string }): string {
-  if (error.code === "42501") return "No tienes permisos para realizar esta acción.";
-  if (error.code === "P0002") return "El torneo no existe o ya no está disponible.";
-  if (error.code === "P0005") return "Este club se encuentra archivado.";
-
-  if (error.code === "22023") {
-    const msg = error.message ?? "";
-
-    if (msg.includes("modified concurrently") || msg.includes("changed concurrently")) {
-      return "El torneo fue actualizado por otra persona. Recarga la información e inténtalo nuevamente.";
-    }
-    if (
-      msg.includes("not in an editable state") ||
-      msg.includes("no longer in draft") ||
-      msg.includes("Only a draft tournament") ||
-      msg.includes("Only a tournament with open registration") ||
-      msg.includes("Only a tournament with closed registration") ||
-      msg.includes("cannot be cancelled in its current state") ||
-      msg.includes("registration is no longer open") ||
-      msg.includes("registration is no longer closed")
-    ) {
-      return "El torneo cambió de estado y esta acción ya no está disponible.";
-    }
-    if (msg.includes("At least 2 confirmed pairs are required to close registration")) {
-      return "Se requieren al menos 2 duplas inscritas para cerrar las inscripciones.";
-    }
-    if (msg.includes("Only a completed or cancelled tournament can be archived")) {
-      return "Solo un torneo finalizado o cancelado puede archivarse.";
-    }
-    if (msg.includes("Tournament is already archived")) {
-      return "Este torneo ya está archivado.";
-    }
-    if (msg.includes("Tournament is not archived")) {
-      return "Este torneo no está archivado.";
-    }
-    // Los tres campos que update_tournament congela una vez abiertas las
-    // inscripciones ya emiten mensajes distintos entre sí desde el propio
-    // RPC ('category cannot change...', 'secondary_category cannot
-    // change...', 'registration_opens_at cannot change...') — el bug real
-    // era que aquí se colapsaban en un único texto genérico, dejando al
-    // usuario sin forma de saber cuál de los tres había cambiado. Deben
-    // revisarse en este orden: "secondary_category cannot change..." es en
-    // sí misma una superstring de "category cannot change...", así que la
-    // variante más específica va primero o nunca se alcanzaría.
-    if (msg.includes("secondary_category cannot change once registration is open")) {
-      return "La categoría secundaria ya no puede modificarse porque las inscripciones están abiertas.";
-    }
-    if (msg.includes("category cannot change once registration is open")) {
-      return "La categoría ya no puede modificarse porque las inscripciones están abiertas.";
-    }
-    if (msg.includes("registration_opens_at cannot change once registration is open")) {
-      return "La apertura de inscripciones ya no puede modificarse porque las inscripciones están abiertas.";
-    }
-    // Red de seguridad para cualquier otro campo que en el futuro se sume a
-    // ese mismo bloqueo sin una traducción específica todavía — nunca debe
-    // ser lo primero que matchee para los tres campos de arriba.
-    if (msg.includes("cannot change once registration is open")) {
-      return "Este campo ya no puede modificarse porque las inscripciones están abiertas.";
-    }
-    if (msg.includes("name cannot be blank")) return "El nombre del torneo es obligatorio.";
-    if (msg.includes("Invalid tournament category combination")) {
-      return "La combinación de categorías no es válida: la categoría principal debe ser superior a la secundaria.";
-    }
-    if (msg.includes("Invalid category")) return "Selecciona una categoría válida.";
-    if (msg.includes("Invalid max pairs")) return "Un torneo debe permitir al menos 2 duplas.";
-    if (msg.includes("Invalid entry fee amount")) {
-      return "El valor de inscripción debe ser un número entero mayor o igual a 0.";
-    }
-    // El RPC interpola el conteo real de duplas activas directamente en el
-    // mensaje ('max_pairs cannot be less than N active tournament
-    // entries') — se extrae aquí en vez de recalcularlo con minMaxPairs en
-    // el cliente, para no mantener una segunda fuente de verdad del mismo
-    // número.
-    const activeEntriesMatch = msg.match(/max_pairs cannot be less than (\d+) active tournament entries/);
-    if (activeEntriesMatch) {
-      return `El cupo máximo no puede ser menor que las ${activeEntriesMatch[1]} duplas activas registradas.`;
-    }
-    if (msg.includes("Invalid visibility")) return "Selecciona una visibilidad válida.";
-    if (msg.includes("registration_opens_at must be before registration_closes_at")) {
-      return "La apertura de inscripciones debe ser anterior a su cierre.";
-    }
-    if (msg.includes("Invalid estimated duration")) {
-      return "La duración estimada debe ser mayor a cero.";
-    }
-    if (msg.includes("registration_closes_at must not be after starts_at")) {
-      return "El cierre de inscripciones no puede ser posterior al inicio del torneo.";
-    }
-    if (msg.includes("schedule is not fully configured")) {
-      return "Completa todas las fechas del torneo (inscripción e inicio/fin) antes de abrir las inscripciones.";
-    }
-    if (msg.includes("needs at least one confirmed pair to start")) {
-      return "El torneo necesita al menos una dupla confirmada para iniciar.";
-    }
-    if (msg.includes("has no confirmed entries")) {
-      return "El torneo no tiene duplas confirmadas.";
-    }
-    if (msg.includes("inconsistent state")) {
-      return "Los puntos de este torneo están en un estado inconsistente. Contacta a soporte.";
-    }
-    return "Datos inválidos.";
-  }
-
-  console.error("[tournaments] RPC failed:", error);
-  return "No fue posible completar la acción. Inténtalo de nuevo.";
-}
-
-// ─── Shared field parsing ────────────────────────────────────────────────────
-
-function parseTournamentFields(formData: FormData) {
-  const name = (formData.get("name") as string | null)?.trim() ?? "";
-  const description = (formData.get("description") as string | null)?.trim() || null;
-  const category = (formData.get("category") as string | null) ?? "";
-  const secondaryCategoryRaw = (formData.get("secondary_category") as string | null) ?? "";
-  const secondaryCategory = secondaryCategoryRaw || null;
-  const maxPairsRaw = formData.get("max_pairs") as string | null;
-  const maxPairs = maxPairsRaw ? parseInt(maxPairsRaw, 10) : NaN;
-  const visibility = (formData.get("visibility") as string | null) ?? "private";
-  const registrationOpensAt = bogotaWallClockToISO((formData.get("registration_opens_at") as string | null) ?? "");
-  const registrationClosesAt = bogotaWallClockToISO((formData.get("registration_closes_at") as string | null) ?? "");
-  const startsAt = bogotaWallClockToISO((formData.get("starts_at") as string | null) ?? "");
-  const estimatedDurationMinutesRaw = formData.get("estimated_duration_minutes") as string | null;
-  const estimatedDurationMinutes = estimatedDurationMinutesRaw ? parseInt(estimatedDurationMinutesRaw, 10) : NaN;
-  const prizeDescription = (formData.get("prize_description") as string | null)?.trim() || null;
-  const coverImageUrl = (formData.get("cover_image_url") as string | null)?.trim() || null;
-  const entryFeeAmountRaw = formData.get("entry_fee_amount") as string | null;
-  const entryFeeAmount = entryFeeAmountRaw ? parseInt(entryFeeAmountRaw, 10) : 0;
-
-  if (!name) return { error: "El nombre del torneo es obligatorio." } as const;
-  if (!category) return { error: "Selecciona una categoría." } as const;
-  if (secondaryCategory && secondaryCategory === category) {
-    return { error: "La categoría secundaria debe ser distinta de la principal." } as const;
-  }
-  if (!Number.isInteger(maxPairs) || maxPairs < 2) {
-    return { error: "Un torneo debe permitir al menos 2 duplas." } as const;
-  }
-  if (!Number.isInteger(entryFeeAmount) || entryFeeAmount < 0) {
-    return { error: "El valor de inscripción debe ser un número entero mayor o igual a 0." } as const;
-  }
-  if (!VISIBILITIES.includes(visibility)) return { error: "Selecciona una visibilidad válida." } as const;
-  if (!Number.isInteger(estimatedDurationMinutes) || estimatedDurationMinutes < 1) {
-    return { error: "La duración estimada debe ser mayor a cero." } as const;
-  }
-  if (registrationOpensAt && registrationClosesAt && registrationOpensAt >= registrationClosesAt) {
-    return { error: "La apertura de inscripciones debe ser anterior a su cierre." } as const;
-  }
-  if (registrationClosesAt && startsAt && registrationClosesAt > startsAt) {
-    return { error: "El cierre de inscripciones no puede ser posterior al inicio del torneo." } as const;
-  }
-
+function parseTournamentFields(formData: FormData): CreateTournamentFields {
   return {
-    value: {
-      name,
-      description,
-      category,
-      secondaryCategory,
-      maxPairs,
-      visibility,
-      registrationOpensAt,
-      registrationClosesAt,
-      startsAt,
-      estimatedDurationMinutes,
-      prizeDescription,
-      coverImageUrl,
-      entryFeeAmount,
-    },
-  } as const;
+    name: (formData.get("name") as string | null)?.trim() ?? "",
+    description: (formData.get("description") as string | null)?.trim() || null,
+    category: (formData.get("category") as string | null) ?? "",
+    secondaryCategory: (formData.get("secondary_category") as string | null) || null,
+    maxPairs: (() => {
+      const raw = formData.get("max_pairs") as string | null;
+      return raw ? parseInt(raw, 10) : NaN;
+    })(),
+    visibility: (formData.get("visibility") as string | null) ?? "private",
+    registrationOpensAt: bogotaWallClockToISO((formData.get("registration_opens_at") as string | null) ?? ""),
+    registrationClosesAt: bogotaWallClockToISO((formData.get("registration_closes_at") as string | null) ?? ""),
+    startsAt: bogotaWallClockToISO((formData.get("starts_at") as string | null) ?? ""),
+    estimatedDurationMinutes: (() => {
+      const raw = formData.get("estimated_duration_minutes") as string | null;
+      return raw ? parseInt(raw, 10) : NaN;
+    })(),
+    prizeDescription: (formData.get("prize_description") as string | null)?.trim() || null,
+    coverImageUrl: (formData.get("cover_image_url") as string | null)?.trim() || null,
+    entryFeeAmount: (() => {
+      const raw = formData.get("entry_fee_amount") as string | null;
+      return raw ? parseInt(raw, 10) : 0;
+    })(),
+  };
 }
 
 // ─── createTournament ─────────────────────────────────────────────────────────
@@ -220,39 +95,11 @@ export async function createTournament(
   const { supabase, error: authError } = await requireAdminRole(clubId);
   if (authError || !supabase) return { error: authError! };
 
-  const parsed = parseTournamentFields(formData);
-  if ("error" in parsed) return { error: parsed.error };
-  const f = parsed.value;
-
-  const { data, error } = await supabase.rpc("create_tournament", {
-    p_club_id: clubId,
-    p_name: f.name,
-    p_category: f.category,
-    p_max_pairs: f.maxPairs,
-    p_description: f.description,
-    p_visibility: f.visibility,
-    p_registration_opens_at: f.registrationOpensAt,
-    p_registration_closes_at: f.registrationClosesAt,
-    p_starts_at: f.startsAt,
-    p_estimated_duration_minutes: f.estimatedDurationMinutes,
-    p_secondary_category: f.secondaryCategory,
-    p_prize_description: f.prizeDescription,
-    p_cover_image_url: f.coverImageUrl,
-    p_entry_fee_amount: f.entryFeeAmount,
-  });
-
-  if (error) {
-    console.error("[createTournament] create_tournament RPC error:", {
-      code: error.code,
-      message: error.message,
-      details: (error as { details?: string }).details,
-      hint: (error as { hint?: string }).hint,
-    });
-    return { error: tournamentErrorMessage(error) };
-  }
+  const { tournament, error } = await sharedCreateTournament(supabase, clubId, parseTournamentFields(formData));
+  if (error) return { error };
 
   revalidatePath(`/${clubSlug}/admin/tournaments`);
-  return { success: true, tournament: data?.[0] };
+  return { success: true, tournament: tournament ?? undefined };
 }
 
 // ─── updateTournament ─────────────────────────────────────────────────────────
@@ -268,32 +115,12 @@ export async function updateTournament(
   const { supabase, error: authError } = await requireAdminRole(clubId);
   if (authError || !supabase) return { error: authError! };
 
-  const parsed = parseTournamentFields(formData);
-  if ("error" in parsed) return { error: parsed.error };
-  const f = parsed.value;
-
-  const { data, error } = await supabase.rpc("update_tournament", {
-    p_tournament_id: tournamentId,
-    p_name: f.name,
-    p_description: f.description,
-    p_category: f.category,
-    p_max_pairs: f.maxPairs,
-    p_visibility: f.visibility,
-    p_registration_opens_at: f.registrationOpensAt,
-    p_registration_closes_at: f.registrationClosesAt,
-    p_starts_at: f.startsAt,
-    p_estimated_duration_minutes: f.estimatedDurationMinutes,
-    p_secondary_category: f.secondaryCategory,
-    p_prize_description: f.prizeDescription,
-    p_cover_image_url: f.coverImageUrl,
-    p_entry_fee_amount: f.entryFeeAmount,
-  });
-
-  if (error) return { error: tournamentErrorMessage(error) };
+  const { tournament, error } = await sharedUpdateTournament(supabase, tournamentId, parseTournamentFields(formData));
+  if (error) return { error };
 
   revalidatePath(`/${clubSlug}/admin/tournaments`);
   revalidatePath(`/${clubSlug}/tournaments/${tournamentSlug}`);
-  return { success: true, tournament: data?.[0] };
+  return { success: true, tournament: tournament ?? undefined };
 }
 
 // ─── updateTournamentCoverImage ────────────────────────────────────────────────
@@ -316,20 +143,37 @@ export async function updateTournamentCoverImage(
   if (authError || !supabase) return { error: authError! };
 
   const coverImageUrl = (formData.get("cover_image_url") as string | null)?.trim() || null;
-
-  const { data, error } = await supabase.rpc("update_tournament_cover_image", {
-    p_tournament_id: tournamentId,
-    p_cover_image_url: coverImageUrl,
-  });
-
-  if (error) return { error: tournamentErrorMessage(error) };
+  const { tournament, error } = await sharedUpdateTournamentCoverImage(supabase, tournamentId, coverImageUrl);
+  if (error) return { error };
 
   revalidatePath(`/${clubSlug}/admin/tournaments`);
   revalidatePath(`/${clubSlug}/tournaments/${tournamentSlug}`);
-  return { success: true, tournament: data?.[0] };
+  return { success: true, tournament: tournament ?? undefined };
 }
 
-// ─── openTournamentRegistration ───────────────────────────────────────────────
+// ─── Transiciones de ciclo de vida ───────────────────────────────────────────
+// Las 8 comparten la misma forma exacta: requireAdminRole → shared
+// runTournamentTransition → revalidatePath. tournamentErrorMessage y el
+// logueo de errores ya viven una sola vez dentro de runTournamentTransition
+// (shared), no repetidos por función como antes.
+
+async function transition(
+  clubId: string,
+  tournamentId: string,
+  tournamentSlug: string,
+  clubSlug: string,
+  key: Parameters<typeof runTournamentTransition>[1]
+): Promise<TournamentActionState> {
+  const { supabase, error: authError } = await requireAdminRole(clubId);
+  if (authError || !supabase) return { error: authError! };
+
+  const { tournament, error } = await runTournamentTransition(supabase, key, tournamentId);
+  if (error) return { error };
+
+  revalidatePath(`/${clubSlug}/admin/tournaments`);
+  revalidatePath(`/${clubSlug}/tournaments/${tournamentSlug}`);
+  return { success: true, tournament: tournament ?? undefined };
+}
 
 export async function openTournamentRegistration(
   clubId: string,
@@ -337,29 +181,8 @@ export async function openTournamentRegistration(
   tournamentSlug: string,
   clubSlug: string
 ): Promise<TournamentActionState> {
-  const { supabase, error: authError } = await requireAdminRole(clubId);
-  if (authError || !supabase) return { error: authError! };
-
-  const { data, error } = await supabase.rpc("open_tournament_registration", {
-    p_tournament_id: tournamentId,
-  });
-
-  if (error) {
-    console.error("[openTournamentRegistration] open_tournament_registration RPC error:", {
-      code: error.code,
-      message: error.message,
-      details: (error as { details?: string }).details,
-      hint: (error as { hint?: string }).hint,
-    });
-    return { error: tournamentErrorMessage(error) };
-  }
-
-  revalidatePath(`/${clubSlug}/admin/tournaments`);
-  revalidatePath(`/${clubSlug}/tournaments/${tournamentSlug}`);
-  return { success: true, tournament: data?.[0] };
+  return transition(clubId, tournamentId, tournamentSlug, clubSlug, "open");
 }
-
-// ─── closeTournamentRegistration ──────────────────────────────────────────────
 
 export async function closeTournamentRegistration(
   clubId: string,
@@ -367,29 +190,8 @@ export async function closeTournamentRegistration(
   tournamentSlug: string,
   clubSlug: string
 ): Promise<TournamentActionState> {
-  const { supabase, error: authError } = await requireAdminRole(clubId);
-  if (authError || !supabase) return { error: authError! };
-
-  const { data, error } = await supabase.rpc("close_tournament_registration", {
-    p_tournament_id: tournamentId,
-  });
-
-  if (error) {
-    console.error("[DIAG close_tournament_registration]", {
-      code: error.code,
-      message: error.message,
-      details: error.details,
-      hint: error.hint,
-    });
-    return { error: tournamentErrorMessage(error) };
-  }
-
-  revalidatePath(`/${clubSlug}/admin/tournaments`);
-  revalidatePath(`/${clubSlug}/tournaments/${tournamentSlug}`);
-  return { success: true, tournament: data?.[0] };
+  return transition(clubId, tournamentId, tournamentSlug, clubSlug, "close");
 }
-
-// ─── reopenTournamentRegistration ─────────────────────────────────────────────
 
 export async function reopenTournamentRegistration(
   clubId: string,
@@ -397,21 +199,8 @@ export async function reopenTournamentRegistration(
   tournamentSlug: string,
   clubSlug: string
 ): Promise<TournamentActionState> {
-  const { supabase, error: authError } = await requireAdminRole(clubId);
-  if (authError || !supabase) return { error: authError! };
-
-  const { data, error } = await supabase.rpc("reopen_tournament_registration", {
-    p_tournament_id: tournamentId,
-  });
-
-  if (error) return { error: tournamentErrorMessage(error) };
-
-  revalidatePath(`/${clubSlug}/admin/tournaments`);
-  revalidatePath(`/${clubSlug}/tournaments/${tournamentSlug}`);
-  return { success: true, tournament: data?.[0] };
+  return transition(clubId, tournamentId, tournamentSlug, clubSlug, "reopen");
 }
-
-// ─── cancelTournament ──────────────────────────────────────────────────────────
 
 export async function cancelTournament(
   clubId: string,
@@ -419,54 +208,49 @@ export async function cancelTournament(
   tournamentSlug: string,
   clubSlug: string
 ): Promise<TournamentActionState> {
-  const { supabase, error: authError } = await requireAdminRole(clubId);
-  if (authError || !supabase) return { error: authError! };
-
-  const { data, error } = await supabase.rpc("cancel_tournament", {
-    p_tournament_id: tournamentId,
-  });
-
-  if (error) {
-    console.error("[cancelTournament] cancel_tournament RPC error:", {
-      code: error.code,
-      message: error.message,
-      details: (error as { details?: string }).details,
-      hint: (error as { hint?: string }).hint,
-    });
-    return { error: tournamentErrorMessage(error) };
-  }
-
-  revalidatePath(`/${clubSlug}/admin/tournaments`);
-  revalidatePath(`/${clubSlug}/tournaments/${tournamentSlug}`);
-  return { success: true, tournament: data?.[0] };
+  return transition(clubId, tournamentId, tournamentSlug, clubSlug, "cancel");
 }
 
-// ─── startTournament ───────────────────────────────────────────────────────────
 // registration_closed → in_progress. El botón explícito "Iniciar torneo".
-
 export async function startTournament(
   clubId: string,
   tournamentId: string,
   tournamentSlug: string,
   clubSlug: string
 ): Promise<TournamentActionState> {
-  const { supabase, error: authError } = await requireAdminRole(clubId);
-  if (authError || !supabase) return { error: authError! };
+  return transition(clubId, tournamentId, tournamentSlug, clubSlug, "start");
+}
 
-  const { data, error } = await supabase.rpc("start_tournament", {
-    p_tournament_id: tournamentId,
-  });
+// Only a completed or cancelled tournament can be archived — never touches
+// status, entries, points, classification or news, purely a visibility
+// toggle for the admin listing (archived_at/archived_by).
+export async function archiveTournament(
+  clubId: string,
+  tournamentId: string,
+  tournamentSlug: string,
+  clubSlug: string
+): Promise<TournamentActionState> {
+  return transition(clubId, tournamentId, tournamentSlug, clubSlug, "archive");
+}
 
-  if (error) return { error: tournamentErrorMessage(error) };
-
-  revalidatePath(`/${clubSlug}/admin/tournaments`);
-  revalidatePath(`/${clubSlug}/tournaments/${tournamentSlug}`);
-  return { success: true, tournament: data?.[0] };
+// Clears archived_at/archived_by only — status is never touched, so the
+// tournament reappears exactly in the tab its unchanged status already
+// maps to (Finalizados o Cancelados).
+export async function restoreTournament(
+  clubId: string,
+  tournamentId: string,
+  tournamentSlug: string,
+  clubSlug: string
+): Promise<TournamentActionState> {
+  return transition(clubId, tournamentId, tournamentSlug, clubSlug, "restore");
 }
 
 // ─── finalizeTournament ─────────────────────────────────────────────────────────
 // in_progress → completed. Congela la clasificación y aplica los puntos al
-// ranking de cada integrante final, en partes iguales. Idempotente.
+// ranking de cada integrante final, en partes iguales. Idempotente — el
+// único caso donde el estado devuelto es alreadyFinalized en vez de la
+// fila del torneo (finalize_tournament no la retorna, ver
+// runTournamentTransition en shared).
 
 export async function finalizeTournament(
   clubId: string,
@@ -477,85 +261,10 @@ export async function finalizeTournament(
   const { supabase, error: authError } = await requireAdminRole(clubId);
   if (authError || !supabase) return { error: authError! };
 
-  const { data, error } = await supabase.rpc("finalize_tournament", {
-    p_tournament_id: tournamentId,
-  });
-
-  if (error) {
-    console.error("[finalizeTournament] finalize_tournament RPC error:", {
-      code: error.code,
-      message: error.message,
-      details: (error as { details?: string }).details,
-      hint: (error as { hint?: string }).hint,
-    });
-    return { error: tournamentErrorMessage(error) };
-  }
+  const { alreadyFinalized, error } = await runTournamentTransition(supabase, "finalize", tournamentId);
+  if (error) return { error };
 
   revalidatePath(`/${clubSlug}/admin/tournaments`);
   revalidatePath(`/${clubSlug}/tournaments/${tournamentSlug}`);
-  return { success: true, alreadyFinalized: data?.[0]?.already_finalized ?? false };
-}
-
-// ─── archiveTournament ───────────────────────────────────────────────────────
-// Only a completed or cancelled tournament can be archived — never touches
-// status, entries, points, classification or news, purely a visibility
-// toggle for the admin listing (archived_at/archived_by).
-export async function archiveTournament(
-  clubId: string,
-  tournamentId: string,
-  tournamentSlug: string,
-  clubSlug: string
-): Promise<TournamentActionState> {
-  const { supabase, error: authError } = await requireAdminRole(clubId);
-  if (authError || !supabase) return { error: authError! };
-
-  const { data, error } = await supabase.rpc("archive_tournament", {
-    p_tournament_id: tournamentId,
-  });
-
-  if (error) {
-    console.error("[archiveTournament] archive_tournament RPC error:", {
-      code: error.code,
-      message: error.message,
-      details: (error as { details?: string }).details,
-      hint: (error as { hint?: string }).hint,
-    });
-    return { error: tournamentErrorMessage(error) };
-  }
-
-  revalidatePath(`/${clubSlug}/admin/tournaments`);
-  revalidatePath(`/${clubSlug}/tournaments/${tournamentSlug}`);
-  return { success: true, tournament: data?.[0] };
-}
-
-// ─── restoreTournament ───────────────────────────────────────────────────────
-// Clears archived_at/archived_by only — status is never touched, so the
-// tournament reappears exactly in the tab its unchanged status already
-// maps to (Finalizados or Cancelados).
-export async function restoreTournament(
-  clubId: string,
-  tournamentId: string,
-  tournamentSlug: string,
-  clubSlug: string
-): Promise<TournamentActionState> {
-  const { supabase, error: authError } = await requireAdminRole(clubId);
-  if (authError || !supabase) return { error: authError! };
-
-  const { data, error } = await supabase.rpc("restore_tournament", {
-    p_tournament_id: tournamentId,
-  });
-
-  if (error) {
-    console.error("[restoreTournament] restore_tournament RPC error:", {
-      code: error.code,
-      message: error.message,
-      details: (error as { details?: string }).details,
-      hint: (error as { hint?: string }).hint,
-    });
-    return { error: tournamentErrorMessage(error) };
-  }
-
-  revalidatePath(`/${clubSlug}/admin/tournaments`);
-  revalidatePath(`/${clubSlug}/tournaments/${tournamentSlug}`);
-  return { success: true, tournament: data?.[0] };
+  return { success: true, alreadyFinalized };
 }

@@ -30,5 +30,19 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    // mobile/ es su propio proyecto TypeScript, con su propio
+    // tsconfig.json y su propio node_modules (Expo/React Native) — nunca
+    // debió compilarse como parte de este tsconfig; que sus archivos
+    // resolvieran limpio aquí hasta ahora era casualidad (cada import
+    // resuelve relativo al archivo que lo hace, no al tsconfig activo).
+    // shared/ expuso esa grieta: desde este tsconfig, sin el mapeo de
+    // paths que mobile/tsconfig.json sí tiene, "@supabase/supabase-js"
+    // importado por shared/ resuelve a la copia de la raíz en vez de la
+    // de mobile/, produciendo dos tipos SupabaseClient<Database>
+    // incompatibles en una única compilación. Verificar mobile/ sigue
+    // siendo `cd mobile && npx tsc --noEmit`, su propio proyecto.
+    "mobile"
+  ]
 }

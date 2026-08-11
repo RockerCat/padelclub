@@ -13,6 +13,14 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { buildReservationSlug } from "@/lib/reservationSlug";
 import { buildReservationShareMessage } from "@/lib/reservationShare";
 import { ReservationShareActions } from "@/components/reservations/ReservationShareActions";
+import {
+  isReservationActive,
+  sortBookingsByProximity,
+  filterVisibleRequests,
+  canPlayerCancelReservation,
+} from "../../../shared/reservations/eligibility";
+
+export { isReservationActive, sortBookingsByProximity, filterVisibleRequests, canPlayerCancelReservation };
 
 // Every surface that shows a player's own reservations/requests (the
 // Reservations page's side panel, the player home page) shares this exact
@@ -35,74 +43,13 @@ function formatCompactDate(date: string): string {
 }
 
 // ─── Visibility / ordering rules ───────────────────────────────────────────────
-
-// Whether a reservation still has operative value for the panel — pending
-// (still being processed) and rejected (recent history, dismissible) always
-// qualify; an approved/confirmed one only qualifies while it hasn't ended
-// yet. Compares full date+end-time, never just the date, so a reservation
-// ending at 19:30 stays visible until 19:30 has actually passed. Anything
-// else (cancelled, or a future status this panel doesn't model) is excluded
-// — the reservation still exists in Supabase and in the full history, it
-// just has no place in this operational panel. Date.now() is called from
-// inside this plain helper (not a component body) so a fresh render always
-// re-evaluates it without introducing a timer/polling loop.
-export function isReservationActive(r: MyReservation): boolean {
-  if (r.status === "pending" || r.status === "rejected") return true;
-  if (r.status !== "confirmed") return false;
-  const endTime = addMinutes(r.start_time.slice(0, 5), r.duration_minutes);
-  const endDate = new Date(`${r.date}T${endTime}:00`);
-  return endDate.getTime() > Date.now();
-}
-
-// Whether a (still-active, per isReservationActive) confirmed reservation
-// has already started — used only to sort "Mis reservas" ("en curso" cards
-// first), never to decide visibility.
-function isReservationInProgress(r: MyReservation): boolean {
-  const startDate = new Date(`${r.date}T${r.start_time.slice(0, 5)}:00`);
-  return startDate.getTime() <= Date.now();
-}
-
-// "Mis reservas" ordering: reservations already in progress first, then
-// upcoming ones soonest-first — a finished one never appears at all
-// (isReservationActive). Reused verbatim for "Mis próximas reservas" on the
-// player home page — same rule, same order, not a second implementation.
-export function sortBookingsByProximity(bookings: MyReservation[]): MyReservation[] {
-  return bookings
-    .filter(isReservationActive)
-    .slice()
-    .sort((a, b) => {
-      const aRank = isReservationInProgress(a) ? 0 : 1;
-      const bRank = isReservationInProgress(b) ? 0 : 1;
-      if (aRank !== bRank) return aRank - bRank;
-      const aStart = new Date(`${a.date}T${a.start_time.slice(0, 5)}:00`).getTime();
-      const bStart = new Date(`${b.date}T${b.start_time.slice(0, 5)}:00`).getTime();
-      return aStart - bStart;
-    });
-}
-
-// "Mis solicitudes" visibility: pending is always shown (still being
-// processed); rejected only while not locally dismissed. approved never
-// belongs here — it's already surfaced as a booking
-// (sortBookingsByProximity above) the moment it's confirmed.
-export function filterVisibleRequests(myReservations: MyReservation[], dismissedIds: Set<string>): MyReservation[] {
-  return myReservations.filter((r) => r.status !== "rejected" || !dismissedIds.has(r.id));
-}
-
-// Purely a client-side UX gate for showing/hiding the "Cancelar" affordance
-// — real enforcement of the 2-hour rule lives server-side in the
-// cancel_reservation RPC, which never trusts this. Only pending/confirmed
-// are ever cancellable by a PLAYER (rejected/cancelled are terminal
-// states); the actual creator-or-participant check also happens
-// server-side, since this component never receives who's related to a
-// reservation, only that it's one of the viewer's own. Takes a Pick (not
-// the full MyReservation) so ReservationShareView's own reservation shape
-// — different fields, same status/date/start_time — can reuse this exact
-// gate instead of a second copy of the 2-hour rule.
-export function canPlayerCancelReservation(r: Pick<MyReservation, "status" | "date" | "start_time">): boolean {
-  if (r.status !== "pending" && r.status !== "confirmed") return false;
-  const startDate = new Date(`${r.date}T${r.start_time.slice(0, 5)}:00`);
-  return startDate.getTime() - Date.now() >= 2 * 60 * 60 * 1000;
-}
+// isReservationActive/sortBookingsByProximity/filterVisibleRequests/
+// canPlayerCancelReservation ya NO se definen aquí — viven en
+// shared/reservations/eligibility.ts, la misma fuente que mobile ahora
+// también usa (antes tenía una copia manual de estas mismas 4 reglas).
+// Re-importadas arriba y re-exportadas para que ningún import existente
+// de "@/components/reservations/PlayerActivity" (que hasta ahora las
+// obtenía de aquí) tenga que cambiar.
 
 // ─── Dismissed-rejected-requests store ─────────────────────────────────────────
 // localStorage-backed, scoped per club only — so dismissing a rejected card

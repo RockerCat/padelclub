@@ -1,0 +1,19 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      // shared/ (fuera de mobile/) importa "@supabase/supabase-js" como
+      // cualquier otro archivo — sin este mapeo, TS lo resuelve caminando
+      // hacia arriba desde shared/ y encuentra la copia de la RAÍZ del
+      // repo (node_modules de la app web) en vez de la de mobile/,
+      // produciendo dos tipos SupabaseClient<Database> estructuralmente
+      // casi idénticos pero nominalmente incompatibles (supabaseUrl es
+      // protected). Este mapeo fuerza SIEMPRE la copia de mobile/ — la
+      // misma que Metro ya usa en tiempo real gracias a
+      // resolver.nodeModulesPaths en metro.config.js.
+      "@supabase/supabase-js": ["./node_modules/@supabase/supabase-js"]
+    }
+  }
+}

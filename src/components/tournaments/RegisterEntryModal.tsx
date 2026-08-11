@@ -8,6 +8,7 @@ import type { PlayerComboboxCandidate } from "./PlayerCombobox";
 import { PlayerTransferList } from "./PlayerTransferList";
 import { registerTournamentEntryAction } from "@/lib/tournamentEntryActions";
 import { tournamentCategoryLabel } from "@/lib/tournamentLabels";
+import { getTournamentCandidates, companionCandidates as sharedCompanionCandidates } from "../../../shared/tournaments/candidates";
 import type { TournamentEntryRow } from "@/types/database";
 
 interface RegisterEntryModalProps {
@@ -82,26 +83,13 @@ export function RegisterEntryModal({
     // category/secondaryCategory, not just the primary one.
     const categoriesToLoad = secondaryCategory ? [category, secondaryCategory] : [category];
 
-    Promise.all(
-      categoriesToLoad.map((cat) => supabase.rpc("get_club_category_ranking_view", { p_club_id: clubId, p_category: cat }))
-    ).then((results) => {
+    getTournamentCandidates(supabase, clubId, categoriesToLoad).then(({ candidates: result, error }) => {
       if (cancelled) return;
-      if (results.some((r) => r.error)) {
-        setLoadError("No se pudo cargar la lista de jugadores.");
+      if (error) {
+        setLoadError(error);
         return;
       }
-      const byMemberId = new Map<string, PlayerComboboxCandidate>();
-      for (const { data } of results) {
-        for (const r of data ?? []) {
-          byMemberId.set(r.club_member_id, {
-            club_member_id: r.club_member_id,
-            full_name: r.full_name,
-            avatar_url: r.avatar_url,
-            category: r.category,
-          });
-        }
-      }
-      setCandidates([...byMemberId.values()]);
+      setCandidates(result);
     });
     return () => {
       cancelled = true;
@@ -114,19 +102,11 @@ export function RegisterEntryModal({
     return candidates.find((c) => c.club_member_id === id)?.category;
   }
 
-  // Composition rule, expressed purely via category codes (never sort_order,
-  // never a sum, never string comparison beyond equality) — "the first slot"
-  // is unrestricted (H or L); once it holds an H, the companion slot is
-  // narrowed to L only, exactly mirroring the backend's H+L/L+H/L+L rule.
-  // For a simple tournament (secondaryCategory null) every already-loaded
-  // candidate already shares the single category, so no extra filtering is
-  // needed here.
+  // Composition rule — shared/tournaments/candidates.ts (misma que
+  // register_tournament_entry aplica server-side, esto es solo UX).
   function companionCandidates(firstMemberId: string | null): PlayerComboboxCandidate[] {
     if (!candidates) return [];
-    if (!secondaryCategory) return candidates;
-    const firstCategory = categoryOf(firstMemberId);
-    if (firstCategory === category) return candidates.filter((c) => c.category === secondaryCategory);
-    return candidates;
+    return sharedCompanionCandidates(candidates, categoryOf(firstMemberId) ?? null, category, secondaryCategory);
   }
 
   const excludeIds = mode.type === "player" ? [...excludeClubMemberIds, mode.ownClubMemberId] : excludeClubMemberIds;

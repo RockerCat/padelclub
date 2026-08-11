@@ -27,6 +27,7 @@ import { buildReservationShareMessage } from "@/lib/reservationShare";
 import { ReservationShareActions } from "@/components/reservations/ReservationShareActions";
 import { PendingJoinRequestsList } from "@/components/reservations/PendingJoinRequestsList";
 import { useReservationJoinManagement } from "./useReservationJoinManagement";
+import { getReservationAdminEditPolicyNow } from "../../../../../../shared/reservations/editPolicy";
 
 // Agenda's reservation detail — a centered dialog (fullscreen on mobile)
 // used for the Agenda view only (WeekCalendar/Semana keeps its own
@@ -289,6 +290,16 @@ export function ReservationTicketPanel({
       ? [editData.created_by]
       : []
     : [];
+
+  // Política de edición por estado temporal (shared/reservations/editPolicy.ts)
+  // — misma regla que ReservationForm ya aplica a sus propios campos;
+  // acá decide qué ACCIONES operativas (Abrir/Cerrar, Cancelar, tiempo
+  // extra, solicitudes de unión) siguen teniendo sentido, nunca una
+  // segunda copia de la condición temporal.
+  const editPolicy =
+    state.mode === "view" && editData
+      ? getReservationAdminEditPolicyNow(state.reservation.date, editData.start_time, editData.duration_minutes)
+      : null;
 
   function handleApprove() {
     if (state.mode !== "pending") return;
@@ -638,7 +649,7 @@ export function ReservationTicketPanel({
                       abre desde la Agenda), así que no hace falta un
                       chequeo extra de "can_manage" aquí — la RPC igual
                       re-valida todo server-side. */}
-                  {pendingJoinRequests.length > 0 && (
+                  {pendingJoinRequests.length > 0 && editPolicy?.actions.manageJoinRequests && (
                     <DetailCard title={`Solicitudes pendientes (${pendingJoinRequests.length})`}>
                       <PendingJoinRequestsList
                         requests={pendingJoinRequests}
@@ -706,30 +717,36 @@ export function ReservationTicketPanel({
               url: shareUrl,
             });
 
+            const actions = editPolicy?.actions;
+
             return (
               <div className="shrink-0 border-t border-white/10 px-5 py-4 flex flex-col gap-2">
                 {openStatusError && <p className="text-xs text-red-400">{openStatusError}</p>}
                 <ReservationShareActions url={shareUrl} message={shareMessage} />
-                <button
-                  type="button"
-                  onClick={() => handleToggleOpen(!editData.is_open)}
-                  disabled={togglingOpen}
-                  className="flex items-center justify-center gap-1.5 h-10 rounded-xl border border-white/15 text-sm font-medium text-white/90 hover:border-white/30 hover:bg-white/5 transition-colors disabled:opacity-40"
-                >
-                  {editData.is_open ? <Lock className="w-3.5 h-3.5" /> : <LockOpen className="w-3.5 h-3.5" />}
-                  {togglingOpen ? "Guardando…" : editData.is_open ? "Cerrar reserva" : "Abrir reserva"}
-                </button>
+                {actions?.toggleOpen && (
+                  <button
+                    type="button"
+                    onClick={() => handleToggleOpen(!editData.is_open)}
+                    disabled={togglingOpen}
+                    className="flex items-center justify-center gap-1.5 h-10 rounded-xl border border-white/15 text-sm font-medium text-white/90 hover:border-white/30 hover:bg-white/5 transition-colors disabled:opacity-40"
+                  >
+                    {editData.is_open ? <Lock className="w-3.5 h-3.5" /> : <LockOpen className="w-3.5 h-3.5" />}
+                    {togglingOpen ? "Guardando…" : editData.is_open ? "Cerrar reserva" : "Abrir reserva"}
+                  </button>
+                )}
 
-                <button
-                  type="button"
-                  onClick={() => setExtraTimeModalOpen(true)}
-                  className="flex items-center justify-center gap-1.5 h-10 rounded-xl border border-white/15 text-sm font-medium text-white/90 hover:border-white/30 hover:bg-white/5 transition-colors"
-                >
-                  <Timer className="w-3.5 h-3.5" />
-                  Agregar tiempo extra
-              </button>
+                {actions?.addExtraTime && (
+                  <button
+                    type="button"
+                    onClick={() => setExtraTimeModalOpen(true)}
+                    className="flex items-center justify-center gap-1.5 h-10 rounded-xl border border-white/15 text-sm font-medium text-white/90 hover:border-white/30 hover:bg-white/5 transition-colors"
+                  >
+                    <Timer className="w-3.5 h-3.5" />
+                    Agregar tiempo extra
+                  </button>
+                )}
 
-              {confirmingCancel ? (
+              {confirmingCancel && actions?.cancel ? (
                 <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4">
                   <p className="text-sm text-white font-medium mb-1">¿Cancelar esta reserva?</p>
                   <p className="text-xs text-brand-muted mb-3">Esta acción liberará el horario de la cancha.</p>
@@ -754,14 +771,16 @@ export function ReservationTicketPanel({
                 </div>
               ) : (
                 <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setConfirmingCancel(true)}
-                    className="flex-1 h-10 rounded-xl border border-red-500/20 text-sm font-medium text-red-400 hover:bg-red-500/10 hover:border-red-500/40 transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    <XCircle className="w-3.5 h-3.5" />
-                    Cancelar
-                  </button>
+                  {actions?.cancel && (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmingCancel(true)}
+                      className="flex-1 h-10 rounded-xl border border-red-500/20 text-sm font-medium text-red-400 hover:bg-red-500/10 hover:border-red-500/40 transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <XCircle className="w-3.5 h-3.5" />
+                      Cancelar
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setEditing(true)}

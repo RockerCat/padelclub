@@ -1,5 +1,6 @@
 import { PlayerSportAvatarButton } from "@/components/players/PlayerSportAvatarButton";
 import { PositionMedal, pairLabel } from "./ClassificationSection";
+import { groupPodiumByPlace } from "../../../shared/tournaments/classification";
 import { cn } from "@/lib/utils/cn";
 import type { TournamentClassificationRow, TournamentEntryWithMembers } from "@/lib/tournamentEntries";
 
@@ -70,14 +71,7 @@ const PLACE_AVATAR_CLASS: Record<1 | 2 | 3, string> = {
 // vacía (sin tarjeta, sin pedestal) para que 1º nunca deje de estar
 // centrado y 2º/3º nunca cambien de lado.
 export function TournamentPodium({ rows, avatarsClickable, onSelectMember, loadingMemberId }: TournamentPodiumProps) {
-  const byPlace = new Map<1 | 2 | 3, TournamentClassificationRow[]>();
-  for (const row of rows) {
-    if (row.position < 1 || row.position > 3) continue;
-    const place = row.position as 1 | 2 | 3;
-    const list = byPlace.get(place) ?? [];
-    list.push(row);
-    byPlace.set(place, list);
-  }
+  const byPlace = groupPodiumByPlace(rows);
 
   if (byPlace.size === 0) return null;
 

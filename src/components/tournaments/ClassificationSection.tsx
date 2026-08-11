@@ -8,7 +8,10 @@ import { PlayerSportAvatarButton } from "@/components/players/PlayerSportAvatarB
 import { ReplaceMemberModal } from "./ReplaceMemberModal";
 import { setTournamentEntryPointsAction } from "@/lib/tournamentEntryActions";
 import { computeTournamentClassification, isOwnEntry, type TournamentEntryWithMembers } from "@/lib/tournamentEntries";
+import { pairLabel } from "../../../shared/tournaments/classification";
 import { cn } from "@/lib/utils/cn";
+
+export { pairLabel };
 
 interface ClassificationSectionProps {
   clubId: string;
@@ -54,10 +57,6 @@ interface ClassificationSectionProps {
   avatarsClickable: boolean;
   onSelectMember: (clubMemberId: string) => void;
   loadingMemberId: string | null;
-}
-
-export function pairLabel(entry: TournamentEntryWithMembers): string {
-  return entry.members.map((m) => m.full_name ?? "Jugador").join(" / ");
 }
 
 // Solo para el aria-label del menú de acciones de cada fila — "y" en vez

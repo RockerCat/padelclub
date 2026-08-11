@@ -97,7 +97,17 @@ export default async function ClubRootPage({ params, searchParams }: Props) {
   const fullName = (profileResult.data as { full_name: string | null } | null)?.full_name;
 
   const topBar = (
-    <div className="border-b border-white/8 bg-brand-bg/90 backdrop-blur-sm sticky top-0 z-20">
+    // key: topBar es un elemento creado acá (Server Component, ClubRootPage)
+    // y pasado como prop a ClubPublicView ("use client") — al cruzar ese
+    // límite Server→Client, React pierde el estado interno de validación de
+    // keys que normalmente arrastra un elemento estático de JSX, y el
+    // reconciler del cliente lo trata como un ítem de lista sin key propia
+    // ("Each child in a list should have a unique key prop... It was passed
+    // a child from ClubRootPage" — confirmado en los logs reales del dev
+    // server). club.id es estable y único por definición (una carga de esta
+    // página siempre corresponde a exactamente un club), nunca un índice ni
+    // un valor generado en cada render.
+    <div key={club.id} className="border-b border-white/8 bg-brand-bg/90 backdrop-blur-sm sticky top-0 z-20">
       <div className="max-w-5xl mx-auto px-5 h-14 flex items-center justify-between gap-3">
         <Link href="/" className="shrink-0">
           <span className="text-lg font-black tracking-tight text-white whitespace-nowrap">

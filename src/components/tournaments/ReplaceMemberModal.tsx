@@ -7,6 +7,7 @@ import { Button, Spinner } from "@/components/ui";
 import { PlayerSportAvatar } from "@/components/players/PlayerSportAvatar";
 import { PlayerCombobox, type PlayerComboboxCandidate } from "./PlayerCombobox";
 import { replaceTournamentEntryMemberAction } from "@/lib/tournamentEntryActions";
+import { getTournamentCandidates } from "../../../shared/tournaments/candidates";
 import type { TournamentEntryMemberDisplay } from "@/lib/tournamentEntries";
 
 interface ReplaceMemberModalProps {
@@ -61,26 +62,13 @@ export function ReplaceMemberModal({
     const supabase = createClient();
     const categoriesToLoad = secondaryCategory ? [category, secondaryCategory] : [category];
 
-    Promise.all(
-      categoriesToLoad.map((cat) => supabase.rpc("get_club_category_ranking_view", { p_club_id: clubId, p_category: cat }))
-    ).then((results) => {
+    getTournamentCandidates(supabase, clubId, categoriesToLoad).then(({ candidates: result, error }) => {
       if (cancelled) return;
-      if (results.some((r) => r.error)) {
-        setLoadError("No se pudo cargar la lista de jugadores.");
+      if (error) {
+        setLoadError(error);
         return;
       }
-      const byMemberId = new Map<string, PlayerComboboxCandidate>();
-      for (const { data } of results) {
-        for (const r of data ?? []) {
-          byMemberId.set(r.club_member_id, {
-            club_member_id: r.club_member_id,
-            full_name: r.full_name,
-            avatar_url: r.avatar_url,
-            category: r.category,
-          });
-        }
-      }
-      setCandidates([...byMemberId.values()]);
+      setCandidates(result);
     });
     return () => {
       cancelled = true;

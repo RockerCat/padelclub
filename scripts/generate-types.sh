@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Regenerates src/types/database.ts from the live Supabase schema, then
-# re-links it to src/types/domain.ts — the hand-written convenience types
-# (Club, Tournament, ClubRole, PricingRule, etc.) that used to live
+# Regenerates shared/types/database.ts from the live Supabase schema, then
+# re-links it to shared/types/domain.ts — the hand-written convenience
+# types (Club, Tournament, ClubRole, PricingRule, etc.) that used to live
 # appended directly inside database.ts, until a raw `supabase gen types`
 # run silently overwrote the whole file and wiped ~150 imports across the
 # app in one shot.
@@ -14,12 +14,18 @@ set -euo pipefail
 # why it's a script and not a step in someone's memory. Never run
 # `supabase gen types` directly for this project — always go through
 # `npm run types:generate` (which calls this file).
+#
+# shared/types/database.ts is the ONE canonical source for both platforms
+# — src/types/database.ts (web) and mobile/src/types/database.ts (mobile)
+# are both thin `export * from "..."` re-exports of it, so regenerating
+# here is all that's ever needed; neither platform's re-export file
+# changes when the schema changes.
 
 PROJECT_ID="rfzyqmvqmqsjigcvxxnf"
 
-npx supabase gen types typescript --project-id "$PROJECT_ID" > src/types/database.ts
+npx supabase gen types typescript --project-id "$PROJECT_ID" > shared/types/database.ts
 
-cat >> src/types/database.ts <<'EOF'
+cat >> shared/types/database.ts <<'EOF'
 
 // AUTO-APPENDED — do not edit above this line by hand, and do not add
 // anything below it by hand either. Everything above is raw `supabase gen
@@ -31,4 +37,4 @@ cat >> src/types/database.ts <<'EOF'
 export * from "./domain";
 EOF
 
-echo "src/types/database.ts regenerated and re-linked to domain.ts"
+echo "shared/types/database.ts regenerated and re-linked to shared/types/domain.ts"

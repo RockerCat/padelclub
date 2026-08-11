@@ -4,6 +4,7 @@ import { useActionState, useEffect, useState } from "react";
 import { Button, Input } from "@/components/ui";
 import { isoToBogotaWallClock } from "@/lib/utils/bogotaDatetime";
 import { defaultEstimatedDurationMinutes, hoursInputToMinutes, minutesToHoursInputValue } from "@/lib/utils/tournamentDuration";
+import { isStructuralFieldsLocked } from "../../../../../../shared/tournaments/actions";
 import { TournamentImageUpload } from "./TournamentImageUpload";
 import type { Tournament, SportCategory } from "@/types/database";
 import type { TournamentActionState } from "./actions";
@@ -54,8 +55,7 @@ export function TournamentForm({ clubId, tournament, categories, action, onSucce
   // activas al editar).
   const effectiveMinMaxPairs = Math.max(2, minMaxPairs);
   const [maxPairsError, setMaxPairsError] = useState<string | null>(null);
-  const structuralFieldsLocked =
-    tournament?.status === "registration_open" || tournament?.status === "registration_closed";
+  const structuralFieldsLocked = !!tournament && isStructuralFieldsLocked(tournament.status);
 
   // Todos los campos de este formulario son controlados (value+onChange,
   // nunca defaultValue) por la misma razón: React resetea los campos no

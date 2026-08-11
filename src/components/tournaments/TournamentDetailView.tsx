@@ -42,6 +42,21 @@ import {
 } from "@/lib/tournamentEntries";
 import { useMemberModal } from "@/app/(app)/[club]/admin/players/useMemberModal";
 import { MemberModalHost } from "@/app/(app)/[club]/admin/players/MemberModalHost";
+import {
+  buildTournamentWhatsappMessage,
+  canEditTournament,
+  canOpenRegistration as sharedCanOpenRegistration,
+  canCloseRegistration as sharedCanCloseRegistration,
+  canReopenRegistration as sharedCanReopenRegistration,
+  canStartTournament,
+  canFinalizeTournament,
+  canCancelTournament,
+  canShareWhatsapp,
+  canArchiveTournament,
+  canRestoreTournament,
+  TOURNAMENT_TRANSITION_COPY,
+  TOURNAMENT_TRANSITION_SUCCESS,
+} from "../../../shared/tournaments/actions";
 import type { Tournament, SportCategory } from "@/types/database";
 
 interface TournamentDetailViewProps {
@@ -79,59 +94,9 @@ interface TournamentDetailViewProps {
   existingNewsSlug?: string | null;
 }
 
-// Mensaje de "Compartir por WhatsApp" — construido según el estado real del
-// torneo (registration_open/registration_closed/in_progress; completed y
-// cualquier otro estado nunca llegan aquí, ver canShareWhatsApp). Recibe la
-// misma `classification` ya calculada más arriba en el componente (mismo
-// computeTournamentClassification, duplas confirmadas únicamente — mismo
-// criterio ya usado por ClassificationSection/capacity.confirmed) — nunca
-// una consulta ni un cálculo paralelo. Cada bloque (descripción, premios,
-// inscripción, duplas) se omite por completo si no hay dato real, nunca
-// deja un título de sección vacío.
-function buildWhatsappShareMessage(
-  tournament: Tournament,
-  clubName: string,
-  classification: TournamentClassificationRow[],
-  tournamentUrl: string
-): string {
-  const isOpen = tournament.status === "registration_open";
-  const pairLines = classification.map((row) =>
-    tournament.status === "in_progress" ? `${pairLabel(row.entry)} — ${row.entry.points} pts` : pairLabel(row.entry)
-  );
-
-  const blocks: string[] = [];
-
-  if (isOpen) {
-    blocks.push(`Ya puedes inscribirte al nuevo torneo en ${clubName}: ${tournament.name}.`);
-    blocks.push("No te quedes por fuera.");
-  } else {
-    // registration_closed | in_progress — mismo encabezado para ambos.
-    blocks.push(`Mira cómo va el nuevo torneo en ${clubName}: ${tournament.name}.`);
-  }
-
-  if (tournament.description) blocks.push(tournament.description);
-  if (tournament.prize_description) blocks.push(`Premios:\n${tournament.prize_description}`);
-
-  if (isOpen) {
-    const feeLabel =
-      tournament.entry_fee_amount <= 0
-        ? "Gratis"
-        : new Intl.NumberFormat("es-CO", {
-            style: "currency",
-            currency: "COP",
-            maximumFractionDigits: 0,
-          }).format(tournament.entry_fee_amount);
-    blocks.push(`Inscripción: ${feeLabel}`);
-  }
-
-  if (pairLines.length > 0) {
-    blocks.push(`Duplas registradas:\n${pairLines.join("\n")}`);
-  }
-
-  blocks.push(tournamentUrl);
-
-  return blocks.join("\n\n");
-}
+// buildWhatsappShareMessage ya NO se define aquí — es
+// buildTournamentWhatsappMessage en shared/tournaments/actions.ts, la
+// misma fuente que mobile usa. Se llama más abajo, en whatsappShareHref.
 
 function formatDateTime(iso: string | null): string {
   if (!iso) return "Sin definir";
@@ -435,35 +400,20 @@ export function TournamentDetailView({
 
   const boundUpdate = updateTournament.bind(null, clubId, tournament.id, tournament.slug, clubSlug);
 
-  const canEdit =
-    isAdmin &&
-    (tournament.status === "draft" ||
-      tournament.status === "registration_open" ||
-      tournament.status === "registration_closed");
-  const canOpenRegistration = isAdmin && tournament.status === "draft";
-  // Cerrar inscripciones requiere al menos 2 duplas realmente confirmadas
-  // (nunca pendientes/rechazadas/retiradas) — con 0 o 1, el organizador
-  // solo puede mantener las inscripciones abiertas o cancelar el torneo
-  // (canCancel, sin cambios). Misma regla reforzada en el RPC.
-  const canCloseRegistration =
-    isAdmin && tournament.status === "registration_open" && capacity.confirmed >= 2;
-  const canReopenRegistration = isAdmin && tournament.status === "registration_closed";
-  const canStart = isAdmin && tournament.status === "registration_closed" && capacity.confirmed >= 1;
-  const canFinalize = isAdmin && tournament.status === "in_progress";
-  const canCancel =
-    isAdmin && ["draft", "registration_open", "registration_closed", "in_progress"].includes(tournament.status);
-  // Compartir por WhatsApp — solo mientras el torneo tiene sentido
-  // promocionar (inscripciones abiertas/cerradas o ya en curso), nunca en
-  // draft (aún no es público de facto), cancelled o completed.
-  const canShareWhatsApp =
-    isAdmin && ["registration_open", "registration_closed", "in_progress"].includes(tournament.status);
-  // Archivar — solo torneos finalizados o cancelados, y solo si aún no
-  // están archivados (nunca dos veces). Restaurar es la acción inversa,
-  // solo disponible una vez archivado. El estado deportivo (status) nunca
-  // cambia por ninguna de las dos — ver 20261020000001_tournament_archive.
-  const canArchive =
-    isAdmin && ["completed", "cancelled"].includes(tournament.status) && !tournament.archived_at;
-  const canRestore = isAdmin && !!tournament.archived_at;
+  // Cada condición ya NO se computa aquí — vive en
+  // shared/tournaments/actions.ts, la misma fuente que mobile usa (antes
+  // esta lógica solo existía como variables inline en este componente,
+  // nunca extraída/exportada, y una reconstrucción manual en mobile).
+  const canEdit = isAdmin && canEditTournament(tournament.status);
+  const canOpenRegistration = isAdmin && sharedCanOpenRegistration(tournament.status);
+  const canCloseRegistration = isAdmin && sharedCanCloseRegistration(tournament.status, capacity);
+  const canReopenRegistration = isAdmin && sharedCanReopenRegistration(tournament.status);
+  const canStart = isAdmin && canStartTournament(tournament.status, capacity);
+  const canFinalize = isAdmin && canFinalizeTournament(tournament.status);
+  const canCancel = isAdmin && canCancelTournament(tournament.status);
+  const canShareWhatsApp = isAdmin && canShareWhatsapp(tournament.status);
+  const canArchive = isAdmin && canArchiveTournament(tournament.status, tournament.archived_at);
+  const canRestore = isAdmin && canRestoreTournament(tournament.archived_at);
   const hasAnyAdminAction =
     canEdit ||
     canOpenRegistration ||
@@ -476,15 +426,14 @@ export function TournamentDetailView({
     canArchive ||
     canRestore;
 
-  const tournamentUrl = `${origin ?? ""}/${clubSlug}/tournaments/${tournament.slug}`;
-  // buildWhatsappShareMessage devuelve un string Unicode normal (emojis/
-  // tildes/símbolos monetarios/saltos de línea sin escapar), codificado UNA
-  // sola vez acá. api.whatsapp.com/send (a diferencia de wa.me/?text=, cuyo
-  // redirect puede mostrar "�" en algunos clientes) decodifica UTF-8 de
-  // forma consistente en todas las plataformas — mismo fix aplicado a
-  // ReservationShareActions.tsx/ShareNewsButtons.tsx.
+  // buildTournamentWhatsappMessage devuelve un string Unicode normal
+  // (emojis/tildes/símbolos monetarios/saltos de línea sin escapar),
+  // codificado UNA sola vez acá. api.whatsapp.com/send (a diferencia de
+  // wa.me/?text=, cuyo redirect puede mostrar "�" en algunos clientes)
+  // decodifica UTF-8 de forma consistente en todas las plataformas —
+  // mismo fix aplicado a ReservationShareActions.tsx/ShareNewsButtons.tsx.
   const whatsappShareHref = `https://api.whatsapp.com/send?text=${encodeURIComponent(
-    buildWhatsappShareMessage(tournament, clubName, classification, tournamentUrl)
+    buildTournamentWhatsappMessage({ clubName, clubSlug, tournament, classification, siteUrl: origin ?? "" })
   )}`;
 
   function handleEditSuccess(updated: Tournament | undefined) {
@@ -516,9 +465,7 @@ export function TournamentDetailView({
           return;
         }
         setConfirming(null);
-        setToastMessage(
-          result.alreadyFinalized ? "Este torneo ya estaba finalizado." : "Torneo finalizado y puntos aplicados al ranking."
-        );
+        setToastMessage(result.alreadyFinalized ? "Este torneo ya estaba finalizado." : TOURNAMENT_TRANSITION_SUCCESS.finalize);
         router.refresh();
         return;
       }
@@ -547,86 +494,26 @@ export function TournamentDetailView({
 
       if (result.tournament) setTournament(result.tournament);
       setConfirming(null);
-      setToastMessage(
-        confirming === "open"
-          ? "Inscripciones abiertas correctamente"
-          : confirming === "close"
-          ? "Inscripciones cerradas correctamente"
-          : confirming === "reopen"
-          ? "Inscripciones reabiertas correctamente"
-          : confirming === "start"
-          ? "Torneo iniciado — ¡en curso!"
-          : confirming === "archive"
-          ? "Torneo archivado correctamente"
-          : confirming === "restore"
-          ? "Torneo restaurado correctamente"
-          : "Torneo cancelado correctamente"
-      );
+      setToastMessage(TOURNAMENT_TRANSITION_SUCCESS[confirming]);
       router.refresh();
     });
   }
 
+  // Copy/gating ya NO se define aquí — TOURNAMENT_TRANSITION_COPY vive en
+  // shared/tournaments/actions.ts (misma fuente que mobile usa); solo se
+  // adapta `destructive: boolean` al `confirmVariant` que ConfirmDialog
+  // ya esperaba.
   const confirmDialogConfig: Record<Exclude<PendingTransition, null>, {
     title: string;
     message: string;
     confirmLabel: string;
     confirmVariant: "primary" | "danger";
-  }> = {
-    open: {
-      title: "Abrir inscripciones",
-      message:
-        "Al abrir las inscripciones, la categoría, el número máximo de duplas y la fecha de apertura ya no podrán modificarse.",
-      confirmLabel: "Abrir inscripciones",
-      confirmVariant: "primary",
-    },
-    close: {
-      title: "Cerrar inscripciones",
-      message: "Al cerrar las inscripciones ya no se podrán registrar nuevas duplas hasta que las reabras.",
-      confirmLabel: "Cerrar inscripciones",
-      confirmVariant: "primary",
-    },
-    reopen: {
-      title: "Reabrir inscripciones",
-      message: "Los jugadores elegibles podrán volver a inscribirse. Las solicitudes ya rechazadas no se reactivan.",
-      confirmLabel: "Reabrir inscripciones",
-      confirmVariant: "primary",
-    },
-    start: {
-      title: "Iniciar torneo",
-      message:
-        'Al iniciar el torneo cambiará su estado a "En curso".\n\n' +
-        "Los partidos se juegan normalmente en la cancha y el club es libre de organizarlos como prefiera.\n\n" +
-        "Al finalizar el torneo, Mi Pádel Club registrará únicamente la clasificación final de las duplas para actualizar el ranking y generar automáticamente la noticia del torneo.",
-      confirmLabel: "Iniciar torneo",
-      confirmVariant: "primary",
-    },
-    finalize: {
-      title: "Finalizar torneo",
-      message:
-        "La clasificación actual quedará congelada. Cada integrante final de cada dupla recibirá la cantidad completa de puntos de su dupla en el ranking (no se dividen entre los dos). Esta acción no se puede deshacer ni se duplica si se ejecuta más de una vez.",
-      confirmLabel: "Finalizar torneo",
-      confirmVariant: "danger",
-    },
-    cancel: {
-      title: "¿Cancelar este torneo?",
-      message: "Esta acción conservará el torneo como historial, pero no podrá continuar su operación.",
-      confirmLabel: "Cancelar torneo",
-      confirmVariant: "danger",
-    },
-    archive: {
-      title: "Archivar torneo",
-      message:
-        "El torneo se moverá a la pestaña Archivados y dejará de mezclarse con los demás torneos. Conserva toda su información e historial — puedes restaurarlo cuando quieras.",
-      confirmLabel: "Archivar torneo",
-      confirmVariant: "primary",
-    },
-    restore: {
-      title: "Restaurar torneo",
-      message: "El torneo volverá a aparecer en la pestaña correspondiente a su estado actual.",
-      confirmLabel: "Restaurar torneo",
-      confirmVariant: "primary",
-    },
-  };
+  }> = Object.fromEntries(
+    Object.entries(TOURNAMENT_TRANSITION_COPY).map(([key, copy]) => [
+      key,
+      { title: copy.title, message: copy.message, confirmLabel: copy.confirmLabel, confirmVariant: copy.destructive ? "danger" : "primary" },
+    ])
+  ) as Record<Exclude<PendingTransition, null>, { title: string; message: string; confirmLabel: string; confirmVariant: "primary" | "danger" }>;
 
   return (
     <>

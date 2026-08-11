@@ -2,10 +2,11 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getEffectiveHour, timeToMinutes as sharedTimeToMinutes } from "@/lib/operatingHours";
 import { validateRejectionInput } from "@/lib/reservationRejection";
 import { mapUpdateReservationError } from "@/lib/reservationErrors";
 import { resolveClubAccess } from "@/lib/clubAccess";
+import { getAvailableSlots as sharedGetAvailableSlots, type AvailableSlotsResult } from "../../../../../../shared/reservations/availability";
+import { syncReservationPlayers } from "../../../../../../shared/reservations/playerSync";
 
 export type ReservationFormState = {
   error?: string;
@@ -137,19 +138,21 @@ export async function createReservation(
 }
 
 // ─── updateReservation ────────────────────────────────────────────────────────
-// Routed through the centralized update_reservation RPC (Phase 7,
-// 20260814000001) — the direct .update() this action used to perform
-// (plus its own checkOperatingHours/checkOverlap calls) is gone; every one
-// of those rules is now re-validated inside the RPC itself, which also
-// re-derives OWNER/ADMIN authorization from auth.uid() instead of trusting
-// requireAdminRole alone (kept here only as the same early, friendly gate
-// every other action in this file already uses).
-//
-// Scope of this phase is exactly court/cancha, fecha, hora de inicio,
-// duración — type, title, notes, and participants are deliberately no
-// longer editable through this action (ReservationForm disables those
-// inputs while editingReservationId is set); reservation_players is never
-// touched here anymore either.
+// Routed through update_reservation_admin (20261106000001) — a real
+// product-scope expansion, not a bug fix: OWNER/ADMIN editing was
+// deliberately restricted to court/fecha/hora/duración during the MVP
+// (Phase 7, 20260814000001); this action now also saves tipo/título/notas
+// and syncs reservation_players (agregar/quitar/conservar via
+// shared/reservations/playerSync.ts, the same helper mobile's
+// updateReservationAdmin calls — one implementation, not two). This action
+// is exclusively OWNER/ADMIN (every caller — ReservationTicketPanel,
+// ReservationModal, admin [id]/page.tsx, and ReservationShareView's
+// isOwnerOrAdmin-gated editing branch — is already gated to that role), so
+// switching it to the OWNER/ADMIN-only RPC never touches PLAYER's own edit
+// flow (a completely separate action/RPC, updateMyReservation/
+// update_reservation in src/app/(app)/[club]/reservations/actions.ts,
+// left untouched). Never changes creator, club, status, price, or
+// is_open/closed_reason (still solely set_reservation_open_status's job).
 export async function updateReservation(
   clubId: string,
   clubSlug: string,
@@ -161,21 +164,46 @@ export async function updateReservation(
   const { supabase, error: authError } = await requireAdminRole(clubId);
   if (authError || !supabase) return { error: authError! };
 
-  const { courtId, date, startTime, durationMinutes } = parseFormData(formData);
+  const { courtId, date, startTime, durationMinutes, type, title, notes, playerIds } = parseFormData(formData);
 
   if (!courtId || !date || !startTime) return { error: "Datos incompletos." };
+  if (type === "block" && !title) return { error: "Un bloqueo necesita un título." };
 
-  const { error } = await supabase.rpc("update_reservation", {
+  const { error } = await supabase.rpc("update_reservation_admin", {
     p_reservation_id: reservationId,
     p_court_id: courtId,
     p_date: date,
     p_start_time: startTime,
     p_duration_minutes: durationMinutes,
+    p_type: type,
+    p_title: title,
+    p_notes: notes,
   });
 
   if (error) {
-    console.error("[updateReservation] update_reservation failed:", { reservationId, clubId, supabaseError: error });
+    console.error("[updateReservation] update_reservation_admin failed:", { reservationId, clubId, supabaseError: error });
     return { error: mapUpdateReservationError(error) };
+  }
+
+  const syncResult = await syncReservationPlayers(supabase, reservationId, playerIds);
+  if (syncResult.error) {
+    console.error("[updateReservation] syncReservationPlayers failed:", { reservationId, clubId, error: syncResult.error });
+    return { error: syncResult.error };
+  }
+
+  // Best-effort, same convention as every other notify_* call in this
+  // module: the reservation is already saved and must never be rolled
+  // back over a notification-only failure. notify_reservation_created_for_players
+  // is idempotent (NOT EXISTS guard per player+reservation), so it only
+  // ever reaches the players actually added just now — someone who was
+  // already linked, or who got removed, is never re-notified here.
+  if (syncResult.added.length > 0) {
+    const { error: playersNotifyError } = await supabase.rpc("notify_reservation_created_for_players", {
+      p_reservation_id: reservationId,
+    });
+    if (playersNotifyError) {
+      console.error("[updateReservation] notify_reservation_created_for_players failed:", { reservationId, playersNotifyError });
+    }
   }
 
   const { error: notifyError } = await supabase.rpc("notify_reservation_updated", {
@@ -190,21 +218,15 @@ export async function updateReservation(
 }
 
 // ─── getAvailableSlots ────────────────────────────────────────────────────────
-
-function minsToTime(m: number): string {
-  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-}
-
-export type AvailableSlotsResult = {
-  slots: string[];
-  closed: boolean;
-  // Present whenever the day is open — lets a caller rebuild the same day
-  // grid (buildDayGrid in CourtAvailabilityTimeline) without a second
-  // operating-hours query. Existing callers that only destructure
-  // {slots, closed} are unaffected.
-  openMins?: number;
-  closeMins?: number;
-};
+// El cómputo real ya NO vive aquí — está en shared/reservations/availability.ts
+// (getAvailableSlots), la misma función que mobile llama directamente
+// (ver mobile/src/lib/reservationEdit.ts). Antes WEB y mobile tenían dos
+// implementaciones independientes del mismo algoritmo — ambas ya
+// corregidas para usar getBogotaNow, pero seguían siendo dos copias que
+// podían volver a divergir. Esta Server Action ahora solo aporta lo que
+// es específico de Next.js: el chequeo de sesión (RLS es la autoridad
+// real de todas formas, pero un caller sin sesión nunca debería ni
+// intentar la consulta).
 
 export async function getAvailableSlots(
   clubId: string,
@@ -219,70 +241,7 @@ export async function getAvailableSlots(
   } = await supabase.auth.getUser();
   if (!user) return { slots: [], closed: false };
 
-  // Effective operating hours for this day
-  const [y, mo, d] = date.split("-").map(Number);
-  const dayOfWeek = new Date(y, mo - 1, d).getDay();
-
-  const { data: ohRow } = await supabase
-    .from("club_operating_hours")
-    .select("day_of_week, is_open, opens_at, closes_at")
-    .eq("club_id", clubId)
-    .eq("day_of_week", dayOfWeek)
-    .maybeSingle();
-
-  const hours = getEffectiveHour(
-    ohRow
-      ? [{ day_of_week: dayOfWeek, is_open: ohRow.is_open, opens_at: ohRow.opens_at, closes_at: ohRow.closes_at }]
-      : [],
-    dayOfWeek
-  );
-
-  if (!hours.is_open || !hours.opens_at || !hours.closes_at) {
-    return { slots: [], closed: true };
-  }
-
-  const openMins = sharedTimeToMinutes(hours.opens_at);
-  const closeMins = sharedTimeToMinutes(hours.closes_at);
-
-  // Base 30-min aligned slots; slot is valid only if full duration fits before close
-  const baseSlots: string[] = [];
-  for (let t = openMins; t + durationMinutes <= closeMins; t += 30) {
-    baseSlots.push(minsToTime(t));
-  }
-
-  // Filter past slots when date is today (server-side best-effort)
-  const now = new Date();
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  const futureSlots =
-    date === todayStr
-      ? baseSlots.filter((s) => sharedTimeToMinutes(s) > now.getHours() * 60 + now.getMinutes())
-      : baseSlots;
-
-  // Fetch existing confirmed reservations for conflict detection
-  let resQuery = supabase
-    .from("reservations")
-    .select("start_time, duration_minutes")
-    .eq("club_id", clubId)
-    .eq("court_id", courtId)
-    .eq("date", date)
-    .eq("status", "confirmed");
-
-  if (excludeReservationId) resQuery = resQuery.neq("id", excludeReservationId);
-
-  const { data: existing } = await resQuery;
-
-  // Slot is blocked if the full window [slotStart, slotStart+duration) overlaps any existing reservation
-  const available = futureSlots.filter((slot) => {
-    const slotStart = sharedTimeToMinutes(slot);
-    const slotEnd = slotStart + durationMinutes;
-    return !(existing ?? []).some((r) => {
-      const rStart = sharedTimeToMinutes(r.start_time);
-      const rEnd = rStart + r.duration_minutes;
-      return slotStart < rEnd && slotEnd > rStart;
-    });
-  });
-
-  return { slots: available, closed: false, openMins, closeMins };
+  return sharedGetAvailableSlots(supabase, clubId, courtId, date, durationMinutes, excludeReservationId);
 }
 
 // ─── getReservationForEdit ────────────────────────────────────────────────────

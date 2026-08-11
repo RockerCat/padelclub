@@ -29,6 +29,7 @@ import {
 } from "@/app/(app)/[club]/admin/reservations/actions";
 import type { ReservationEditData } from "@/app/(app)/[club]/admin/reservations/actions";
 import type { RejectionReasonCode } from "@/lib/reservationRejection";
+import { getReservationAdminEditPolicyNow } from "../../../../../../shared/reservations/editPolicy";
 
 // Página sencilla de detalle para la URL compartible (sección 5/6 del
 // spec) — reutiliza request_to_join_reservation/set_reservation_open_status/
@@ -310,6 +311,18 @@ export function ReservationShareView({
     });
   }
 
+  // Política de edición por estado temporal (shared/reservations/editPolicy.ts)
+  // — misma regla que ReservationTicketPanel ya aplica, para que un
+  // OWNER/ADMIN vea exactamente el mismo conjunto de acciones sin importar
+  // si llegó por la Agenda o por este enlace compartible. Solo se calcula
+  // (y solo se aplica) cuando isOwnerOrAdmin es real: el creador PLAYER
+  // también puede llegar a can_manage/showManage más abajo, y ese flujo no
+  // se toca — null acá hace que cada `!isOwnerOrAdmin || editPolicy?.…`
+  // de abajo se resuelva siempre a "mostrar" para él, sin excepción.
+  const editPolicy = isOwnerOrAdmin
+    ? getReservationAdminEditPolicyNow(reservation.date, reservation.start_time, reservation.duration_minutes)
+    : null;
+
   const dateLabel = formatDate(reservation.date);
   const timeRange = `${fmt(reservation.start_time)} – ${endTime(reservation.start_time, reservation.duration_minutes)}`;
   const statusCfg = STATUS_LABEL[reservation.status] ?? STATUS_LABEL.pending;
@@ -385,8 +398,10 @@ export function ReservationShareView({
   const showManage = can_manage && reservation.status === "confirmed";
   // El switch "Aceptar solicitudes" vive dentro del bloque de la columna
   // derecha — lo único que sigue gatillando la sección de acciones de abajo
-  // por este lado es la lista de solicitudes pendientes en sí.
-  const showPendingRequests = showManage && pendingRequests.length > 0;
+  // por este lado es la lista de solicitudes pendientes en sí. Mismo gate
+  // que el switch de arriba: para OWNER/ADMIN, una reserva ya pasada oculta
+  // la gestión de solicitudes; el creador PLAYER nunca se ve afectado.
+  const showPendingRequests = showManage && pendingRequests.length > 0 && (!isOwnerOrAdmin || editPolicy?.actions.manageJoinRequests);
 
   // Acciones exclusivas de OWNER/ADMIN real (nunca del creador PLAYER) —
   // mismo alcance que requireAdminRole en admin/reservations/actions.ts.
@@ -568,8 +583,11 @@ export function ReservationShareView({
             <Row label="Cupo" value={`Jugadores ${player_count} / 4`} />
 
             {/* Control de solicitudes — mismo switch/handler que antes,
-                reubicado dentro del bloque de la columna derecha. */}
-            {showManage && (
+                reubicado dentro del bloque de la columna derecha. Para
+                OWNER/ADMIN, una reserva ya pasada oculta el switch (mismo
+                criterio que ReservationTicketPanel); el creador PLAYER
+                nunca se ve afectado por esta condición adicional. */}
+            {showManage && (!isOwnerOrAdmin || editPolicy?.actions.toggleOpen) && (
               <div className="flex flex-col gap-2 py-3 border-b border-white/5 last:border-0">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex flex-col pr-2">
@@ -786,62 +804,69 @@ export function ReservationShareView({
                 ReservationTicketPanel: addReservationExtraTime +
                 AddExtraTimeModal, cancelReservation, y el modo "editing" de
                 arriba para Editar (mismo ReservationForm/updateReservation). */}
-            {showConfirmedAdminActions && editData && (
-              <div className="flex flex-col gap-2">
-                <button
-                  type="button"
-                  onClick={() => setExtraTimeModalOpen(true)}
-                  className="flex items-center justify-center gap-1.5 h-10 rounded-xl border border-white/15 text-sm font-medium text-white/90 hover:border-white/30 hover:bg-white/5 transition-colors"
-                >
-                  <Timer className="w-3.5 h-3.5" />
-                  Agregar tiempo extra
-                </button>
+            {showConfirmedAdminActions && editData && (() => {
+              const actions = editPolicy?.actions;
+              return (
+                <div className="flex flex-col gap-2">
+                  {actions?.addExtraTime && (
+                    <button
+                      type="button"
+                      onClick={() => setExtraTimeModalOpen(true)}
+                      className="flex items-center justify-center gap-1.5 h-10 rounded-xl border border-white/15 text-sm font-medium text-white/90 hover:border-white/30 hover:bg-white/5 transition-colors"
+                    >
+                      <Timer className="w-3.5 h-3.5" />
+                      Agregar tiempo extra
+                    </button>
+                  )}
 
-                {confirmingCancel ? (
-                  <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4">
-                    <p className="text-sm text-white font-medium mb-1">¿Cancelar esta reserva?</p>
-                    <p className="text-xs text-brand-muted mb-3">Esta acción liberará el horario de la cancha.</p>
+                  {confirmingCancel && actions?.cancel ? (
+                    <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4">
+                      <p className="text-sm text-white font-medium mb-1">¿Cancelar esta reserva?</p>
+                      <p className="text-xs text-brand-muted mb-3">Esta acción liberará el horario de la cancha.</p>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setConfirmingCancel(false)}
+                          disabled={cancelPending}
+                          className="flex-1 h-9 rounded-lg border border-white/15 text-xs text-brand-muted hover:text-white transition-colors disabled:opacity-40"
+                        >
+                          Volver
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCancelConfirm}
+                          disabled={cancelPending}
+                          className="flex-1 h-9 rounded-lg border border-red-500/30 bg-red-500/10 text-xs font-medium text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-40"
+                        >
+                          {cancelPending ? "Cancelando…" : "Confirmar"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
                     <div className="flex gap-2">
+                      {actions?.cancel && (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmingCancel(true)}
+                          className="flex-1 h-10 rounded-xl border border-red-500/20 text-sm font-medium text-red-400 hover:bg-red-500/10 hover:border-red-500/40 transition-colors flex items-center justify-center gap-1.5"
+                        >
+                          <XCircle className="w-3.5 h-3.5" />
+                          Cancelar
+                        </button>
+                      )}
                       <button
                         type="button"
-                        onClick={() => setConfirmingCancel(false)}
-                        disabled={cancelPending}
-                        className="flex-1 h-9 rounded-lg border border-white/15 text-xs text-brand-muted hover:text-white transition-colors disabled:opacity-40"
+                        onClick={() => setEditing(true)}
+                        className="flex-1 h-10 rounded-xl bg-brand-primary text-brand-bg text-sm font-semibold hover:brightness-110 transition-all flex items-center justify-center gap-1.5"
                       >
-                        Volver
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleCancelConfirm}
-                        disabled={cancelPending}
-                        className="flex-1 h-9 rounded-lg border border-red-500/30 bg-red-500/10 text-xs font-medium text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-40"
-                      >
-                        {cancelPending ? "Cancelando…" : "Confirmar"}
+                        <Pencil className="w-3.5 h-3.5" />
+                        Editar
                       </button>
                     </div>
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setConfirmingCancel(true)}
-                      className="flex-1 h-10 rounded-xl border border-red-500/20 text-sm font-medium text-red-400 hover:bg-red-500/10 hover:border-red-500/40 transition-colors flex items-center justify-center gap-1.5"
-                    >
-                      <XCircle className="w-3.5 h-3.5" />
-                      Cancelar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditing(true)}
-                      className="flex-1 h-10 rounded-xl bg-brand-primary text-brand-bg text-sm font-semibold hover:brightness-110 transition-all flex items-center justify-center gap-1.5"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                      Editar
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
 

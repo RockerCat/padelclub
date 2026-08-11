@@ -1,22 +1,19 @@
-export type OperatingHour = {
-  day_of_week: number; // 0=Dom, 1=Lun, 2=Mar, 3=Mié, 4=Jue, 5=Vie, 6=Sáb
-  is_open: boolean;
-  opens_at: string | null;  // "HH:MM" or "HH:MM:SS"
-  closes_at: string | null;
-};
+// OperatingHour/DAY_NAMES/DEFAULT_OPERATING_HOURS/timeToMinutes/
+// getEffectiveHour ya NO se definen aquí — viven en
+// shared/reservations/operatingHours.ts (la misma fuente que
+// courtAvailability.ts y mobile ahora reutilizan), re-exportados bajo
+// estos mismos nombres para que ningún import existente de
+// "@/lib/operatingHours" tenga que cambiar. Todo lo demás en este
+// archivo (buildScheduleSummary, generateTimeOptions,
+// validateOperatingHours, computeWeekly*/computeAvailableMinutes*,
+// validateAgainstOperatingHours) es específico de Club Settings/
+// Estadísticas — fuera del alcance de la migración de Reservaciones a
+// shared/, se queda aquí tal cual, solo que ahora usa el timeToMinutes/
+// getEffectiveHour compartidos en vez de una copia local.
+export { type OperatingHour, DAY_NAMES, DEFAULT_OPERATING_HOURS, timeToMinutes, getEffectiveHour } from "../../shared/reservations/operatingHours";
 
-export const DAY_NAMES = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
-
-// Defaults applied when a club has no configured hours for a day
-export const DEFAULT_OPERATING_HOURS: OperatingHour[] = [
-  { day_of_week: 0, is_open: false, opens_at: null,    closes_at: null    }, // Domingo
-  { day_of_week: 1, is_open: true,  opens_at: "06:00", closes_at: "22:00" }, // Lunes
-  { day_of_week: 2, is_open: true,  opens_at: "06:00", closes_at: "22:00" }, // Martes
-  { day_of_week: 3, is_open: true,  opens_at: "06:00", closes_at: "22:00" }, // Miércoles
-  { day_of_week: 4, is_open: true,  opens_at: "06:00", closes_at: "22:00" }, // Jueves
-  { day_of_week: 5, is_open: true,  opens_at: "06:00", closes_at: "22:00" }, // Viernes
-  { day_of_week: 6, is_open: true,  opens_at: "08:00", closes_at: "18:00" }, // Sábado
-];
+import type { OperatingHour } from "../../shared/reservations/operatingHours";
+import { DAY_NAMES, DEFAULT_OPERATING_HOURS, timeToMinutes, getEffectiveHour } from "../../shared/reservations/operatingHours";
 
 export type ScheduleGroup = { label: string; timeRange: string };
 
@@ -50,11 +47,6 @@ export function buildScheduleSummary(hours: OperatingHour[]): ScheduleGroup[] {
   }));
 }
 
-export function timeToMinutes(t: string): number {
-  const [h, m] = t.slice(0, 5).split(":").map(Number);
-  return h * 60 + m;
-}
-
 // 24h-only "HH:MM" options in 30-minute steps, e.g. ["00:00","00:30",...,"23:30"].
 // Used by the operating hours <select> pickers so opening/closing times are never
 // entered through a locale-dependent native time input (no AM/PM ambiguity).
@@ -84,13 +76,6 @@ export function validateOperatingHours(hours: OperatingHour[]): Map<number, stri
     }
   }
   return errors;
-}
-
-export function getEffectiveHour(dbHours: OperatingHour[], dayOfWeek: number): OperatingHour {
-  return (
-    dbHours.find((h) => h.day_of_week === dayOfWeek) ??
-    DEFAULT_OPERATING_HOURS.find((h) => h.day_of_week === dayOfWeek)!
-  );
 }
 
 // Total available minutes across a week.

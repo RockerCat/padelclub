@@ -5,6 +5,13 @@ import { useRouter } from "next/navigation";
 import { Plus, Trophy } from "lucide-react";
 import { TournamentCard } from "./TournamentCard";
 import { CreateTournamentModal } from "./CreateTournamentModal";
+import {
+  type TabKey,
+  ADMIN_TAB_ORDER,
+  PLAYER_TAB_ORDER,
+  tournamentsForTab,
+  resolveDefaultTab,
+} from "../../../../../../shared/tournaments/tabs";
 import type { Tournament, SportCategory } from "@/types/database";
 
 interface TournamentsGridProps {
@@ -23,54 +30,6 @@ interface TournamentsGridProps {
   // tarjetas, navegación al detalle) depende del rol: es exactamente la
   // misma lógica para los tres.
   role: "OWNER" | "ADMIN" | "PLAYER";
-}
-
-// "archived" is not a real tournaments.status value — it's orthogonal
-// (archived_at IS NOT NULL), so it gets its own synthetic tab key here,
-// filtered differently below (see tournamentsForTab). Every other key is
-// a real status value, always filtered with `!t.archived_at` too, so an
-// archived tournament — regardless of its underlying status — can never
-// also show up in one of the six status tabs (no duplicates).
-type TabKey =
-  | "draft"
-  | "registration_open"
-  | "registration_closed"
-  | "in_progress"
-  | "completed"
-  | "cancelled"
-  | "archived";
-
-const ADMIN_TAB_ORDER: { key: TabKey; label: string }[] = [
-  { key: "draft", label: "Borradores" },
-  { key: "registration_open", label: "Inscripciones abiertas" },
-  { key: "registration_closed", label: "Inscripciones cerradas" },
-  { key: "in_progress", label: "En vivo" },
-  { key: "completed", label: "Finalizados" },
-  { key: "cancelled", label: "Cancelados" },
-  { key: "archived", label: "Archivados" },
-];
-
-// PLAYER nunca ve Borradores (un torneo sin publicar) ni Archivados (un
-// torneo que el club retiró de su operación normal) — mismo orden que el
-// de OWNER/ADMIN para el resto, solo con esos dos tabs quitados.
-const PLAYER_TAB_ORDER: { key: TabKey; label: string }[] = ADMIN_TAB_ORDER.filter(
-  ({ key }) => key !== "draft" && key !== "archived"
-);
-
-function tournamentsForTab(tournaments: Tournament[], key: TabKey): Tournament[] {
-  return tournaments.filter((t) => (key === "archived" ? !!t.archived_at : t.status === key && !t.archived_at));
-}
-
-// En vivo gana siempre que exista al menos un torneo en ese estado; si
-// no, el primer tab (en el orden dado) que tenga al menos un torneo.
-// Con el club totalmente vacío no importa cuál quede activo (no hay nada
-// que mostrar), así que cae en el primero por simplicidad.
-function resolveDefaultTab(tournaments: Tournament[], tabOrder: { key: TabKey; label: string }[]): TabKey {
-  if (tournamentsForTab(tournaments, "in_progress").length > 0) return "in_progress";
-  for (const { key } of tabOrder) {
-    if (tournamentsForTab(tournaments, key).length > 0) return key;
-  }
-  return tabOrder[0].key;
 }
 
 export function TournamentsGrid({
