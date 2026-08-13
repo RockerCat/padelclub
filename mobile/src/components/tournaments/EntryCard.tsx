@@ -27,12 +27,14 @@ function formatDate(iso: string): string {
 // RLS ocultó la fila), mismo footer "Registrada el {fecha}" + acciones.
 export function EntryCard({
   entry,
+  isOwn,
   actions,
   avatarsClickable,
   onSelectMember,
   loadingMemberId,
 }: {
   entry: TournamentEntryWithMembers;
+  isOwn?: boolean;
   actions?: ReactNode;
   avatarsClickable?: boolean;
   onSelectMember?: (clubMemberId: string) => void;
@@ -53,6 +55,7 @@ export function EntryCard({
             {ENTRY_STATUS_LABEL[entry.status] ?? entry.status}
           </Text>
           {entry.status === "confirmed" && <Text style={styles.points}>{entry.points} pts</Text>}
+          {isOwn && <Text style={styles.ownLabel}>Tu dupla</Text>}
         </View>
       </View>
 
@@ -133,6 +136,7 @@ const styles = StyleSheet.create({
   placeholderText: { fontSize: 13, color: theme.colors.muted, fontStyle: "italic" },
   statusBadge: { fontSize: 11, fontWeight: "700" },
   points: { fontSize: 10, color: theme.colors.muted },
+  ownLabel: { fontSize: 10, fontWeight: "500", color: theme.colors.muted },
   rejectionBox: {
     borderRadius: 10,
     borderWidth: 1,

@@ -5,6 +5,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Camera, Globe, ImageIcon, Lock, MessageCircle, Pencil, Plus } from "lucide-react-native";
 import { supabase } from "../lib/supabase";
+import { useAuth } from "../contexts/AuthContext";
 import { useClub } from "../contexts/ClubContext";
 import { SITE_URL } from "../lib/reservationShare";
 import { getMemberById, type MemberRow, type MemberSportState } from "../lib/players";
@@ -60,24 +61,33 @@ function formatDateTime(iso: string | null): string {
 // "danger". Ver TournamentDetailView.tsx (app web).
 const PRIMARY_TRANSITIONS = new Set<TournamentTransitionKey>(["open", "close", "reopen", "start", "finalize"]);
 
-// PARIDAD FUNCIONAL de TournamentDetailView.tsx (app web, rama OWNER/ADMIN)
-// — mismas 8 transiciones de ciclo de vida (Alert.alert nativo como
-// equivalente del ConfirmDialog compartido, mismo copy exacto), mismo
-// Compartir por WhatsApp, Editar (TournamentFormModal en modo edición),
-// Inscripciones (EntriesSection: registrar/confirmar/rechazar/retirar),
-// duplas retiradas, Clasificación (puntos editables solo in_progress +
-// Cambiar jugadores), Podio (completed, agrupado por posición real, nunca
-// por índice), portada (subir/reemplazar en cualquier estado + lightbox).
-// Único subflujo deliberadamente fuera de alcance: "Generar noticia"/"Ver
-// noticia" — depende enteramente del módulo Noticias, que no existe en
-// mobile todavía (ver reporte).
+// PARIDAD FUNCIONAL de TournamentDetailView.tsx (app web) — una sola
+// pantalla para los 3 roles, igual que la web: OWNER/ADMIN conserva las 8
+// transiciones de ciclo de vida (Alert.alert nativo como equivalente del
+// ConfirmDialog compartido, mismo copy exacto), Compartir por WhatsApp,
+// Editar, Inscripciones (registrar cualquier dupla/confirmar/rechazar/
+// retirar duplas confirmadas), duplas retiradas, Clasificación editable
+// (puntos + Cambiar jugadores) y edición de portada. PLAYER ve
+// exactamente el equivalente WEB PLAYER: inscripción propia/Inscribirme,
+// retirar su propia dupla, lista de duplas confirmadas en solo lectura,
+// Clasificación/Podio en solo lectura (avatares no clickeables — el
+// modal "Miembro del club" sigue siendo exclusivo de OWNER/ADMIN, ver
+// TournamentDetailView.tsx), portada visible pero sin ningún control de
+// edición, y nunca Editar/Compartir/transiciones/duplas retiradas —
+// ninguno de los dos roles comparte capacidades del otro. Único subflujo
+// deliberadamente fuera de alcance para ambos roles: "Generar noticia"/
+// "Ver noticia" — depende enteramente del módulo Noticias, que no existe
+// en mobile todavía (ver reporte).
 export function TournamentDetailScreen({ route }: Props) {
   const { tournamentId } = route.params;
-  const { club } = useClub();
+  const { club, role, clubMemberId, identity } = useClub();
+  const { session } = useAuth();
+  const isAdmin = role === "OWNER" || role === "ADMIN";
 
   const [tournament, setTournament] = useState<Tournament | null | undefined>(undefined);
   const [entries, setEntries] = useState<TournamentEntryWithMembers[]>([]);
   const [categories, setCategories] = useState<SportCategoryOption[]>([]);
+  const [ownCategory, setOwnCategory] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [editing, setEditing] = useState(false);
@@ -113,6 +123,22 @@ export function TournamentDetailScreen({ route }: Props) {
     load();
   }, [load]);
 
+  // Categoría propia — únicamente para el gate de elegibilidad de
+  // inscripción de PLAYER (ver EntriesSection). Mismo RPC/misma forma que
+  // TournamentDetailPage (app web); OWNER/ADMIN nunca se autoinscriben, así
+  // que esta consulta ni siquiera corre para ellos.
+  useEffect(() => {
+    if (isAdmin || !club || !clubMemberId) return;
+    let cancelled = false;
+    supabase.rpc("get_club_member_sport_state", { p_club_id: club.id, p_club_member_id: clubMemberId }).then(({ data }) => {
+      if (cancelled) return;
+      setOwnCategory(data?.[0]?.category ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin, club, clubMemberId]);
+
   // Clasificación/inscripciones no deben quedar obsoletas mientras se ve
   // un torneo en_curso — equivalente a la re-suscripción por
   // visibilidad/foco de TournamentDetailView.tsx (router.refresh()
@@ -126,10 +152,15 @@ export function TournamentDetailScreen({ route }: Props) {
     }, [tournamentId])
   );
 
-  async function handleSelectMember(clubMemberId: string) {
-    if (!club) return;
-    setLoadingMemberId(clubMemberId);
-    const result = await getMemberById(supabase, club.id, clubMemberId);
+  // "Miembro del club" es exclusivo de OWNER/ADMIN (ver
+  // TournamentDetailView.tsx, app web — el modal no tiene modo de solo
+  // lectura para PLAYER todavía). avatarsClickable ya queda en false para
+  // PLAYER en cada sección de abajo, así que esto nunca se dispara desde
+  // la UI — este guard es solo defensa adicional, nunca la única barrera.
+  async function handleSelectMember(memberId: string) {
+    if (!club || !isAdmin) return;
+    setLoadingMemberId(memberId);
+    const result = await getMemberById(supabase, club.id, memberId);
     setLoadingMemberId(null);
     if (!result) return;
     setSelectedMember(result.member);
@@ -220,9 +251,14 @@ export function TournamentDetailScreen({ route }: Props) {
   const podiumRows = classification.filter((r) => r.position <= 3);
   const isInProgress = tournament.status === "in_progress";
   const isCompleted = tournament.status === "completed";
-  const transitions = availableTransitions(tournament, capacity);
-  const showEdit = canEditTournament(tournament.status);
-  const showShare = canShareWhatsapp(tournament.status);
+  // Las 8 transiciones de ciclo de vida, Editar y Compartir por WhatsApp
+  // son EXCLUSIVAS de OWNER/ADMIN en la web (ver TournamentDetailView.tsx:
+  // canEdit/canShareWhatsApp/canOpenRegistration/etc. siempre parten de
+  // `isAdmin &&`) — PLAYER nunca ve ninguna, aunque el status del torneo
+  // por sí solo las habilitaría.
+  const transitions = isAdmin ? availableTransitions(tournament, capacity) : [];
+  const showEdit = isAdmin && canEditTournament(tournament.status);
+  const showShare = isAdmin && canShareWhatsapp(tournament.status);
 
   // Mismos campos exactos, mismo orden que infoFields en
   // TournamentDetailView.tsx (app web) — categoría/cupo/inscripción/
@@ -259,17 +295,20 @@ export function TournamentDetailScreen({ route }: Props) {
   );
 
   // Portada — aspect-[3/4] (retrato, como un flyer de torneo), igual que
-  // WEB. Ícono de cámara superpuesto solo cuando ya hay portada (editar);
-  // sin portada, todo el placeholder discontinuo es el botón para
-  // agregarla.
-  const coverBlock = (
+  // WEB. Ícono de cámara superpuesto y placeholder "Agregar portada" son
+  // exclusivos de OWNER/ADMIN (ver TournamentDetailView.tsx:
+  // `(tournament.cover_image_url || isAdmin)`) — un PLAYER sin portada
+  // simplemente no ve nada, nunca un botón para crear una.
+  const coverBlock = (tournament.cover_image_url || isAdmin) && (
     <View>
       {tournament.cover_image_url ? (
         <TouchableOpacity onPress={() => setPreviewOpen(true)} activeOpacity={0.9}>
           <Image source={{ uri: tournament.cover_image_url }} style={styles.cover} />
-          <TouchableOpacity style={styles.coverEditButton} onPress={() => setEditingCover(true)} hitSlop={6}>
-            <Camera width={16} height={16} color={theme.colors.white} />
-          </TouchableOpacity>
+          {isAdmin && (
+            <TouchableOpacity style={styles.coverEditButton} onPress={() => setEditingCover(true)} hitSlop={6}>
+              <Camera width={16} height={16} color={theme.colors.white} />
+            </TouchableOpacity>
+          )}
         </TouchableOpacity>
       ) : (
         <TouchableOpacity style={styles.coverPlaceholder} onPress={() => setEditingCover(true)} activeOpacity={0.85}>
@@ -286,8 +325,14 @@ export function TournamentDetailScreen({ route }: Props) {
       tournament={tournament}
       entries={entries}
       capacity={capacity}
+      role={role as "OWNER" | "ADMIN" | "PLAYER"}
+      ownClubMemberId={clubMemberId ?? ""}
+      ownUserId={session?.user?.id ?? ""}
+      ownFullName={identity?.name ?? null}
+      ownAvatarUrl={identity?.avatarUrl ?? null}
+      ownCategory={ownCategory}
       hideConfirmedList={isInProgress}
-      avatarsClickable
+      avatarsClickable={isAdmin}
       onSelectMember={handleSelectMember}
       loadingMemberId={loadingMemberId}
       onEntryPatched={handleEntryPatched}
@@ -296,14 +341,17 @@ export function TournamentDetailScreen({ route }: Props) {
     />
   );
 
-  const withdrawnBlock = !isCompleted && (
+  // Historial de duplas retiradas — únicamente OWNER/ADMIN (ver
+  // TournamentDetailView.tsx: `isAdmin && !isCompleted`), nunca PLAYER.
+  const withdrawnBlock = isAdmin && !isCompleted && (
     <WithdrawnEntriesAccordion entries={withdrawnEntries} avatarsClickable onSelectMember={handleSelectMember} loadingMemberId={loadingMemberId} />
   );
 
   // Sin tarjeta/borde propio — WEB muestra Clasificación como un título +
   // la lista directamente sobre el fondo, nunca dentro de una caja
   // adicional (esa sí existe para la información del torneo, pero no
-  // aquí).
+  // aquí). Editable (input de puntos + "Cambiar jugadores") y avatares
+  // clickeables (modal "Miembro del club") son exclusivos de OWNER/ADMIN.
   const classificationBlock = (isInProgress || isCompleted) && (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{isCompleted ? "Clasificación final" : "Clasificación"}</Text>
@@ -313,10 +361,11 @@ export function TournamentDetailScreen({ route }: Props) {
         category={tournament.category}
         secondaryCategory={tournament.secondary_category}
         entries={entries}
-        editable={isInProgress}
+        editable={isAdmin && isInProgress}
         isLive={isInProgress}
         completed={isCompleted}
-        avatarsClickable
+        ownClubMemberId={clubMemberId}
+        avatarsClickable={isAdmin}
         onSelectMember={handleSelectMember}
         loadingMemberId={loadingMemberId}
         onPointsSaved={handlePointsSaved}
@@ -329,7 +378,7 @@ export function TournamentDetailScreen({ route }: Props) {
   const podiumBlock = isCompleted && podiumRows.length > 0 && (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>Podio final</Text>
-      <TournamentPodium rows={podiumRows} avatarsClickable onSelectMember={handleSelectMember} loadingMemberId={loadingMemberId} />
+      <TournamentPodium rows={podiumRows} avatarsClickable={isAdmin} onSelectMember={handleSelectMember} loadingMemberId={loadingMemberId} />
     </View>
   );
 
@@ -446,7 +495,7 @@ export function TournamentDetailScreen({ route }: Props) {
         )}
       </ScrollView>
 
-      {editing && (
+      {isAdmin && editing && (
         <TournamentFormModal
           clubId={club.id}
           tournament={tournament}
@@ -469,7 +518,7 @@ export function TournamentDetailScreen({ route }: Props) {
         />
       )}
 
-      {editingCover && (
+      {isAdmin && editingCover && (
         <EditTournamentCoverModal
           clubId={club.id}
           tournamentId={tournament.id}

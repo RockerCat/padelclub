@@ -33,6 +33,7 @@ export function PlayerTransferList({
   partnerHintText,
   emptyText = "Selecciona 2 jugadores para formar la dupla.",
   filterAvailable,
+  lockedPlayerIds = [],
   headerExtra,
   footerExtra,
 }: {
@@ -45,6 +46,12 @@ export function PlayerTransferList({
   panelTitle?: string;
   partnerHintText?: string;
   emptyText?: string;
+  // Traducción 1:1 del prop `lockedPlayerIds` de PlayerTransferList.tsx
+  // (app web) — el propio jugador en modo autoinscripción (ver
+  // RegisterEntryModal.tsx, mode.type === "player") nunca puede quitarse
+  // a sí mismo: su fila seleccionada oculta el botón "×", nunca deja de
+  // mostrarse.
+  lockedPlayerIds?: string[];
   // Filtro de composición (companionCandidates en la web) — se aplica
   // SOLO a la lista de disponibles, nunca a la resolución de los ya
   // seleccionados (evita que el primer seleccionado desaparezca de su
@@ -98,9 +105,11 @@ export function PlayerTransferList({
                   <View style={styles.categoryChip}>
                     <Text style={styles.categoryChipText}>{c.category}</Text>
                   </View>
-                  <TouchableOpacity onPress={() => onDeselect(c.club_member_id)} hitSlop={8}>
-                    <X width={16} height={16} color={theme.colors.muted} />
-                  </TouchableOpacity>
+                  {!lockedPlayerIds.includes(c.club_member_id) && (
+                    <TouchableOpacity onPress={() => onDeselect(c.club_member_id)} hitSlop={8}>
+                      <X width={16} height={16} color={theme.colors.muted} />
+                    </TouchableOpacity>
+                  )}
                 </View>
               ))}
               {selected.length === 1 && partnerHintText && (

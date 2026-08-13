@@ -6,20 +6,31 @@ import { theme } from "../../lib/theme";
 import { confirmTournamentEntry, rejectTournamentEntry, withdrawTournamentEntry } from "../../lib/tournamentEntryActions";
 import { RegisterEntryModal } from "./RegisterEntryModal";
 import { EntryCard } from "./EntryCard";
-import type { TournamentEntryWithMembers, TournamentEntriesCapacity } from "../../lib/tournamentEntries";
+import { isOwnEntry, type TournamentEntryWithMembers, type TournamentEntriesCapacity } from "../../lib/tournamentEntries";
+import { tournamentCategoryLabel } from "../../lib/tournaments";
 import type { Tournament, TournamentEntryRow } from "../../types/domain";
 
-// Traducción 1:1 de EntriesSection.tsx (app web, rama OWNER/ADMIN) —
-// misma barra de capacidad, mismos banners por status, mismos 3 grupos
-// (Pendientes/Confirmadas[oculto si hideConfirmedList]/Rechazadas — las
-// retiradas viven aparte en WithdrawnEntriesAccordion, nunca acá), mismos
-// botones por entry (Confirmar/Rechazar/Retirar) con las mismas
-// condiciones de status exactas.
+// Traducción 1:1 de EntriesSection.tsx (app web) — misma barra de
+// capacidad, mismos banners por status, mismas condiciones exactas de
+// Confirmar/Rechazar/Retirar. OWNER/ADMIN: mismos 3 grupos (Pendientes/
+// Confirmadas[oculto si hideConfirmedList]/Rechazadas — las retiradas
+// viven aparte en WithdrawnEntriesAccordion, nunca acá) + botón
+// "Registrar dupla" (elige a los dos jugadores). PLAYER: "Tu inscripción"
+// (si tiene una pendiente) o "Inscribirme"/mensaje de categoría no
+// elegible (si no tiene ninguna activa), lista de solo lectura "Duplas
+// confirmadas", y "Retirar" únicamente sobre su propia dupla — nunca
+// Confirmar/Rechazar ni el botón de registrar duplas ajenas.
 export function EntriesSection({
   clubId,
   tournament,
   entries,
   capacity,
+  role,
+  ownClubMemberId,
+  ownUserId,
+  ownFullName,
+  ownAvatarUrl,
+  ownCategory,
   hideConfirmedList,
   avatarsClickable,
   onSelectMember,
@@ -32,6 +43,12 @@ export function EntriesSection({
   tournament: Tournament;
   entries: TournamentEntryWithMembers[];
   capacity: TournamentEntriesCapacity;
+  role: "OWNER" | "ADMIN" | "PLAYER";
+  ownClubMemberId: string;
+  ownUserId: string;
+  ownFullName: string | null;
+  ownAvatarUrl: string | null;
+  ownCategory: string | null;
   hideConfirmedList: boolean;
   avatarsClickable?: boolean;
   onSelectMember?: (clubMemberId: string) => void;
@@ -47,9 +64,11 @@ export function EntriesSection({
   const [rejectError, setRejectError] = useState<string | null>(null);
   const [busyEntryId, setBusyEntryId] = useState<string | null>(null);
 
+  const isAdmin = role === "OWNER" || role === "ADMIN";
   const status = tournament.status;
   const full = capacity.occupied >= capacity.total;
   const canAdminRegister = ["registration_open", "registration_closed", "in_progress"].includes(status) && !full;
+  const canPlayerRegister = status === "registration_open" && !full;
   const canConfirmOrRejectStatus = ["registration_open", "registration_closed"].includes(status);
   const canWithdrawStatus = ["registration_open", "registration_closed"].includes(status);
 
@@ -57,6 +76,22 @@ export function EntriesSection({
   const confirmed = entries.filter((e) => e.status === "confirmed");
   const rejected = entries.filter((e) => e.status === "rejected");
   const registeredMemberIds = [...pending, ...confirmed].flatMap((e) => e.members.map((m) => m.club_member_id));
+
+  // Misma definición de "activa" que EntriesSection.tsx (app web): pending
+  // o confirmed — una retirada/rechazada nunca vuelve a ocupar este lugar,
+  // aunque siga existiendo en el historial.
+  const ownActiveEntry = entries.find(
+    (e) => (e.status === "pending" || e.status === "confirmed") && isOwnEntry(e, ownUserId, ownClubMemberId)
+  );
+  // Solo "puede ver un botón de inscripción en absoluto" — la composición
+  // real H+L/L+H/L+L por pareja la sigue validando register_tournament_entry
+  // server-side, esto es únicamente curación de UX (ver EntriesSection.tsx,
+  // app web).
+  const ownCategoryMatches =
+    !!ownCategory && (ownCategory === tournament.category || ownCategory === tournament.secondary_category);
+  const eligibleToRegister = isAdmin
+    ? canAdminRegister
+    : canPlayerRegister && ownCategoryMatches && !ownActiveEntry;
 
   async function handleConfirm(entryId: string) {
     setBusyEntryId(entryId);
@@ -113,9 +148,17 @@ export function EntriesSection({
   }
 
   function entryActions(entry: TournamentEntryWithMembers) {
-    const showConfirm = entry.status === "pending" && canConfirmOrRejectStatus;
-    const showReject = entry.status === "pending" && canConfirmOrRejectStatus;
-    const showWithdraw = entry.status === "confirmed" && canWithdrawStatus;
+    const isMine = isOwnEntry(entry, ownUserId, ownClubMemberId);
+    const showConfirm = isAdmin && entry.status === "pending" && canConfirmOrRejectStatus;
+    const showReject = isAdmin && entry.status === "pending" && canConfirmOrRejectStatus;
+    // El organizador nunca ve "Retirar" junto a "Confirmar"/"Rechazar" para
+    // la misma dupla pendiente — para él, Retirar solo aparece una vez
+    // confirmada. El propio jugador conserva "Retirar" en pending y
+    // confirmed — su única acción de autoservicio, y nunca sobre la dupla
+    // de otro (mismo criterio exacto que EntriesSection.tsx, app web).
+    const showWithdraw =
+      canWithdrawStatus &&
+      (isAdmin ? entry.status === "confirmed" : isMine && (entry.status === "pending" || entry.status === "confirmed"));
     if (!showConfirm && !showReject && !showWithdraw) return null;
     const busy = busyEntryId === entry.id;
     return (
@@ -146,7 +189,7 @@ export function EntriesSection({
     <View style={{ gap: 16 }}>
       <View style={styles.headerRow}>
         <Text style={styles.h2}>Inscripciones</Text>
-        {canAdminRegister && (
+        {isAdmin && eligibleToRegister && (
           <TouchableOpacity style={styles.registerButton} onPress={() => setRegistering(true)}>
             <Plus width={16} height={16} color={theme.colors.bg} />
             <Text style={styles.registerButtonText}>Registrar dupla</Text>
@@ -171,35 +214,57 @@ export function EntriesSection({
         <Text style={[styles.banner, { color: theme.colors.warning }]}>El torneo alcanzó su cupo máximo de duplas.</Text>
       )}
 
-      {pending.length + confirmed.length + rejected.length === 0 ? (
-        <View style={styles.emptyState}>
-          <View style={styles.emptyIconCircle}>
-            <Users width={20} height={20} color={theme.colors.muted} />
-          </View>
-          <Text style={styles.emptyTitle}>Aún no hay duplas inscritas</Text>
-          <Text style={styles.emptySubtitle}>
-            {status === "registration_open"
-              ? "Todavía no hay duplas inscritas. Registra la primera dupla del torneo."
-              : "Cuando abras las inscripciones podrás registrar duplas para el torneo."}
-          </Text>
+      {/* PLAYER: propia inscripción pendiente destacada aparte — nunca
+          duplicada con la lista de confirmadas de abajo (que ya marca
+          "TÚ" sobre una confirmada propia). Una dupla propia retirada o
+          rechazada nunca aparece aquí — sigue en el historial, solo deja
+          de ser la "activa". */}
+      {!isAdmin && ownActiveEntry && ownActiveEntry.status !== "confirmed" && (
+        <View style={{ gap: 8 }}>
+          <Text style={styles.groupTitle}>Tu inscripción</Text>
+          <EntryCard
+            entry={ownActiveEntry}
+            isOwn
+            actions={entryActions(ownActiveEntry)}
+            avatarsClickable={avatarsClickable}
+            onSelectMember={onSelectMember}
+            loadingMemberId={loadingMemberId}
+          />
         </View>
-      ) : (
-        <>
-          <EntryGroup title="Pendientes" entries={pending} highlight={pending.length > 0}>
-            {(entry) => (
-              <EntryCard
-                key={entry.id}
-                entry={entry}
-                actions={entryActions(entry)}
-                avatarsClickable={avatarsClickable}
-                onSelectMember={onSelectMember}
-                loadingMemberId={loadingMemberId}
-              />
-            )}
-          </EntryGroup>
+      )}
 
-          {!hideConfirmedList && (
-            <EntryGroup title="Confirmadas" entries={confirmed}>
+      {!isAdmin && !ownActiveEntry && (
+        <>
+          {eligibleToRegister ? (
+            <TouchableOpacity style={[styles.registerButton, { alignSelf: "flex-start" }]} onPress={() => setRegistering(true)}>
+              <Plus width={16} height={16} color={theme.colors.bg} />
+              <Text style={styles.registerButtonText}>Inscribirme</Text>
+            </TouchableOpacity>
+          ) : canPlayerRegister && !ownCategoryMatches ? (
+            <Text style={styles.banner}>
+              No perteneces a la categoría {tournamentCategoryLabel(tournament.category, tournament.secondary_category)} de este
+              torneo, así que no puedes inscribirte.
+            </Text>
+          ) : null}
+        </>
+      )}
+
+      {isAdmin ? (
+        pending.length + confirmed.length + rejected.length === 0 ? (
+          <View style={styles.emptyState}>
+            <View style={styles.emptyIconCircle}>
+              <Users width={20} height={20} color={theme.colors.muted} />
+            </View>
+            <Text style={styles.emptyTitle}>Aún no hay duplas inscritas</Text>
+            <Text style={styles.emptySubtitle}>
+              {status === "registration_open"
+                ? "Todavía no hay duplas inscritas. Registra la primera dupla del torneo."
+                : "Cuando abras las inscripciones podrás registrar duplas para el torneo."}
+            </Text>
+          </View>
+        ) : (
+          <>
+            <EntryGroup title="Pendientes" entries={pending} highlight={pending.length > 0}>
               {(entry) => (
                 <EntryCard
                   key={entry.id}
@@ -211,14 +276,51 @@ export function EntriesSection({
                 />
               )}
             </EntryGroup>
-          )}
 
-          <EntryGroup title="Rechazadas" entries={rejected}>
-            {(entry) => (
-              <EntryCard key={entry.id} entry={entry} avatarsClickable={avatarsClickable} onSelectMember={onSelectMember} loadingMemberId={loadingMemberId} />
+            {!hideConfirmedList && (
+              <EntryGroup title="Confirmadas" entries={confirmed}>
+                {(entry) => (
+                  <EntryCard
+                    key={entry.id}
+                    entry={entry}
+                    isOwn={isOwnEntry(entry, ownUserId, ownClubMemberId)}
+                    actions={entryActions(entry)}
+                    avatarsClickable={avatarsClickable}
+                    onSelectMember={onSelectMember}
+                    loadingMemberId={loadingMemberId}
+                  />
+                )}
+              </EntryGroup>
             )}
-          </EntryGroup>
-        </>
+
+            <EntryGroup title="Rechazadas" entries={rejected}>
+              {(entry) => (
+                <EntryCard key={entry.id} entry={entry} avatarsClickable={avatarsClickable} onSelectMember={onSelectMember} loadingMemberId={loadingMemberId} />
+              )}
+            </EntryGroup>
+          </>
+        )
+      ) : (
+        !hideConfirmedList && (
+          <View style={{ gap: 10 }}>
+            <Text style={styles.groupTitle}>Duplas confirmadas</Text>
+            {confirmed.length === 0 ? (
+              <Text style={styles.emptySubtitle}>Aún no hay duplas confirmadas.</Text>
+            ) : (
+              confirmed.map((entry) => (
+                <EntryCard
+                  key={entry.id}
+                  entry={entry}
+                  isOwn={isOwnEntry(entry, ownUserId, ownClubMemberId)}
+                  actions={entryActions(entry)}
+                  avatarsClickable={avatarsClickable}
+                  onSelectMember={onSelectMember}
+                  loadingMemberId={loadingMemberId}
+                />
+              ))
+            )}
+          </View>
+        )
       )}
 
       {registering && (
@@ -228,11 +330,12 @@ export function EntriesSection({
           category={tournament.category}
           secondaryCategory={tournament.secondary_category}
           excludeClubMemberIds={registeredMemberIds}
+          mode={isAdmin ? { type: "admin" } : { type: "player", ownClubMemberId, ownFullName, ownAvatarUrl, ownCategory }}
           onClose={() => setRegistering(false)}
           onSuccess={(entry, members) => {
             setRegistering(false);
             onEntryRegistered(entry, members);
-            onToast("Dupla registrada correctamente");
+            onToast(isAdmin ? "Dupla registrada correctamente" : "Tu inscripción fue enviada y está pendiente de aprobación.");
           }}
         />
       )}

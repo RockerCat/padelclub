@@ -21,18 +21,22 @@ import { PlayerTransferList } from "./PlayerTransferList";
 import type { TournamentEntryMemberDisplay } from "../../lib/tournamentEntries";
 import type { TournamentEntryRow } from "../../types/domain";
 
-// Traducción 1:1 de RegisterEntryModal.tsx (app web, rama OWNER/ADMIN) —
-// mismo flujo: cargar candidatos elegibles (get_club_category_ranking_view,
+// Traducción 1:1 de RegisterEntryModal.tsx (app web) — mismo flujo en
+// ambos modos: cargar candidatos elegibles (get_club_category_ranking_view,
 // vía tournamentCandidates.ts), misma regla de composición para torneo
-// combinado (companionCandidates), mismo RPC register_tournament_entry
-// (siempre confirmed cuando lo crea OWNER/ADMIN — la RPC decide eso
-// internamente, nunca el cliente).
+// combinado (companionCandidates), mismo RPC register_tournament_entry (la
+// propia RPC decide confirmed-directo para OWNER/ADMIN vs. pending para
+// PLAYER, nunca el cliente). mode="player" fija memberOneId en
+// ownClubMemberId desde el inicio y esa fila queda bloqueada
+// (lockedPlayerIds en PlayerTransferList) — el jugador solo elige a su
+// partner, nunca puede quitarse a sí mismo del formulario.
 export function RegisterEntryModal({
   clubId,
   tournamentId,
   category,
   secondaryCategory,
   excludeClubMemberIds,
+  mode,
   onClose,
   onSuccess,
 }: {
@@ -41,11 +45,14 @@ export function RegisterEntryModal({
   category: string;
   secondaryCategory: string | null;
   excludeClubMemberIds: string[];
+  mode:
+    | { type: "admin" }
+    | { type: "player"; ownClubMemberId: string; ownFullName: string | null; ownAvatarUrl: string | null; ownCategory: string | null };
   onClose: () => void;
   onSuccess: (entry: TournamentEntryRow, members: TournamentEntryMemberDisplay[]) => void;
 }) {
   const [candidates, setCandidates] = useState<TournamentCandidate[] | null>(null);
-  const [memberOneId, setMemberOneId] = useState<string | null>(null);
+  const [memberOneId, setMemberOneId] = useState<string | null>(mode.type === "player" ? mode.ownClubMemberId : null);
   const [memberTwoId, setMemberTwoId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +79,10 @@ export function RegisterEntryModal({
     else if (!memberTwoId) setMemberTwoId(id);
   }
   function handleDeselect(id: string) {
+    // El propio jugador nunca se quita a sí mismo — defensa adicional, ya
+    // que su fila ni siquiera expone un botón "×" para esto (mismo criterio
+    // que RegisterEntryModal.tsx, app web).
+    if (mode.type === "player" && id === mode.ownClubMemberId) return;
     if (memberOneId === id) {
       setMemberOneId(memberTwoId);
       setMemberTwoId(null);
@@ -87,7 +98,7 @@ export function RegisterEntryModal({
 
   async function handleSubmit() {
     if (!memberOneId || !memberTwoId) {
-      setError("Selecciona a los dos jugadores.");
+      setError(mode.type === "player" ? "Selecciona a tu partner." : "Selecciona a los dos jugadores.");
       return;
     }
     setError(null);
@@ -131,6 +142,9 @@ export function RegisterEntryModal({
                 onSelect={handleSelect}
                 onDeselect={handleDeselect}
                 filterAvailable={filterAvailable}
+                lockedPlayerIds={mode.type === "player" ? [mode.ownClubMemberId] : []}
+                panelTitle={mode.type === "player" ? "Tu dupla" : "Dupla seleccionada"}
+                partnerHintText={mode.type === "player" ? "Selecciona tu partner." : undefined}
                 headerExtra={<Text style={styles.helpText}>{helpText}</Text>}
                 footerExtra={
                   <>
