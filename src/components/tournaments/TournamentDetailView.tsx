@@ -541,13 +541,22 @@ export function TournamentDetailView({
       <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[7fr_3fr] lg:gap-8 lg:items-start">
         <div className="contents lg:flex lg:flex-col lg:gap-6 lg:min-w-0">
           <div className="order-1 min-w-0">
-            <Link
-              href={isAdmin ? `/${clubSlug}/admin/tournaments` : `/${clubSlug}/tournaments`}
-              className="inline-flex items-center gap-1.5 text-sm text-brand-muted hover:text-white transition-colors mb-6"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Torneos
-            </Link>
+            {/* El detalle puede abrirse desde orígenes distintos al listado
+                de Torneos (Dashboard del PLAYER, Actividad reciente, etc.)
+                — para PLAYER este enlace asumía siempre "Torneos" como
+                origen, así que se retira sin reemplazo: el navegador ya
+                preserva el origen real vía su propio historial (Back). Solo
+                OWNER/ADMIN lo conserva — su propio flujo administrativo
+                siempre entra desde /admin/tournaments, sin este ambigüedad. */}
+            {isAdmin && (
+              <Link
+                href={`/${clubSlug}/admin/tournaments`}
+                className="inline-flex items-center gap-1.5 text-sm text-brand-muted hover:text-white transition-colors mb-6"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Torneos
+              </Link>
+            )}
 
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div className="min-w-0">

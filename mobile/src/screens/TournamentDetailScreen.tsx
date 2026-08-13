@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { ActivityIndicator, Alert, Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { Camera, Globe, ImageIcon, Lock, MessageCircle, Pencil, Plus } from "lucide-react-native";
+import { Camera, ChevronLeft, Globe, ImageIcon, Lock, MessageCircle, Pencil, Plus } from "lucide-react-native";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../contexts/AuthContext";
 import { useClub } from "../contexts/ClubContext";
@@ -78,11 +78,34 @@ const PRIMARY_TRANSITIONS = new Set<TournamentTransitionKey>(["open", "close", "
 // deliberadamente fuera de alcance para ambos roles: "Generar noticia"/
 // "Ver noticia" — depende enteramente del módulo Noticias, que no existe
 // en mobile todavía (ver reporte).
-export function TournamentDetailScreen({ route }: Props) {
+export function TournamentDetailScreen({ route, navigation }: Props) {
   const { tournamentId } = route.params;
   const { club, role, clubMemberId, identity } = useClub();
   const { session } = useAuth();
   const isAdmin = role === "OWNER" || role === "ADMIN";
+
+  // El detalle puede abrirse desde orígenes distintos (Torneos, Dashboard
+  // → "Próxima actividad", Actividad reciente, etc.). Cuando se entra
+  // cross-tab desde Dashboard (navigation.navigate("TournamentsTab",
+  // {screen:"TournamentDetail", params})), TournamentDetail queda como la
+  // ÚNICA route de TournamentsStack en ese momento — no hay una pantalla
+  // previa DENTRO de ese mismo stack, así que native-stack no dibuja
+  // ningún botón "atrás" (headerBackButtonDisplayMode no tiene efecto sin
+  // una previous route), pero el header nativo (fondo + altura) se sigue
+  // reservando igual — de ahí la franja vacía entre el header global del
+  // club y el título. Para PLAYER, el header nativo se oculta por completo
+  // (headerShown: false) y el propio contenido de la pantalla dibuja su
+  // propia flecha "←" (ver el render de abajo) que sí funciona sin
+  // importar el origen: llama a navigation.goBack() directamente, que
+  // React Navigation resuelve dentro del stack si hay una route previa
+  // (Torneos → detalle) o, si no la hay, la burbujea al Tab Navigator
+  // padre y cambia al tab anterior (Dashboard → detalle) — nunca una ruta
+  // hardcodeada, nunca un fallback inventado. OWNER/ADMIN conserva el
+  // header nativo intacto (mismo criterio que WEB: el back se retira solo
+  // para PLAYER).
+  useLayoutEffect(() => {
+    navigation.setOptions({ headerShown: isAdmin, headerBackButtonDisplayMode: "default" });
+  }, [navigation, isAdmin]);
 
   const [tournament, setTournament] = useState<Tournament | null | undefined>(undefined);
   const [entries, setEntries] = useState<TournamentEntryWithMembers[]>([]);
@@ -223,10 +246,21 @@ export function TournamentDetailScreen({ route }: Props) {
     Linking.openURL(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`);
   }
 
+  // Con el header nativo oculto para PLAYER, estos dos estados tempranos
+  // (cargando/error) también necesitan su propia flecha "←" — sin ella,
+  // un PLAYER con conexión lenta o un torneo inexistente quedaría sin
+  // forma de volver mientras esta rama sigue montada.
+  const backButton = !isAdmin && (
+    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton} hitSlop={8} accessibilityLabel="Volver">
+      <ChevronLeft width={24} height={24} color={theme.colors.white} />
+    </TouchableOpacity>
+  );
+
   if (tournament === undefined) {
     return (
       <SafeAreaView style={styles.screen} edges={["bottom"]}>
         <View style={styles.content}>
+          {backButton}
           <Skeleton style={{ height: 180, borderRadius: 16 }} />
           <Skeleton style={{ height: 24, width: "60%" }} />
           <Skeleton style={{ height: 80, borderRadius: 16 }} />
@@ -238,8 +272,11 @@ export function TournamentDetailScreen({ route }: Props) {
   if (!tournament || !club) {
     return (
       <SafeAreaView style={styles.screen} edges={["bottom"]}>
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{loadError ?? "Torneo no encontrado."}</Text>
+        <View style={[styles.content, { flex: 1 }]}>
+          {backButton}
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>{loadError ?? "Torneo no encontrado."}</Text>
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -385,31 +422,70 @@ export function TournamentDetailScreen({ route }: Props) {
   return (
     <SafeAreaView style={styles.screen} edges={["bottom"]}>
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.header}>
-          <View style={styles.titleRow}>
-            <Text style={styles.title}>{tournament.name}</Text>
-            <TournamentStatusBadge status={tournament.status} />
-          </View>
-
-          <View style={styles.subBadgeRow}>
-            {isInProgress && (
-              <View style={styles.liveBadge}>
-                <View style={styles.liveDot} />
-                <Text style={styles.liveText}>En vivo</Text>
-              </View>
-            )}
-            <View style={styles.visibilityInline}>
-              {tournament.visibility === "public" ? (
-                <Globe width={13} height={13} color={theme.colors.muted} />
-              ) : (
-                <Lock width={13} height={13} color={theme.colors.muted} />
-              )}
-              <Text style={styles.visibilityText}>{tournamentVisibilityLabel(tournament.visibility)}</Text>
+        {/* Header compacto — solo PLAYER (sin header nativo, ver
+            useLayoutEffect arriba): fila 1 flecha "atrás" + título juntos
+            (alignItems: flex-start en playerTitleRow, así con título de 2
+            líneas la flecha queda arriba, nunca centrada respecto al
+            bloque completo); fila 2 estado + visibilidad juntos. OWNER/
+            ADMIN conserva exactamente el markup/orden anterior sin cambios
+            (título+estado en la fila 1, en-vivo+visibilidad en la fila 2,
+            sin flecha — sigue con su header nativo intacto). Mismos
+            badges/colores/textos en ambas ramas, nunca una segunda
+            implementación visual de cada badge. */}
+        {isAdmin ? (
+          <View style={styles.header}>
+            <View style={styles.titleRow}>
+              <Text style={styles.title}>{tournament.name}</Text>
+              <TournamentStatusBadge status={tournament.status} />
             </View>
-          </View>
 
-          {tournament.description && <Text style={styles.description}>{tournament.description}</Text>}
-        </View>
+            <View style={styles.subBadgeRow}>
+              {isInProgress && (
+                <View style={styles.liveBadge}>
+                  <View style={styles.liveDot} />
+                  <Text style={styles.liveText}>En vivo</Text>
+                </View>
+              )}
+              <View style={styles.visibilityInline}>
+                {tournament.visibility === "public" ? (
+                  <Globe width={13} height={13} color={theme.colors.muted} />
+                ) : (
+                  <Lock width={13} height={13} color={theme.colors.muted} />
+                )}
+                <Text style={styles.visibilityText}>{tournamentVisibilityLabel(tournament.visibility)}</Text>
+              </View>
+            </View>
+
+            {tournament.description && <Text style={styles.description}>{tournament.description}</Text>}
+          </View>
+        ) : (
+          <View style={styles.header}>
+            <View style={styles.playerTitleRow}>
+              {backButton}
+              <Text style={styles.title}>{tournament.name}</Text>
+            </View>
+
+            <View style={styles.subBadgeRow}>
+              <TournamentStatusBadge status={tournament.status} />
+              {isInProgress && (
+                <View style={styles.liveBadge}>
+                  <View style={styles.liveDot} />
+                  <Text style={styles.liveText}>En vivo</Text>
+                </View>
+              )}
+              <View style={styles.visibilityInline}>
+                {tournament.visibility === "public" ? (
+                  <Globe width={13} height={13} color={theme.colors.muted} />
+                ) : (
+                  <Lock width={13} height={13} color={theme.colors.muted} />
+                )}
+                <Text style={styles.visibilityText}>{tournamentVisibilityLabel(tournament.visibility)}</Text>
+              </View>
+            </View>
+
+            {tournament.description && <Text style={styles.description}>{tournament.description}</Text>}
+          </View>
+        )}
 
         {(showShare || showEdit || transitions.length > 0) && (
           <View style={styles.actionsRow}>
@@ -544,8 +620,13 @@ export function TournamentDetailScreen({ route }: Props) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: theme.colors.bg },
   content: { padding: 16, gap: 20, paddingBottom: 40 },
+  backButton: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
   header: { gap: 10 },
   titleRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 8 },
+  // PLAYER: flecha + título en la misma fila. alignItems: "flex-start" —
+  // no "center" — es lo que mantiene la flecha arriba (nunca centrada
+  // respecto al bloque completo) cuando el título ocupa 2 líneas.
+  playerTitleRow: { flexDirection: "row", alignItems: "flex-start", gap: 6 },
   title: { flex: 1, fontSize: 20, fontWeight: "800", color: theme.colors.white },
   subBadgeRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 10 },
   liveBadge: {
