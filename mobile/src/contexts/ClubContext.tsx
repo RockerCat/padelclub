@@ -14,6 +14,7 @@ import { getIdentity, type IdentityData } from "../lib/userIdentity";
 type ClubContextValue = {
   club: ActiveMembership["club"] | null;
   role: string | null;
+  clubMemberId: string | null;
   identity: IdentityData | null;
   loading: boolean;
   error: string | null;
@@ -26,6 +27,7 @@ export function ClubProvider({ children }: { children: ReactNode }) {
   const { session } = useAuth();
   const [club, setClub] = useState<ActiveMembership["club"] | null>(null);
   const [role, setRole] = useState<string | null>(null);
+  const [clubMemberId, setClubMemberId] = useState<string | null>(null);
   const [identity, setIdentity] = useState<IdentityData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +36,7 @@ export function ClubProvider({ children }: { children: ReactNode }) {
     if (!session?.user) {
       setClub(null);
       setRole(null);
+      setClubMemberId(null);
       setIdentity(null);
       setLoading(false);
       return;
@@ -47,6 +50,7 @@ export function ClubProvider({ children }: { children: ReactNode }) {
       ]);
       setClub(membership?.club ?? null);
       setRole(membership?.role ?? null);
+      setClubMemberId(membership?.clubMemberId ?? null);
       setIdentity(identityData);
     } catch {
       setError("No pudimos cargar la información del club. Desliza para reintentar.");
@@ -60,7 +64,9 @@ export function ClubProvider({ children }: { children: ReactNode }) {
   }, [load]);
 
   return (
-    <ClubContext.Provider value={{ club, role, identity, loading, error, reload: load }}>{children}</ClubContext.Provider>
+    <ClubContext.Provider value={{ club, role, clubMemberId, identity, loading, error, reload: load }}>
+      {children}
+    </ClubContext.Provider>
   );
 }
 

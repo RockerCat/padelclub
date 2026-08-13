@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CalendarPlus, Trophy, MapPin, Users as UsersIcon } from "lucide-react";
 import { durationLabel } from "@/lib/durations";
 import { tournamentCategoryLabel, tournamentStatusLabel } from "@/lib/tournamentLabels";
+import { buildReservationSlug } from "@/lib/reservationSlug";
 import type { MyReservation } from "@/lib/playerReservations";
 import type { UpcomingBookingDetails, UpcomingTournamentActivity } from "@/lib/playerDashboard";
 
@@ -29,6 +30,17 @@ interface UpcomingActivityCardProps {
 // próxima). Nunca crea nada — solo enlaza al módulo correspondiente.
 export function UpcomingActivityCard({ clubSlug, booking, tournamentActivity }: UpcomingActivityCardProps) {
   if (booking) {
+    // Mismo slug corto compartible que el resto del producto ya usa para
+    // enlazar al detalle real de una reserva (ver CLAUDE.md → Reservation
+    // Sharing Principles, y el mismo patrón en
+    // src/components/reservations/PlayerActivity.tsx) — nunca la página
+    // general de Reservaciones, que era el destino anterior.
+    const shareSlug = buildReservationSlug({
+      creatorName: booking.creator_name,
+      date: booking.date,
+      startTime: booking.start_time,
+      id: booking.id,
+    });
     return (
       <div className="bg-brand-surface border border-white/10 rounded-2xl p-5 flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
@@ -55,7 +67,7 @@ export function UpcomingActivityCard({ clubSlug, booking, tournamentActivity }: 
         <div className="flex items-center justify-between gap-3 pt-1">
           <span className="text-xs text-brand-muted">{RESERVATION_STATUS_LABEL[booking.status] ?? booking.status}</span>
           <Link
-            href={`/${clubSlug}/reservations`}
+            href={`/${clubSlug}/reservations/${shareSlug}`}
             className="inline-flex items-center h-8 px-3 rounded-lg text-xs font-semibold transition-opacity hover:opacity-90"
             style={{ backgroundColor: "var(--club-primary, #00ffff)", color: "#001A24" }}
           >

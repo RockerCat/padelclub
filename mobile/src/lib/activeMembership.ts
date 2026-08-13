@@ -10,6 +10,11 @@ import type { Database } from "../types/database";
 // Identity Principles / src/lib/constants/clubTheme.ts) — mobile/src/lib/theme.ts
 // ya trae los dos colores fijos que reemplazan esas columnas.
 export interface ActiveMembership {
+  // club_members.id — el ancla de identidad deportiva (ver CLAUDE.md →
+  // Sport / Ranking Module Principles), necesario para el Dashboard
+  // deportivo del PLAYER (getUpcomingTournamentActivity). Antes no se
+  // seleccionaba porque ninguna pantalla lo necesitaba todavía.
+  clubMemberId: string;
   role: string;
   club: {
     id: string;
@@ -20,6 +25,7 @@ export interface ActiveMembership {
 }
 
 type MembershipRow = {
+  id: string;
   role: string;
   clubs: ActiveMembership["club"] & { archived_at: string | null };
 };
@@ -30,7 +36,7 @@ export async function resolveActiveMembership(
 ): Promise<ActiveMembership | null> {
   const { data: memberships } = await supabase
     .from("club_members")
-    .select("role, clubs!inner(id, name, slug, logo_url, archived_at)")
+    .select("id, role, clubs!inner(id, name, slug, logo_url, archived_at)")
     .eq("profile_id", userId)
     .eq("is_active", true)
     .order("joined_at", { ascending: true });
@@ -41,6 +47,7 @@ export async function resolveActiveMembership(
 
   function toResult(row: MembershipRow): ActiveMembership {
     return {
+      clubMemberId: row.id,
       role: row.role,
       club: { id: row.clubs.id, name: row.clubs.name, slug: row.clubs.slug, logo_url: row.clubs.logo_url },
     };

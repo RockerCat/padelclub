@@ -54,10 +54,17 @@ export function TournamentCard({
   tournament,
   confirmedCount,
   onPress,
+  footerExtra,
 }: {
   tournament: Tournament;
   confirmedCount?: number;
   onPress: () => void;
+  // Línea extra opcional bajo la fecha — traducción 1:1 del slot
+  // `footerExtra` de TournamentCard.tsx (app web), usado por "Mis
+  // torneos" del Dashboard del PLAYER (compañero/posición/puntos). undefined
+  // no renderiza nada extra, así que TournamentsScreen.tsx (el único otro
+  // caller) queda exactamente igual.
+  footerExtra?: React.ReactNode;
 }) {
   return (
     <TouchableOpacity activeOpacity={0.8} onPress={onPress} style={styles.card}>
@@ -93,6 +100,7 @@ export function TournamentCard({
 
         <View style={styles.footer}>
           <Text style={styles.dateText}>{dateRangeLabel(tournament)}</Text>
+          {footerExtra}
         </View>
       </View>
     </TouchableOpacity>
