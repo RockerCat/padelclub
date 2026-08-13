@@ -9,16 +9,8 @@ import { cn } from "@/lib/utils/cn";
 import { useMemberModal } from "@/app/(app)/[club]/admin/players/useMemberModal";
 import { MemberModalHost } from "@/app/(app)/[club]/admin/players/MemberModalHost";
 import { RankingExportButton } from "@/components/sports-share/RankingExportButton";
+import { computeRankingPresentation, type RankingRow } from "../../../../../shared/players/ranking";
 import type { SportCategory } from "@/types/database";
-
-interface RankingRow {
-  ranking_position: number;
-  club_member_id: string;
-  profile_id: string;
-  full_name: string | null;
-  avatar_url: string | null;
-  current_points: number;
-}
 
 interface RankingViewProps {
   clubId: string;
@@ -291,12 +283,7 @@ export function RankingView({
 
   // Todo lo de abajo es puramente derivado de `rows` para presentación —
   // no dispara ninguna consulta ni cambia el dato recibido de la RPC.
-  const sortedRows = [...rows].sort((a, b) => a.ranking_position - b.ranking_position);
-  const allTied = sortedRows.length > 0 && sortedRows.every((r) => r.current_points === sortedRows[0].current_points);
-  const showPodium = !allTied && sortedRows.length >= 3;
-  const podiumRows = showPodium ? (sortedRows.slice(0, 3) as [RankingRow, RankingRow, RankingRow]) : null;
-  const tableRows = showPodium ? sortedRows.slice(3) : sortedRows;
-  const ownRow = sortedRows.find((r) => r.club_member_id === ownClubMemberId) ?? null;
+  const { sortedRows, allTied, podiumRows, tableRows, ownRow } = computeRankingPresentation(rows, ownClubMemberId);
   const showReady = !loading && !error && sortedRows.length > 0;
 
   return (

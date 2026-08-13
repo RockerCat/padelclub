@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Share2 } from "lucide-react";
 import { Button } from "@/components/ui";
 import { resolveImageDataUrl, resolveImageDataUrls } from "@/lib/sportsShareExport";
+import { buildRankingWhatsappMessage } from "../../../shared/players/ranking";
 import { RankingShareCard, type RankingShareRow } from "./RankingShareCard";
 import { ShareCardModal } from "./ShareCardModal";
 
@@ -95,7 +96,7 @@ export function RankingExportButton({ clubName, clubSlug, clubLogoUrl, accentCol
           filenameParts={["ranking", clubName, category]}
           shareTitle={`Ranking ${category} · ${clubName}`}
           shareText={`Ranking ${category} de ${clubName} — Mi Pádel Club`}
-          whatsappMessage={`🏆 Ranking ${category} — ${clubName}\n\nConsulta la clasificación completa aquí 👇\n\n${window.location.origin}/clubs/${clubSlug}/ranking`}
+          whatsappMessage={buildRankingWhatsappMessage({ category, clubName, clubSlug, siteUrl: window.location.origin })}
           onClose={() => setExportData(null)}
           card={
             <RankingShareCard

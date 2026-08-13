@@ -5,6 +5,7 @@ import { tennisBall, tennisRacket } from "@lucide/lab";
 import { useClub } from "../contexts/ClubContext";
 import { HomeScreen } from "../screens/HomeScreen";
 import { PlayersScreen } from "../screens/PlayersScreen";
+import { RankingScreen } from "../screens/RankingScreen";
 import { PlaceholderScreen } from "../screens/PlaceholderScreen";
 import { ReservationsStack } from "./ReservationsStack";
 import { TournamentsStack } from "./TournamentsStack";
@@ -166,12 +167,16 @@ function PlayerTabs() {
         component={ReservationsStack}
         options={{ title: "Reservaciones", tabBarIcon: ({ color, size }) => <CalendarDays width={size} height={size} color={color} /> }}
       />
+      {/* RankingTab del PLAYER deja de ser PlaceholderScreen — RankingScreen
+          es el equivalente nativo real de RankingView.tsx (app web), ver
+          RankingScreen.tsx. OwnerAdminTabs arriba sigue con
+          PlaceholderScreen sin cambios: este módulo es PLAYER-only por
+          ahora. */}
       <PlayerTab.Screen
         name="RankingTab"
+        component={RankingScreen}
         options={{ title: "Ranking", tabBarIcon: ({ color, size }) => <Trophy width={size} height={size} color={color} /> }}
-      >
-        {() => <PlaceholderScreen title="Ranking" icon={Trophy} />}
-      </PlayerTab.Screen>
+      />
       <PlayerTab.Screen
         name="TournamentsTab"
         component={TournamentsStack}
