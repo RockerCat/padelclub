@@ -414,6 +414,16 @@ export function ReservationShareView({
   // acciones nunca tenían dónde vivir — canPlayerCancelReservation es la
   // misma regla de 2 horas que ya rige "Mis solicitudes"/"Mis reservas".
   const showPlayerPendingActions = reservation.status === "pending" && reservation.is_creator && !isOwnerOrAdmin;
+  // Cancelar — creador PLAYER de una reserva ya CONFIRMED (nunca
+  // OWNER/ADMIN, que ya tiene showConfirmedAdminActions arriba). Misma
+  // Server Action y misma regla de 2 horas (canPlayerCancelReservation,
+  // shared/reservations/eligibility.ts) que ya usa "Mis reservas"
+  // (PlayerActivity) y el bloque de solicitud pendiente de arriba — antes
+  // esta página nunca ofrecía cancelar una reserva ya confirmada, aunque
+  // cancel_reservation ya lo permitía server-side. Solo Cancelar (no
+  // Editar): ese flujo para una reserva confirmada del propio jugador vive
+  // en el calendario, fuera de alcance de este ajuste puntual.
+  const showPlayerConfirmedCancelAction = reservation.status === "confirmed" && reservation.is_creator && !isOwnerOrAdmin;
   const canPlayerActNow = canPlayerCancelReservation({
     status: reservation.status as "pending" | "confirmed" | "cancelled" | "rejected",
     date: reservation.date,
@@ -429,7 +439,8 @@ export function ReservationShareView({
     showPendingRequests ||
     showPendingApproval ||
     showConfirmedAdminActions ||
-    showPlayerPendingActions;
+    showPlayerPendingActions ||
+    showPlayerConfirmedCancelAction;
 
   // Regla "no repetir al creador" — players ya incluye al creador cuando es
   // PLAYER (ver get_reservation_share_detail), así que un array de longitud
@@ -665,17 +676,22 @@ export function ReservationShareView({
               </div>
             )}
 
-            {/* Cancelar/Editar — creador PLAYER de una solicitud pendiente.
-                Mismas Server Actions/regla de 2 horas que "Mis solicitudes"
-                (PlayerActivity) y el flujo de edición del calendario —
+            {/* Cancelar/Editar — creador PLAYER de una solicitud pendiente, o
+                solo Cancelar para una reserva ya CONFIRMED (misma Server
+                Action/estado compartido, cancelMyReservation/
+                confirmingMyCancel — nunca una segunda copia por estado).
                 Editar reutiliza ese mismo punto de entrada en vez de un
-                formulario nuevo acá. */}
-            {showPlayerPendingActions && (
+                formulario nuevo acá, y solo aplica a la solicitud pendiente
+                (editar una reserva confirmada del propio jugador vive en el
+                calendario, fuera de alcance acá). */}
+            {(showPlayerPendingActions || showPlayerConfirmedCancelAction) && (
               <div className="flex flex-col gap-2">
                 {cancelMyError && <p className="text-xs text-red-400">{cancelMyError}</p>}
                 {confirmingMyCancel ? (
                   <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4">
-                    <p className="text-sm text-white font-medium mb-1">¿Cancelar esta solicitud?</p>
+                    <p className="text-sm text-white font-medium mb-1">
+                      {showPlayerPendingActions ? "¿Cancelar esta solicitud?" : "¿Cancelar esta reserva?"}
+                    </p>
                     <p className="text-xs text-brand-muted mb-3">Esta acción no se puede deshacer.</p>
                     <div className="flex gap-2">
                       <button
@@ -704,19 +720,23 @@ export function ReservationShareView({
                       className="flex-1 h-10 rounded-xl border border-red-500/20 text-sm font-medium text-red-400 hover:bg-red-500/10 hover:border-red-500/40 transition-colors flex items-center justify-center gap-1.5"
                     >
                       <XCircle className="w-3.5 h-3.5" />
-                      Cancelar
+                      {showPlayerPendingActions ? "Cancelar" : "Cancelar reserva"}
                     </button>
-                    <Link
-                      href={`${activityHref(clubSlug, reservation.id)}&edit=1`}
-                      className="flex-1 h-10 rounded-xl bg-brand-primary text-brand-bg text-sm font-semibold hover:brightness-110 transition-all flex items-center justify-center gap-1.5"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                      Editar
-                    </Link>
+                    {showPlayerPendingActions && (
+                      <Link
+                        href={`${activityHref(clubSlug, reservation.id)}&edit=1`}
+                        className="flex-1 h-10 rounded-xl bg-brand-primary text-brand-bg text-sm font-semibold hover:brightness-110 transition-all flex items-center justify-center gap-1.5"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        Editar
+                      </Link>
+                    )}
                   </div>
                 ) : (
                   <p className="text-xs text-brand-muted/60">
-                    Ya no se puede editar ni cancelar (faltan menos de 2 horas)
+                    {showPlayerPendingActions
+                      ? "Ya no se puede editar ni cancelar (faltan menos de 2 horas)"
+                      : "Ya no se puede cancelar (faltan menos de 2 horas)"}
                   </p>
                 )}
               </div>

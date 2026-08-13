@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../contexts/AuthContext";
 import { useClub } from "../contexts/ClubContext";
@@ -108,6 +109,21 @@ export function PlayerDashboardScreen() {
     setLoading(true);
     load().finally(() => setLoading(false));
   }, [club, clubMemberId, load]);
+
+  // El Tab Navigator mantiene esta pantalla montada al cambiar de tab
+  // (nunca la desmonta) — sin esto, "Próxima actividad" podía seguir
+  // mostrando una reserva ya cancelada/editada desde otra pantalla (p. ej.
+  // ReservationDetailScreen, vía ReservasTab) hasta el próximo pull-to-
+  // refresh manual. Mismo patrón ya usado en TournamentDetailScreen.tsx
+  // (recargar al recuperar foco) — nunca un mecanismo nuevo. Sin toggle de
+  // `loading`: es un refresco silencioso en segundo plano, no debe volver
+  // a mostrar los skeletons cada vez que el jugador visita este tab.
+  useFocusEffect(
+    useCallback(() => {
+      load();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [club, clubMemberId])
+  );
 
   async function handleRefresh() {
     setRefreshing(true);

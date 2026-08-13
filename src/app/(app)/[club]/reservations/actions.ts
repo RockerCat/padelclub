@@ -161,6 +161,11 @@ export async function cancelMyReservation(
 
   revalidatePath(`/${clubSlug}/reservations`);
   revalidatePath(`/${clubSlug}/home`);
+  // El Dashboard deportivo del PLAYER (ver CLAUDE.md → Player Dashboard
+  // Principles) también depende de esta reserva para "Próxima actividad" —
+  // sin esto, el Router Cache de Next.js podía seguir sirviendo esa
+  // pantalla con la reserva ya cancelada hasta que expirara solo.
+  revalidatePath(`/${clubSlug}/dashboard`);
   return { success: true };
 }
 

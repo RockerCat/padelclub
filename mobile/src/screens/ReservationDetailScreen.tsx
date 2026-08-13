@@ -43,14 +43,19 @@ function getInitials(name: string): string {
 // datos exacta (get_reservation_share_detail, ver reservationShareDetail.ts),
 // mismas dos DetailCard (Estado/Participación/Cancha/Fecha/Hora/Duración/
 // Tipo/Valor — luego Creador/Jugadores/Cupo/Compartir), mismo banner
-// primario por prioridad, mismo par Cancelar/Editar SOLO para una
-// solicitud pendiente propia (la web tampoco ofrece cancelar desde esta
-// pantalla para una ya confirmada — eso vive solo en la tarjeta de "Mis
-// reservas"). "Aceptar solicitudes de jugadores"/"Solicitar unirme" (el
-// switch y el flujo de join-request) siguen sin replicarse — otro módulo.
-// El avatar de "Jugadores" es una versión simplificada (foto o iniciales)
-// — no el PlayerSportAvatar real con anillo de categoría/corona, que es
-// infraestructura del módulo Sport/Ranking.
+// primario por prioridad. Cancelar/Editar para el creador PLAYER: par
+// completo (Cancelar + Editar) mientras la solicitud sigue pending; solo
+// Cancelar una vez confirmed (mismo alcance que ReservationShareView.tsx —
+// editar una reserva confirmada del propio jugador vive en el calendario,
+// fuera de este ajuste). Ambos casos comparten exactamente la misma Server
+// Action/regla de 2 horas (cancelReservation → cancel_reservation RPC,
+// canPlayerCancelReservation) que ya usa la tarjeta de "Mis reservas" —
+// nunca una segunda implementación. "Aceptar solicitudes de jugadores"/
+// "Solicitar unirme" (el switch y el flujo de join-request) siguen sin
+// replicarse — otro módulo. El avatar de "Jugadores" es una versión
+// simplificada (foto o iniciales) — no el PlayerSportAvatar real con
+// anillo de categoría/corona, que es infraestructura del módulo
+// Sport/Ranking.
 //
 // "Editar" para OWNER/ADMIN sí se agrega acá (a diferencia del comentario
 // original de este archivo) — esta pantalla es un punto de entrada real
@@ -60,8 +65,8 @@ function getInitials(name: string): string {
 // ninguna acción administrativa, solo WhatsApp/Copiar enlace. Reutiliza el
 // mismo WeekReservationModal (mode="edit") que Agenda ya usa, que aplica
 // getReservationAdminEditPolicy internamente sin que esta pantalla
-// necesite duplicar esa regla. Nunca se agregó Cancelar/Abrir-Cerrar/
-// tiempo extra acá — fuera de alcance de este fix puntual.
+// necesite duplicar esa regla. Cancelar/Abrir-Cerrar/tiempo extra para
+// OWNER/ADMIN siguen sin agregarse acá — fuera de alcance de este ajuste.
 export function ReservationDetailScreen({ route }: Props) {
   const { id } = route.params;
   // currentClub: el club activo del viewer (useClub) — deliberadamente
@@ -206,6 +211,15 @@ export function ReservationDetailScreen({ route }: Props) {
   }
 
   const showPlayerPendingActions = reservation.status === "pending" && reservation.is_creator;
+  // Cancelar — creador PLAYER de una reserva ya CONFIRMED (nunca
+  // OWNER/ADMIN). Misma Server Action/regla de 2 horas
+  // (canPlayerCancelReservation, shared/reservations/eligibility.ts) que ya
+  // usa el bloque de solicitud pendiente de arriba — antes esta pantalla
+  // nunca ofrecía cancelar una reserva ya confirmada, aunque
+  // cancel_reservation ya lo permitía server-side (paridad con
+  // ReservationShareView.tsx, app web). Solo Cancelar, nunca Editar (eso
+  // sigue siendo exclusivo de OWNER/ADMIN acá, ver showEditAction).
+  const showPlayerConfirmedCancelAction = reservation.status === "confirmed" && reservation.is_creator && !isOwnerOrAdmin;
   const canPlayerActNow = canPlayerCancelReservation(reservation);
 
   // Editar — OWNER/ADMIN, reserva confirmada (mismo alcance que
@@ -251,7 +265,8 @@ export function ReservationDetailScreen({ route }: Props) {
   ];
 
   function handleCancelPress() {
-    Alert.alert("¿Cancelar esta solicitud?", "Esta acción no se puede deshacer.", [
+    const title = showPlayerPendingActions ? "¿Cancelar esta solicitud?" : "¿Cancelar esta reserva?";
+    Alert.alert(title, "Esta acción no se puede deshacer.", [
       { text: "Volver", style: "cancel" },
       {
         text: "Confirmar",
@@ -349,7 +364,7 @@ export function ReservationDetailScreen({ route }: Props) {
           </View>
         </DetailCard>
 
-        {(primary || showPlayerPendingActions || showEditAction) && (
+        {(primary || showPlayerPendingActions || showPlayerConfirmedCancelAction || showEditAction) && (
           <View style={styles.actionsSection}>
             {primary && (
               <View
@@ -373,15 +388,19 @@ export function ReservationDetailScreen({ route }: Props) {
               </View>
             )}
 
-            {showPlayerPendingActions &&
+            {(showPlayerPendingActions || showPlayerConfirmedCancelAction) &&
               (cancelling ? (
                 <ActivityIndicator color={theme.colors.danger} />
               ) : canPlayerActNow ? (
                 <TouchableOpacity style={styles.cancelButton} onPress={handleCancelPress} activeOpacity={0.85}>
-                  <Text style={styles.cancelButtonText}>Cancelar</Text>
+                  <Text style={styles.cancelButtonText}>{showPlayerPendingActions ? "Cancelar" : "Cancelar reserva"}</Text>
                 </TouchableOpacity>
               ) : (
-                <Text style={styles.windowClosed}>Ya no se puede editar ni cancelar (faltan menos de 2 horas)</Text>
+                <Text style={styles.windowClosed}>
+                  {showPlayerPendingActions
+                    ? "Ya no se puede editar ni cancelar (faltan menos de 2 horas)"
+                    : "Ya no se puede cancelar (faltan menos de 2 horas)"}
+                </Text>
               ))}
 
             {showEditAction && (
