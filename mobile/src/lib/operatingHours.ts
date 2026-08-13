@@ -1,14 +1,16 @@
-// OperatingHour/DEFAULT_OPERATING_HOURS/timeToMinutes/getEffectiveHour ya
-// NO son una copia — Metro ahora resuelve shared/ fuera de la raíz de
-// mobile/ (ver mobile/metro.config.js, watchFolders). Misma fuente única
-// que src/lib/operatingHours.ts (app web) también usa
-// (shared/reservations/operatingHours.ts).
+// OperatingHour/DEFAULT_OPERATING_HOURS/timeToMinutes/getEffectiveHour/
+// ScheduleGroup/buildScheduleSummary ya NO son una copia — Metro ahora
+// resuelve shared/ fuera de la raíz de mobile/ (ver mobile/metro.config.js,
+// watchFolders). Misma fuente única que src/lib/operatingHours.ts (app
+// web) también usa (shared/reservations/operatingHours.ts).
 export {
   type OperatingHour,
   DEFAULT_OPERATING_HOURS,
   DAY_NAMES,
   timeToMinutes,
   getEffectiveHour,
+  type ScheduleGroup,
+  buildScheduleSummary,
 } from "../../../shared/reservations/operatingHours";
 
 import type { OperatingHour } from "../../../shared/reservations/operatingHours";

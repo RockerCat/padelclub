@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   CalendarDays,
   Users,
-  Home,
   User,
   LogOut,
   Lock,
@@ -17,7 +16,9 @@ import {
   ChevronDown,
   Trophy,
   Swords,
+  createLucideIcon,
 } from "lucide-react";
+import { tennisBall, tennisRacket } from "@lucide/lab";
 import { createClient } from "@/lib/supabase/client";
 import { PlayerAvatar } from "@/components/players/PlayerAvatar";
 import { cn } from "@/lib/utils/cn";
@@ -35,6 +36,23 @@ import type { NotificationRow } from "@/lib/notifications";
 import type { SidebarIdentityData } from "@/lib/userIdentity";
 import { clubRoleLabel, PLATFORM_ADMIN_LABEL } from "@/lib/roleLabels";
 import { CLUB_PRIMARY_COLOR } from "@/lib/constants/clubTheme";
+
+// "tennis-ball" no es un ícono core de lucide-react — vive en @lucide/lab
+// (paquete oficial de Lucide, sin dependencias propias, mismo trazo/
+// viewBox/stroke-width que el set principal). createLucideIcon lo
+// convierte en un componente con la misma forma que cualquier ícono core
+// (acepta className, ref, etc.) para que encaje sin cambios en NavItem.icon
+// más abajo. Reemplaza al intento anterior con Volleyball — visualmente no
+// se leía como pelota de pádel/tenis.
+const TennisBallIcon = createLucideIcon("tennis-ball", tennisBall);
+
+// "tennis-racket" — mismo paquete, mismo trato. Reemplaza a Swords (que se
+// leía como dos espadas cruzadas, no una pala) SOLO en el tab "Torneos" del
+// PLAYER, más abajo — no existe ningún ícono "padel"/"paddle"/
+// "table-tennis"/"ping-pong" en @lucide/lab ni en el set core de
+// lucide-react/lucide-react-native; esta es la opción más cercana
+// disponible (una sola raqueta/pala, nunca un par).
+const TennisRacketIcon = createLucideIcon("tennis-racket", tennisRacket);
 
 function getInitials(name: string): string {
   return name
@@ -74,6 +92,12 @@ function isNavItemActive(pathname: string, href: string): boolean {
 }
 
 interface NavItem {
+  /** Stable identifier — never the display label, which can be dynamic
+   *  (the PLAYER "Página del club" item shows the real club name instead
+   *  of a fixed copy string). Used for React keys and for the tab-bar
+   *  selection lookups below (getTabBarItems), which must never break
+   *  just because a label's text changes. */
+  id: string;
   label: string;
   href?: string;
   icon: React.ComponentType<{ className?: string }>;
@@ -106,24 +130,31 @@ interface AppNavProps {
 // pendingJoinRequests only ever has a meaningful value for OWNER/ADMIN (the
 // layout never queries it for PLAYER), so gating the badge by role here is
 // just a safety net — the real exclusion already happens in the layout.
-function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequests: number): NavItem[] {
+// clubName is only used by the PLAYER branch (its "Página del club" item
+// shows the real club name instead of a fixed copy string) — always the
+// same `club.name` already loaded into AppNavProps.club for every role, so
+// this never triggers a new query.
+function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequests: number, clubName: string): NavItem[] {
   const base: NavItem[] = [];
 
   if (role === "OWNER") {
     base.push(
       {
+        id: "dashboard",
         label: "Dashboard",
         href: `/${slug}/dashboard`,
         icon: LayoutDashboard,
         color: "secondary" as const,
       },
       {
+        id: "reservations",
         label: "Reservaciones",
         href: `/${slug}/admin/reservations`,
         icon: CalendarDays,
         color: "secondary" as const,
       },
       {
+        id: "players",
         label: "Jugadores",
         href: `/${slug}/admin/players`,
         icon: Users,
@@ -131,16 +162,19 @@ function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequest
         badgeCount: pendingJoinRequests,
       },
       {
+        id: "ranking",
         label: "Ranking",
         href: `/${slug}/ranking`,
         icon: Trophy,
       },
       {
+        id: "tournaments",
         label: "Torneos",
         href: `/${slug}/admin/tournaments`,
         icon: Swords,
       },
       {
+        id: "clubHub",
         label: "Club",
         href: clubHubPath(slug),
         icon: Building2,
@@ -149,18 +183,21 @@ function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequest
   } else if (role === "ADMIN") {
     base.push(
       {
+        id: "dashboard",
         label: "Dashboard",
         href: `/${slug}/dashboard`,
         icon: LayoutDashboard,
         color: "secondary" as const,
       },
       {
+        id: "reservations",
         label: "Reservaciones",
         href: `/${slug}/admin/reservations`,
         icon: CalendarDays,
         color: "secondary" as const,
       },
       {
+        id: "players",
         label: "Jugadores",
         href: `/${slug}/admin/players`,
         icon: Users,
@@ -168,48 +205,60 @@ function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequest
         badgeCount: pendingJoinRequests,
       },
       {
+        id: "ranking",
         label: "Ranking",
         href: `/${slug}/ranking`,
         icon: Trophy,
       },
       {
+        id: "tournaments",
         label: "Torneos",
         href: `/${slug}/admin/tournaments`,
         icon: Swords,
       },
       {
+        id: "clubHub",
         label: "Club",
         href: clubHubPath(slug),
         icon: Building2,
       }
     );
   } else {
-    // PLAYER
+    // PLAYER — "clubHome" points at exactly the same /[slug]/home route as
+    // before ("Página del club"); only its label (now the real club name)
+    // and icon (now a ball, not a house) changed. See CLAUDE.md → this
+    // section must never show OWNER/ADMIN's separate "Club" hub (clubHub,
+    // above) — different id, different href, never merged.
     base.push(
       {
+        id: "dashboard",
         label: "Dashboard",
         href: `/${slug}/dashboard`,
         icon: LayoutDashboard,
       },
       {
-        label: "Página del club",
+        id: "clubHome",
+        label: clubName,
         href: `/${slug}/home`,
-        icon: Home,
+        icon: TennisBallIcon,
       },
       {
+        id: "reservations",
         label: "Reservaciones",
         href: `/${slug}/reservations`,
         icon: CalendarDays,
       },
       {
+        id: "ranking",
         label: "Ranking",
         href: `/${slug}/ranking`,
         icon: Trophy,
       },
       {
+        id: "tournaments",
         label: "Torneos",
         href: `/${slug}/tournaments`,
-        icon: Swords,
+        icon: TennisRacketIcon,
       }
     );
   }
@@ -234,25 +283,30 @@ function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequest
 // Ambos casos leen href/icon directamente de navItems — nunca una segunda
 // lista de rutas hardcodeada que pueda desalinearse del sidebar de
 // escritorio.
-const OWNER_ADMIN_TAB_BAR_LABELS = ["Dashboard", "Jugadores", "Reservaciones", "Torneos", "Ranking", "Club"] as const;
+// Ambas listas identifican items por `id` (nunca por `label` — el label de
+// "clubHome" ahora es el nombre real del club, no un texto fijo contra el
+// que se pueda comparar). El orden de cada arreglo es el orden real de la
+// tab bar, deliberadamente distinto del orden del sidebar de escritorio en
+// el caso de OWNER/ADMIN (Torneos antes que Ranking aquí).
+const OWNER_ADMIN_TAB_BAR_IDS = ["dashboard", "players", "reservations", "tournaments", "ranking", "clubHub"] as const;
 const OWNER_ADMIN_TAB_BAR_LABEL_OVERRIDES: Record<string, string> = {
-  Dashboard: "Inicio",
-  Reservaciones: "Reservas",
+  dashboard: "Inicio",
+  reservations: "Reservas",
 };
 
-const PLAYER_TAB_BAR_LABELS = ["Dashboard", "Página del club", "Reservaciones", "Ranking", "Torneos"] as const;
+const PLAYER_TAB_BAR_IDS = ["dashboard", "clubHome", "reservations", "ranking", "tournaments"] as const;
 
 function getTabBarItems(navItems: NavItem[], role: AppNavProps["role"]): NavItem[] {
-  const byLabel = new Map(navItems.map((item) => [item.label, item] as const));
+  const byId = new Map(navItems.map((item) => [item.id, item] as const));
 
   if (role === "PLAYER") {
-    return PLAYER_TAB_BAR_LABELS.map((label) => byLabel.get(label)).filter((item): item is NavItem => !!item);
+    return PLAYER_TAB_BAR_IDS.map((id) => byId.get(id)).filter((item): item is NavItem => !!item);
   }
 
-  return OWNER_ADMIN_TAB_BAR_LABELS.map((label) => byLabel.get(label))
+  return OWNER_ADMIN_TAB_BAR_IDS.map((id) => byId.get(id))
     .filter((item): item is NavItem => !!item)
     .map((item) =>
-      OWNER_ADMIN_TAB_BAR_LABEL_OVERRIDES[item.label] ? { ...item, label: OWNER_ADMIN_TAB_BAR_LABEL_OVERRIDES[item.label] } : item
+      OWNER_ADMIN_TAB_BAR_LABEL_OVERRIDES[item.id] ? { ...item, label: OWNER_ADMIN_TAB_BAR_LABEL_OVERRIDES[item.id] } : item
     );
 }
 
@@ -395,10 +449,10 @@ function NavContent({
 
           if (item.disabled) {
             return (
-              <li key={item.label}>
+              <li key={item.id}>
                 <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-brand-muted/50 cursor-not-allowed select-none">
                   <Icon className="w-4 h-4 shrink-0" />
-                  <span className="text-sm flex-1">{item.label}</span>
+                  <span className="text-sm flex-1 min-w-0 truncate">{item.label}</span>
                   {item.soon && (
                     <span className="text-[10px] font-medium bg-white/5 border border-white/10 text-brand-muted px-1.5 py-0.5 rounded-md flex items-center gap-1">
                       <Lock className="w-2.5 h-2.5" />
@@ -415,7 +469,7 @@ function NavContent({
 
           return (
             <li
-              key={item.label}
+              key={item.id}
               className="relative"
               style={{ "--item-accent": accent } as React.CSSProperties}
             >
@@ -445,7 +499,7 @@ function NavContent({
                 }
               >
                 <Icon className="w-4 h-4 shrink-0" />
-                <span className="flex-1">{item.label}</span>
+                <span className="flex-1 min-w-0 truncate">{item.label}</span>
                 {!!item.badgeCount && (
                   <span className="text-[10px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/25 rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center shrink-0">
                     {item.badgeCount}
@@ -695,7 +749,7 @@ export function AppNav({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [userMenuOpen]);
 
-  const navItems = getNavItems(club.slug, role, pendingJoinRequests);
+  const navItems = getNavItems(club.slug, role, pendingJoinRequests, club.name);
   const tabBarItems = getTabBarItems(navItems, role);
   const displayName = getDisplayName(identity);
 
@@ -861,7 +915,7 @@ export function AppNav({
           >
             {tabBarItems.map((item) => (
               <MobileTabBarItem
-                key={item.label}
+                key={item.id}
                 item={item}
                 isActive={item.href ? isNavItemActive(effectiveNavPath, item.href) : false}
                 isPending={pendingHref !== null && item.href === pendingHref}
@@ -1027,7 +1081,7 @@ export function AppNav({
           >
             {tabBarItems.map((item) => (
               <MobileTabBarItem
-                key={item.label}
+                key={item.id}
                 item={item}
                 isActive={item.href ? isNavItemActive(effectiveNavPath, item.href) : false}
                 isPending={pendingHref !== null && item.href === pendingHref}
