@@ -6,6 +6,7 @@ import {
   isOwnEntry,
 } from "../tournaments/entries";
 import { compareTournaments } from "../tournaments/sort";
+import { hasTournamentStarted } from "../tournaments/actions";
 import type { MyReservation } from "../reservations/playerReservations";
 import { getReservationTimeStatus, type BogotaNow } from "../reservations/editPolicy";
 import { getBogotaNow } from "../utils/bogotaDatetime";
@@ -138,7 +139,15 @@ export function computeRankingTrend(
 // fallback de prioridad 3 (Torneo), que myBookings no cubre.
 
 export interface UpcomingTournamentActivity {
-  tournament: Pick<Tournament, "id" | "slug" | "name" | "starts_at" | "status" | "category" | "secondary_category">;
+  // registration_closes_at agregado (además de starts_at, ya presente) —
+  // lo necesita effectivePlayerTournamentStatus (shared/tournaments/
+  // actions.ts) para que UpcomingActivityCard (WEB y mobile) muestre el
+  // mismo estado efectivo que el resto de superficies PLAYER, nunca el
+  // status crudo.
+  tournament: Pick<
+    Tournament,
+    "id" | "slug" | "name" | "starts_at" | "status" | "category" | "secondary_category" | "registration_closes_at"
+  >;
   entryStatus: TournamentEntryStatus;
 }
 
@@ -201,16 +210,28 @@ export async function getUpcomingTournamentActivity(
 
   const { data: tournaments } = await supabase
     .from("tournaments")
-    .select("id, slug, name, starts_at, status, category, secondary_category")
+    .select("id, slug, name, starts_at, status, category, secondary_category, registration_closes_at")
     .eq("club_id", clubId)
     .in("id", tournamentIds)
     .in("status", ["registration_open", "in_progress"]);
 
   if (!tournaments || tournaments.length === 0) return null;
 
+  // Un torneo con status='registration_open' cuyo starts_at ya pasó quedó
+  // temporalmente atrás (nadie lo cerró/inició a tiempo — este MVP no
+  // tiene cron) y nunca puede seguir compitiendo como "próxima actividad",
+  // aunque su status persistido todavía diga lo contrario (nunca se
+  // auto-finaliza/cancela por esto, ver CLAUDE.md). in_progress nunca se
+  // filtra por esto: empezar en el pasado es justamente lo que "en curso"
+  // significa.
+  const temporallyValid = tournaments.filter(
+    (t) => t.status !== "registration_open" || !hasTournamentStarted(t)
+  );
+  if (temporallyValid.length === 0) return null;
+
   // Próximo por starts_at ascendente — sin fecha definida al final, nunca
   // primero (un torneo sin fecha no es "lo más próximo").
-  const sorted = [...tournaments].sort((a, b) => {
+  const sorted = [...temporallyValid].sort((a, b) => {
     if (!a.starts_at && !b.starts_at) return 0;
     if (!a.starts_at) return 1;
     if (!b.starts_at) return -1;

@@ -7,7 +7,7 @@ import { confirmTournamentEntry, rejectTournamentEntry, withdrawTournamentEntry 
 import { RegisterEntryModal } from "./RegisterEntryModal";
 import { EntryCard } from "./EntryCard";
 import { isOwnEntry, type TournamentEntryWithMembers, type TournamentEntriesCapacity } from "../../lib/tournamentEntries";
-import { tournamentCategoryLabel } from "../../lib/tournaments";
+import { tournamentCategoryLabel, isRegistrationTemporallyOpen } from "../../lib/tournaments";
 import type { Tournament, TournamentEntryRow } from "../../types/domain";
 
 // Traducción 1:1 de EntriesSection.tsx (app web) — misma barra de
@@ -68,7 +68,13 @@ export function EntriesSection({
   const status = tournament.status;
   const full = capacity.occupied >= capacity.total;
   const canAdminRegister = ["registration_open", "registration_closed", "in_progress"].includes(status) && !full;
-  const canPlayerRegister = status === "registration_open" && !full;
+  // status='registration_open' ya no es suficiente por sí solo —
+  // isRegistrationTemporallyOpen exige además que no haya pasado
+  // registration_closes_at ni starts_at, mismo límite duro que
+  // register_tournament_entry ya aplica server-side (shared/tournaments/
+  // actions.ts). El organizador (canAdminRegister arriba) no pasa por
+  // esto — sigue sin ningún límite temporal nuevo.
+  const canPlayerRegister = isRegistrationTemporallyOpen(tournament) && !full;
   const canConfirmOrRejectStatus = ["registration_open", "registration_closed"].includes(status);
   const canWithdrawStatus = ["registration_open", "registration_closed"].includes(status);
 

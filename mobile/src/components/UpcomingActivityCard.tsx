@@ -2,7 +2,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useNavigation, type NavigationProp, type ParamListBase } from "@react-navigation/native";
 import { CalendarPlus, Trophy, MapPin, Users as UsersIcon } from "lucide-react-native";
 import { durationLabel } from "../lib/durations";
-import { tournamentCategoryLabel, tournamentStatusLabel } from "../lib/tournaments";
+import { tournamentCategoryLabel, tournamentStatusLabel, effectivePlayerTournamentStatus } from "../lib/tournaments";
 import { formatShortDate } from "../lib/dateFormat";
 import { isoToBogotaWallClock } from "../lib/bogotaDatetime";
 import type { MyReservation } from "../lib/playerReservations";
@@ -88,7 +88,9 @@ export function UpcomingActivityCard({ booking, tournamentActivity }: UpcomingAc
 
         <View style={styles.footerRow}>
           <Text style={styles.statusText}>
-            {tournamentActivity.entryStatus === "pending" ? "Inscripción pendiente" : tournamentStatusLabel(t.status)}
+            {tournamentActivity.entryStatus === "pending"
+              ? "Inscripción pendiente"
+              : tournamentStatusLabel(effectivePlayerTournamentStatus(t))}
           </Text>
           <TouchableOpacity
             style={styles.ctaButton}

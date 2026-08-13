@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CalendarPlus, Trophy, MapPin, Users as UsersIcon } from "lucide-react";
 import { durationLabel } from "@/lib/durations";
 import { tournamentCategoryLabel, tournamentStatusLabel } from "@/lib/tournamentLabels";
+import { effectivePlayerTournamentStatus } from "../../../../../../shared/tournaments/actions";
 import { buildReservationSlug } from "@/lib/reservationSlug";
 import type { MyReservation } from "@/lib/playerReservations";
 import type { UpcomingBookingDetails, UpcomingTournamentActivity } from "@/lib/playerDashboard";
@@ -97,7 +98,9 @@ export function UpcomingActivityCard({ clubSlug, booking, tournamentActivity }: 
 
         <div className="flex items-center justify-between gap-3 pt-1">
           <span className="text-xs text-brand-muted">
-            {tournamentActivity.entryStatus === "pending" ? "Inscripción pendiente" : tournamentStatusLabel(t.status)}
+            {tournamentActivity.entryStatus === "pending"
+              ? "Inscripción pendiente"
+              : tournamentStatusLabel(effectivePlayerTournamentStatus(t))}
           </span>
           <Link
             href={`/${clubSlug}/tournaments/${t.slug}`}

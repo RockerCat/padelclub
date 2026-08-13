@@ -8,6 +8,7 @@ import { supabase } from "../lib/supabase";
 import { useClub } from "../contexts/ClubContext";
 import {
   ADMIN_TAB_ORDER,
+  effectivePlayerTournamentStatus,
   getTournamentsForClub,
   resolveDefaultTab,
   tournamentsForTab,
@@ -31,7 +32,17 @@ import type { TournamentsStackParamList } from "../navigation/TournamentsStack";
 // "Crear torneo" abre el mismo RPC create_tournament vía
 // TournamentFormModal (modo creación).
 export function TournamentsScreen() {
-  const { club } = useClub();
+  // NOTA: esta pantalla sigue siendo el mismo listado ADMIN-only de
+  // siempre (con "Crear torneo" y los 7 tabs de ADMIN_TAB_ORDER visibles
+  // para cualquier rol que entre acá — un gap real y separado, ya
+  // reconocido, de portar el rol correcto a esta lista, análogo al que ya
+  // se corrigió en TournamentDetailScreen/EntriesSection; fuera de
+  // alcance de este ajuste puntual). `role` se agrega acá únicamente para
+  // que el badge de cada tarjeta muestre el estado EFECTIVO cuando quien
+  // mira es PLAYER, igual que el resto de superficies PLAYER — ningún
+  // otro comportamiento de esta pantalla cambia.
+  const { club, role } = useClub();
+  const isAdmin = role === "OWNER" || role === "ADMIN";
   const navigation = useNavigation<NativeStackNavigationProp<TournamentsStackParamList, "TournamentsList">>();
 
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
@@ -142,6 +153,7 @@ export function TournamentsScreen() {
             tournament={item}
             confirmedCount={confirmedCountByTournamentId[item.id] ?? 0}
             onPress={() => navigation.navigate("TournamentDetail", { tournamentId: item.id })}
+            displayStatus={isAdmin ? item.status : effectivePlayerTournamentStatus(item)}
           />
         )}
         ItemSeparatorComponent={() => <View style={{ height: 12 }} />}

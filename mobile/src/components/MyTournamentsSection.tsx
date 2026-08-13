@@ -2,6 +2,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useNavigation, type NavigationProp, type ParamListBase } from "@react-navigation/native";
 import { TournamentCard } from "./TournamentCard";
 import type { PlayerTournamentCard } from "../lib/playerDashboard";
+import { effectivePlayerTournamentStatus } from "../lib/tournaments";
 import { theme } from "../lib/theme";
 
 // Línea extra bajo la fecha (compañero/posición/puntos) — traducción 1:1
@@ -59,6 +60,9 @@ export function MyTournamentsSection({ cards }: { cards: PlayerTournamentCard[] 
             tournament={card.tournament}
             onPress={() => navigation.navigate("TournamentsTab", { screen: "TournamentDetail", params: { tournamentId: card.tournament.id } })}
             footerExtra={<TournamentFooterExtra card={card} />}
+            // Esta sección es exclusiva de PLAYER (Dashboard deportivo) —
+            // siempre el estado EFECTIVO, mismo criterio que WEB.
+            displayStatus={effectivePlayerTournamentStatus(card.tournament)}
           />
         ))}
       </View>

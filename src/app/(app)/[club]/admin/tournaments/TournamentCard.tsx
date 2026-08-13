@@ -33,12 +33,23 @@ export function TournamentCard({
   href,
   confirmedCount,
   footerExtra,
+  displayStatus,
 }: {
   tournament: Tournament;
   href: string;
   confirmedCount?: number;
   footerExtra?: React.ReactNode;
+  // Estado a mostrar en el badge, cuando difiere de tournament.status —
+  // el caller PLAYER-facing (TournamentsGrid con role="PLAYER",
+  // MyTournamentsSection) pasa el estado EFECTIVO
+  // (effectivePlayerTournamentStatus, shared/tournaments/actions.ts) para
+  // que un 'registration_open' cuyo horario real ya cerró se vea como
+  // "Inscripciones cerradas" — nunca reescribe tournament.status. Un
+  // caller OWNER/ADMIN (o que no lo pasa) sigue viendo tournament.status
+  // real sin ningún cambio, exactamente igual que antes.
+  displayStatus?: string;
 }) {
+  const status = displayStatus ?? tournament.status;
   return (
     <Link
       href={href}
@@ -54,8 +65,8 @@ export function TournamentCard({
       <div className="p-4 flex flex-col gap-3 flex-1">
         <div className="flex items-start justify-between gap-2">
           <h3 className="text-sm font-semibold text-white line-clamp-2 min-w-0">{tournament.name}</h3>
-          <Badge variant={tournamentStatusBadgeVariant(tournament.status)} size="sm" className="shrink-0">
-            {tournamentStatusLabel(tournament.status)}
+          <Badge variant={tournamentStatusBadgeVariant(status)} size="sm" className="shrink-0">
+            {tournamentStatusLabel(status)}
           </Badge>
         </div>
 

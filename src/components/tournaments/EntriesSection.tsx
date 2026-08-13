@@ -15,10 +15,14 @@ import {
 import { isOwnEntry, type TournamentEntriesCapacity, type TournamentEntryWithMembers } from "@/lib/tournamentEntries";
 import { tournamentCategoryLabel } from "@/lib/tournamentLabels";
 import { cn } from "@/lib/utils/cn";
+import { isRegistrationTemporallyOpen } from "../../../shared/tournaments/actions";
 import type { Tournament, TournamentEntryRow } from "@/types/database";
 
 interface EntriesSectionProps {
-  tournament: Pick<Tournament, "id" | "club_id" | "category" | "secondary_category" | "max_pairs" | "status">;
+  tournament: Pick<
+    Tournament,
+    "id" | "club_id" | "category" | "secondary_category" | "max_pairs" | "status" | "registration_closes_at" | "starts_at"
+  >;
   initialEntries: TournamentEntryWithMembers[];
   capacity: TournamentEntriesCapacity;
   role: "OWNER" | "ADMIN" | "PLAYER";
@@ -129,11 +133,16 @@ export function EntriesSection({
   // el botón ya no ofrece esa acción en la UI cuando el cupo está lleno —
   // solo oculta la entrada, nunca bloquea ni debilita esa validación real.
   const full = capacity.occupied >= capacity.total;
-  // Un jugador solo puede inscribirse mientras las inscripciones están
-  // abiertas; el organizador puede seguir registrando parejas durante
+  // Un jugador solo puede inscribirse mientras las inscripciones siguen
+  // REALMENTE abiertas — status='registration_open' ya no es suficiente
+  // por sí solo: isRegistrationTemporallyOpen exige además que no haya
+  // pasado registration_closes_at ni starts_at (mismo criterio, mismo
+  // límite duro, que register_tournament_entry aplica server-side). El
+  // organizador puede seguir registrando parejas durante
   // registration_closed/in_progress ("agregar nuevas duplas durante el
-  // torneo") — ambos casos ahora exigen además que quede cupo disponible.
-  const canPlayerRegister = tournament.status === "registration_open" && !full;
+  // torneo") sin ningún límite temporal nuevo — ambos casos ahora exigen
+  // además que quede cupo disponible.
+  const canPlayerRegister = isRegistrationTemporallyOpen(tournament) && !full;
   const canAdminRegister =
     (tournament.status === "registration_open" ||
       tournament.status === "registration_closed" ||

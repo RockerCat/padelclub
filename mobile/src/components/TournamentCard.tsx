@@ -55,6 +55,7 @@ export function TournamentCard({
   confirmedCount,
   onPress,
   footerExtra,
+  displayStatus,
 }: {
   tournament: Tournament;
   confirmedCount?: number;
@@ -65,7 +66,15 @@ export function TournamentCard({
   // no renderiza nada extra, así que TournamentsScreen.tsx (el único otro
   // caller) queda exactamente igual.
   footerExtra?: React.ReactNode;
+  // Estado a mostrar en el badge, cuando difiere de tournament.status —
+  // mismo prop/mismo motivo que TournamentCard.tsx (app web):
+  // effectivePlayerTournamentStatus para callers PLAYER-facing (
+  // MyTournamentsSection, TournamentsScreen para PLAYER), nunca reescribe
+  // tournament.status. Un caller que no lo pasa sigue viendo el status
+  // real, sin cambios.
+  displayStatus?: string;
 }) {
+  const status = displayStatus ?? tournament.status;
   return (
     <TouchableOpacity activeOpacity={0.8} onPress={onPress} style={styles.card}>
       {tournament.cover_image_url ? <Image source={{ uri: tournament.cover_image_url }} style={styles.cover} /> : null}
@@ -74,7 +83,7 @@ export function TournamentCard({
           <Text style={styles.name} numberOfLines={2}>
             {tournament.name}
           </Text>
-          <TournamentStatusBadge status={tournament.status} />
+          <TournamentStatusBadge status={status} />
         </View>
 
         <View style={styles.metaRow}>

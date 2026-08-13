@@ -14,6 +14,7 @@ import {
   buildTournamentWhatsappMessage,
   canEditTournament,
   canShareWhatsapp,
+  effectivePlayerTournamentStatus,
   formatDurationMinutes,
   runTournamentTransition,
   tournamentCategoryLabel,
@@ -324,6 +325,13 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
   const transitions = isAdmin ? availableTransitions(tournament, capacity) : [];
   const showEdit = isAdmin && canEditTournament(tournament.status);
   const showShare = isAdmin && canShareWhatsapp(tournament.status);
+  // OWNER/ADMIN siempre ve tournament.status real (lo necesita para
+  // encontrar Cerrar inscripciones/Iniciar torneo sobre el torneo real que
+  // debe operar). PLAYER ve el estado EFECTIVO: un 'registration_open'
+  // cuyo horario real ya cerró se percibe como 'registration_closed' —
+  // nunca se reescribe tournament.status, solo el badge que ve un PLAYER
+  // (shared/tournaments/actions.ts, mismo criterio que WEB).
+  const displayStatus = isAdmin ? tournament.status : effectivePlayerTournamentStatus(tournament);
 
   // Mismos campos exactos, mismo orden que infoFields en
   // TournamentDetailView.tsx (app web) — categoría/cupo/inscripción/
@@ -500,7 +508,7 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
             </View>
 
             <View style={styles.subBadgeRow}>
-              <TournamentStatusBadge status={tournament.status} />
+              <TournamentStatusBadge status={displayStatus} />
               {isInProgress && (
                 <View style={styles.liveBadge}>
                   <View style={styles.liveDot} />

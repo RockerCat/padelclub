@@ -12,6 +12,7 @@ import {
   tournamentsForTab,
   resolveDefaultTab,
 } from "../../../../../../shared/tournaments/tabs";
+import { effectivePlayerTournamentStatus } from "../../../../../../shared/tournaments/actions";
 import type { Tournament, SportCategory } from "@/types/database";
 
 interface TournamentsGridProps {
@@ -146,6 +147,12 @@ export function TournamentsGrid({
                   tournament={t}
                   href={`/${clubSlug}/tournaments/${t.slug}`}
                   confirmedCount={confirmedCountByTournamentId?.[t.id] ?? 0}
+                  // PLAYER ve el estado EFECTIVO (un 'registration_open'
+                  // cuyo horario real ya cerró se percibe como
+                  // 'registration_closed'); OWNER/ADMIN sigue viendo el
+                  // status real, sin cambios — mismo criterio que ya
+                  // aplica TournamentDetailView.tsx.
+                  displayStatus={role === "PLAYER" ? effectivePlayerTournamentStatus(t) : t.status}
                 />
               ))}
             </div>

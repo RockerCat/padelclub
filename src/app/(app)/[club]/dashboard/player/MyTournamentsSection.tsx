@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { TournamentCard } from "../../admin/tournaments/TournamentCard";
+import { effectivePlayerTournamentStatus } from "../../../../../../shared/tournaments/actions";
 import type { PlayerTournamentCard } from "@/lib/playerDashboard";
 
 // Sección "Mis torneos" — reutiliza EXACTAMENTE la misma tarjeta compacta
@@ -49,6 +50,10 @@ export function MyTournamentsSection({ clubSlug, cards }: { clubSlug: string; ca
             tournament={card.tournament}
             href={`/${clubSlug}/tournaments/${card.tournament.slug}`}
             footerExtra={<TournamentFooterExtra card={card} />}
+            // Esta sección es exclusiva de PLAYER (Dashboard deportivo) —
+            // siempre el estado EFECTIVO, mismo criterio que
+            // TournamentDetailView.tsx/TournamentsGrid.tsx.
+            displayStatus={effectivePlayerTournamentStatus(card.tournament)}
           />
         ))}
       </div>

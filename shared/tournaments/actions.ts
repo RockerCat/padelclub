@@ -41,6 +41,9 @@ export function tournamentErrorMessage(error: { code?: string; message?: string 
     ) {
       return "El torneo cambió de estado y esta acción ya no está disponible.";
     }
+    if (msg.includes("Tournament registration window has closed")) {
+      return "Las inscripciones de este torneo ya cerraron.";
+    }
     if (msg.includes("At least 2 confirmed pairs are required to close registration")) {
       return "Se requieren al menos 2 duplas inscritas para cerrar las inscripciones.";
     }
@@ -411,6 +414,75 @@ export function canArchiveTournament(status: string, archivedAt: string | null):
 
 export function canRestoreTournament(archivedAt: string | null): boolean {
   return !!archivedAt;
+}
+
+// ─── Vigencia temporal ──────────────────────────────────────────────────────
+// El status persistido sigue siendo la única fuente de verdad para el
+// workflow ADMINISTRATIVO (nunca se auto-transiciona por tiempo — este MVP
+// no tiene cron, ver CLAUDE.md → Tournament Module Principles), pero un
+// torneo con status='registration_open' que nadie cerró/inició a tiempo
+// nunca puede seguir aceptando inscripciones de un PLAYER ni presentarse
+// como actividad futura, solo porque el status quedó desactualizado.
+// registration_closes_at/starts_at ya son timestamptz reales (instantes
+// absolutos, no fecha+hora locales separadas como reservations.date/
+// start_time) — compararlos contra `now` es correcto en cualquier huso del
+// proceso/dispositivo que ejecute esto, sin necesitar anclarlos a
+// America/Bogota acá: esa conversión ya ocurrió una única vez, al guardar
+// el valor original (ver shared/utils/bogotaDatetime.ts,
+// bogotaWallClockToISO). `now` se recibe como parámetro (nunca `new Date()`
+// interno) por el mismo motivo que shared/reservations/editPolicy.ts ya
+// establece: mantiene la función pura y testeable.
+
+// ¿Siguen las inscripciones REALMENTE abiertas en este instante?
+// status='registration_open' sigue siendo necesario pero ya no suficiente
+// — además debe faltar tiempo real hasta el cierre de inscripciones Y
+// hasta el inicio del torneo. Única fuente para el CTA "Inscribirme" del
+// PLAYER (EntriesSection, WEB y mobile) y para el chequeo equivalente en
+// register_tournament_entry (mismo criterio expresado en plpgsql, nunca
+// una segunda regla) — OWNER/ADMIN nunca pasa por esta función: su propia
+// capacidad de registrar duplas sigue rigiéndose solo por status, sin
+// ningún límite temporal nuevo.
+export function isRegistrationTemporallyOpen(
+  tournament: Pick<Tournament, "status" | "registration_closes_at" | "starts_at">,
+  now: Date = new Date()
+): boolean {
+  if (tournament.status !== "registration_open") return false;
+  if (tournament.registration_closes_at && now.getTime() >= new Date(tournament.registration_closes_at).getTime()) {
+    return false;
+  }
+  if (tournament.starts_at && now.getTime() >= new Date(tournament.starts_at).getTime()) return false;
+  return true;
+}
+
+// ¿Ya pasó el horario real de inicio de este torneo? Único criterio para
+// decidir si un torneo con status='registration_open' quedó temporalmente
+// atrás y por lo tanto ya no puede competir como "Próxima actividad" en
+// el Dashboard del PLAYER (getUpcomingTournamentActivity,
+// shared/players/playerDashboard.ts) — nunca se auto-finaliza/cancela el
+// torneo por esto, solo deja de ofrecerse como actividad futura. Un
+// torneo in_progress nunca se filtra por esto (empezar en el pasado es
+// justamente lo que "en curso" significa).
+export function hasTournamentStarted(tournament: Pick<Tournament, "starts_at">, now: Date = new Date()): boolean {
+  if (!tournament.starts_at) return false;
+  return now.getTime() >= new Date(tournament.starts_at).getTime();
+}
+
+// Estado EFECTIVO para la vista de un PLAYER — NUNCA para OWNER/ADMIN
+// (cuyo badge/acciones siguen leyendo tournament.status real sin cambios,
+// para que sigan encontrando "Cerrar inscripciones"/"Iniciar torneo" sobre
+// el torneo real que necesitan operar). Un 'registration_open'
+// temporalmente cerrado se percibe como 'registration_closed' — el
+// siguiente status real que un admin habría fijado a tiempo — nunca se
+// escribe en la base de datos, solo cambia qué badge/label ve un PLAYER.
+// Cualquier otro status se devuelve sin cambios.
+export function effectivePlayerTournamentStatus(
+  tournament: Pick<Tournament, "status" | "registration_closes_at" | "starts_at">,
+  now: Date = new Date()
+): string {
+  if (tournament.status === "registration_open" && !isRegistrationTemporallyOpen(tournament, now)) {
+    return "registration_closed";
+  }
+  return tournament.status;
 }
 
 export async function runTournamentTransition(

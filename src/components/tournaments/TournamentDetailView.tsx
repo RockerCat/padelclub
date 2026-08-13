@@ -54,6 +54,7 @@ import {
   canShareWhatsapp,
   canArchiveTournament,
   canRestoreTournament,
+  effectivePlayerTournamentStatus,
   TOURNAMENT_TRANSITION_COPY,
   TOURNAMENT_TRANSITION_SUCCESS,
 } from "../../../shared/tournaments/actions";
@@ -414,6 +415,14 @@ export function TournamentDetailView({
   const canShareWhatsApp = isAdmin && canShareWhatsapp(tournament.status);
   const canArchive = isAdmin && canArchiveTournament(tournament.status, tournament.archived_at);
   const canRestore = isAdmin && canRestoreTournament(tournament.archived_at);
+  // Estado visible — OWNER/ADMIN siempre ve tournament.status real (lo
+  // necesita para encontrar "Cerrar inscripciones"/"Iniciar torneo" sobre
+  // el torneo real que debe operar). PLAYER ve el estado EFECTIVO: un
+  // 'registration_open' cuyo horario real ya cerró se percibe como
+  // 'registration_closed' — nunca se reescribe tournament.status en la
+  // base de datos, solo cambia qué badge ve un PLAYER (ver
+  // shared/tournaments/actions.ts).
+  const displayStatus = isAdmin ? tournament.status : effectivePlayerTournamentStatus(tournament);
   const hasAnyAdminAction =
     canEdit ||
     canOpenRegistration ||
@@ -562,8 +571,8 @@ export function TournamentDetailView({
               <div className="min-w-0">
                 <div className="flex items-center gap-3 flex-wrap mb-1">
                   <h1 className="text-2xl font-bold text-white">{tournament.name}</h1>
-                  <Badge variant={tournamentStatusBadgeVariant(tournament.status)} size="sm">
-                    {tournamentStatusLabel(tournament.status)}
+                  <Badge variant={tournamentStatusBadgeVariant(displayStatus)} size="sm">
+                    {tournamentStatusLabel(displayStatus)}
                   </Badge>
                   {/* Señal visual PRINCIPAL de que el torneo está
                       ocurriendo ahora — deliberadamente más grande y
