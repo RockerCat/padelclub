@@ -5,10 +5,10 @@ import { tennisBall, tennisRacket } from "@lucide/lab";
 import { useClub } from "../contexts/ClubContext";
 import { HomeScreen } from "../screens/HomeScreen";
 import { PlayersScreen } from "../screens/PlayersScreen";
-import { ClubHomeScreen } from "../screens/ClubHomeScreen";
 import { PlaceholderScreen } from "../screens/PlaceholderScreen";
 import { ReservationsStack } from "./ReservationsStack";
 import { TournamentsStack } from "./TournamentsStack";
+import { ClubHomeStack } from "./ClubHomeStack";
 import { theme } from "../lib/theme";
 
 export type OwnerAdminTabsParamList = {
@@ -158,7 +158,7 @@ function PlayerTabs() {
       />
       <PlayerTab.Screen
         name="ClubHomeTab"
-        component={ClubHomeScreen}
+        component={ClubHomeStack}
         options={{ title: clubHomeLabel, tabBarIcon: ({ color, size }) => <TennisBallIcon width={size} height={size} color={color} /> }}
       />
       <PlayerTab.Screen

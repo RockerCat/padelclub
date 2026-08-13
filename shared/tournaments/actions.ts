@@ -485,6 +485,53 @@ export function effectivePlayerTournamentStatus(
   return tournament.status;
 }
 
+// Portados a un torneo ascendente/descendente por starts_at — mismo
+// null-handling que compareTournaments (sort.ts): un torneo sin
+// starts_at siempre queda al final del orden, nunca intercalado por
+// comparar contra null/undefined.
+function compareByStartsAtAsc(a: Tournament, b: Tournament): number {
+  if (!a.starts_at && !b.starts_at) return 0;
+  if (!a.starts_at) return 1;
+  if (!b.starts_at) return -1;
+  return a.starts_at.localeCompare(b.starts_at);
+}
+
+export interface PlayerTournamentBuckets {
+  /** en vivo, inscripción abierta (vigente), o cerrada pero aún sin arrancar — orden: inicio más próximo primero. */
+  active: Tournament[];
+  /** status='completed' — orden: más reciente primero. */
+  finished: Tournament[];
+}
+
+// Agrupa los torneos de un club en lo que un PLAYER necesita ver de forma
+// compacta (Página del club, ver ClubHomeScreen.tsx/page.tsx) — nunca una
+// tercera lógica temporal: reutiliza exactamente
+// effectivePlayerTournamentStatus/hasTournamentStarted ya definidos arriba.
+// "Activo" es en_vivo, o inscripción-abierta vigente, o inscripción-cerrada
+// mientras el torneo todavía no arranca (el mismo caso que
+// effectivePlayerTournamentStatus ya reconoce como "cerrada mientras
+// espera" cuando viene de un registration_open vencido, más el caso real
+// de un admin que cerró inscripciones a tiempo). draft/cancelled — y
+// cualquier torneo archivado (archived_at) — nunca aparecen en ningún
+// bucket, igual que PLAYER_TAB_ORDER (tabs.ts) ya los excluye del listado
+// completo.
+export function partitionPlayerTournaments(tournaments: Tournament[], now: Date = new Date()): PlayerTournamentBuckets {
+  const visible = tournaments.filter((t) => !t.archived_at);
+
+  const active = visible
+    .filter((t) => {
+      const displayStatus = effectivePlayerTournamentStatus(t, now);
+      if (displayStatus === "in_progress" || displayStatus === "registration_open") return true;
+      if (displayStatus === "registration_closed") return !hasTournamentStarted(t, now);
+      return false;
+    })
+    .sort(compareByStartsAtAsc);
+
+  const finished = visible.filter((t) => t.status === "completed").sort((a, b) => compareByStartsAtAsc(b, a));
+
+  return { active, finished };
+}
+
 export async function runTournamentTransition(
   supabase: SupabaseClient<Database>,
   key: TournamentTransitionKey,

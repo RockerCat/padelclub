@@ -26,3 +26,15 @@ export function formatModalDate(dateStr: string): string {
   const dt = new Date(y, m - 1, d);
   return `${WEEKDAY_LONG[dt.getDay()]} ${dt.getDate()} de ${MONTH_LONG[dt.getMonth()]}`;
 }
+
+// "12 de agosto de 2026" — equivalente a formatNewsDate en
+// PublicNewsCard.tsx (app web, toLocaleDateString "es-MX" con
+// day/month-long/year, sin weekday). Misma razón que arriba para no usar
+// toLocaleDateString acá. Acepta un ISO datetime completo (published_at es
+// timestamptz) — solo toma los primeros 10 caracteres (fecha), igual que
+// formatShortDate/formatModalDate hacen con un date-only string.
+export function formatLongDate(iso: string): string {
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  return `${dt.getDate()} de ${MONTH_LONG[dt.getMonth()]} de ${y}`;
+}

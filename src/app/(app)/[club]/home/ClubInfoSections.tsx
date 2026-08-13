@@ -1,9 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import dynamic from "next/dynamic";
-import { MapPin, Clock, MessageCircle, ExternalLink, Navigation, Camera } from "lucide-react";
-import { GalleryLightbox } from "@/components/clubs/GalleryLightbox";
+import { MapPin, Clock, MessageCircle, ExternalLink, Navigation } from "lucide-react";
 import { getSurfaceLabel } from "@/components/courts/CourtIllustration";
 import type { ScheduleGroup } from "@/lib/operatingHours";
 import type { Court } from "@/components/clubs/ClubPublicView";
@@ -29,7 +27,6 @@ export type ClubInfoClub = {
   youtube: string | null;
   latitude: number | null;
   longitude: number | null;
-  gallery_image_urls: string[];
 };
 
 // "Información del club" for the player home page — same real data as the
@@ -49,8 +46,6 @@ export function ClubInfoSections({
   const locFull = [club.city, club.state, club.country].filter(Boolean).join(", ");
   const hasCoords = club.latitude != null && club.longitude != null;
   const hasContact = club.whatsapp || club.instagram || club.facebook || club.youtube;
-  const gallery = club.gallery_image_urls ?? [];
-  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   const courtsBySurface = courts.reduce<Record<string, number>>((acc, c) => {
     if (!c.surface) return acc;
@@ -67,8 +62,7 @@ export function ClubInfoSections({
       ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([club.address, locFull].filter(Boolean).join(", "))}`
       : null;
 
-  const hasNothing =
-    !locFull && !club.address && !hasCoords && schedule.length === 0 && courts.length === 0 && !hasContact && gallery.length === 0;
+  const hasNothing = !locFull && !club.address && !hasCoords && schedule.length === 0 && courts.length === 0 && !hasContact;
   if (hasNothing) return null;
 
   return (
@@ -195,39 +189,6 @@ export function ClubInfoSections({
         </div>
       )}
 
-      {/* Galería */}
-      {gallery.length > 0 && (
-        <div className="rounded-2xl bg-brand-surface border border-white/10 overflow-hidden">
-          <div className="px-5 py-4 border-b border-white/5 flex items-center gap-2">
-            <Camera className="w-3.5 h-3.5 text-brand-muted" />
-            <h3 className="text-sm font-semibold text-white">Galería</h3>
-          </div>
-          <div className="p-3 grid grid-cols-3 gap-2">
-            {gallery.map((url, i) => (
-              <button
-                key={url}
-                type="button"
-                onClick={() => setLightboxIndex(i)}
-                className="block cursor-pointer rounded-lg overflow-hidden"
-                aria-label={`Ver foto ${i + 1} en tamaño grande`}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={url} alt={`Foto ${i + 1}`} className="w-full aspect-square object-cover hover:opacity-90 transition-opacity" />
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {lightboxIndex !== null && (
-        <GalleryLightbox
-          images={gallery}
-          index={lightboxIndex}
-          onClose={() => setLightboxIndex(null)}
-          onNavigate={setLightboxIndex}
-          altPrefix="Foto"
-        />
-      )}
     </div>
   );
 }
