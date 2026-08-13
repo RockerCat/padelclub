@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useState } from "react";
-import { ActivityIndicator, Alert, Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { AccessibilityInfo, ActivityIndicator, Alert, Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -37,6 +37,7 @@ import { EntriesSection } from "../components/tournaments/EntriesSection";
 import { WithdrawnEntriesAccordion } from "../components/tournaments/WithdrawnEntriesAccordion";
 import { ClassificationSection } from "../components/tournaments/ClassificationSection";
 import { TournamentPodium } from "../components/tournaments/TournamentPodium";
+import { TournamentConfetti } from "../components/tournaments/TournamentConfetti";
 import { EditTournamentCoverModal } from "../components/tournaments/EditTournamentCoverModal";
 import { ImagePreviewModal } from "../components/tournaments/ImagePreviewModal";
 import { PlayerDetailSheet } from "../components/PlayerDetailSheet";
@@ -116,6 +117,8 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
   const [editing, setEditing] = useState(false);
   const [editingCover, setEditingCover] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
+  const confettiFiredRef = useRef(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [busyTransition, setBusyTransition] = useState<TournamentTransitionKey | null>(null);
 
@@ -161,6 +164,31 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
       cancelled = true;
     };
   }, [isAdmin, club, clubMemberId]);
+
+  // Celebración de torneo finalizado — dispara UNA sola vez por montaje de
+  // pantalla, apenas se observa tournament.status === "completed" (al
+  // entrar directo a un torneo ya finalizado, o al finalizarlo desde acá
+  // mismo). confettiFiredRef evita que un refetch posterior (useFocusEffect
+  // de abajo, u otra actualización de `tournament` que conserve el mismo
+  // status) dispare una segunda explosión — nunca un loop. Respeta
+  // "reducir movimiento" del sistema, igual que la versión web
+  // (motion-reduce:hidden) — nunca se ignora un resultado real. El único
+  // resguardo agregado es un timeout de 500ms EN CARRERA con la propia
+  // llamada nativa: si isReduceMotionEnabled() nunca resuelve (falla
+  // silenciosa del bridge, no un "true" real), se asume que la preferencia
+  // no está activa y se muestra el confetti — nunca al revés.
+  useEffect(() => {
+    if (tournament?.status !== "completed" || confettiFiredRef.current) return;
+    confettiFiredRef.current = true;
+
+    const reduceMotionCheck = AccessibilityInfo.isReduceMotionEnabled();
+    const timeoutFallback = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 500));
+    Promise.race([reduceMotionCheck, timeoutFallback])
+      .then((reduceMotion) => {
+        if (!reduceMotion) setShowConfetti(true);
+      })
+      .catch(() => setShowConfetti(true));
+  }, [tournament?.status]);
 
   // Clasificación/inscripciones no deben quedar obsoletas mientras se ve
   // un torneo en_curso — equivalente a la re-suscripción por
@@ -415,7 +443,13 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
   const podiumBlock = isCompleted && podiumRows.length > 0 && (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>Podio final</Text>
-      <TournamentPodium rows={podiumRows} avatarsClickable={isAdmin} onSelectMember={handleSelectMember} loadingMemberId={loadingMemberId} />
+      <TournamentPodium
+        rows={podiumRows}
+        avatarsClickable={isAdmin}
+        onSelectMember={handleSelectMember}
+        loadingMemberId={loadingMemberId}
+        ownClubMemberId={clubMemberId}
+      />
     </View>
   );
 
@@ -611,6 +645,8 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
       {previewOpen && tournament.cover_image_url && <ImagePreviewModal src={tournament.cover_image_url} onClose={() => setPreviewOpen(false)} />}
 
       <PlayerDetailSheet member={selectedMember} sportState={selectedMemberSportState} onClose={() => setSelectedMember(null)} />
+
+      {showConfetti && <TournamentConfetti onDone={() => setShowConfetti(false)} />}
 
       <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />
     </SafeAreaView>
