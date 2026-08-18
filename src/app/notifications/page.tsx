@@ -2,7 +2,9 @@ import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { getNotificationsPaginated } from "@/lib/notifications";
+import { resolveClubEntryPath } from "@/lib/utils/navigation";
 import { NotificationsListClient } from "./NotificationsListClient";
+import { NotificationsBackButton } from "./NotificationsBackButton";
 
 export const metadata: Metadata = {
   title: "Notificaciones | MiPadelClub",
@@ -21,12 +23,18 @@ export default async function NotificationsPage() {
 
   if (!user) redirect("/auth/login?next=/notifications");
 
-  const { items, hasMore } = await getNotificationsPaginated(supabase, { limit: PAGE_SIZE, offset: 0 });
+  const [{ items, hasMore }, fallbackHref] = await Promise.all([
+    getNotificationsPaginated(supabase, { limit: PAGE_SIZE, offset: 0 }),
+    resolveClubEntryPath(supabase, user.id),
+  ]);
 
   return (
     <div className="min-h-screen bg-brand-bg">
       <div className="max-w-2xl mx-auto px-4 sm:px-5 py-8 sm:py-10">
-        <h1 className="text-2xl font-bold text-white mb-6">Notificaciones</h1>
+        <div className="flex items-center gap-2 mb-6">
+          <NotificationsBackButton fallbackHref={fallbackHref} />
+          <h1 className="text-2xl font-bold text-white">Notificaciones</h1>
+        </div>
 
         <NotificationsListClient
           initialItems={items}

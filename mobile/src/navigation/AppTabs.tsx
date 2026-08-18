@@ -1,5 +1,8 @@
+import { useEffect } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { LayoutDashboard, Users, CalendarDays, Swords, Trophy, Building2, createLucideIcon } from "lucide-react-native";
 import { tennisBall, tennisRacket } from "@lucide/lab";
 import { useClub } from "../contexts/ClubContext";
@@ -11,6 +14,8 @@ import { ReservationsStack } from "./ReservationsStack";
 import { TournamentsStack } from "./TournamentsStack";
 import { ClubHomeStack } from "./ClubHomeStack";
 import { theme } from "../lib/theme";
+import type { RootStackParamList } from "./RootNavigator";
+import { navigateIntoApp } from "./navigateIntoApp";
 
 export type OwnerAdminTabsParamList = {
   HomeTab: undefined;
@@ -147,8 +152,22 @@ function OwnerAdminTabs() {
 // ...)/navigation.navigate("TournamentsTab", ...) ya existente (Dashboard
 // PLAYER, notificaciones, etc.) sigue funcionando sin cambios.
 function PlayerTabs() {
-  const { club } = useClub();
+  const { club, pendingNav, setPendingNav } = useClub();
   const clubHomeLabel = club?.name ?? "Mi club";
+  const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
+  // Consume una navegación pendiente dejada por NotificationsScreen justo
+  // antes de cambiar de club (ver ClubContext.tsx → pendingNav). Corre una
+  // sola vez por montaje real de PlayerTabs — que es exactamente lo que
+  // ocurre después de un cambio de club, gracias al `key={club?.id}` en
+  // AppShell (RootNavigator.tsx).
+  useEffect(() => {
+    if (!pendingNav) return;
+    const nav = pendingNav;
+    setPendingNav(null);
+    navigateIntoApp(rootNavigation, { screen: nav.tab, params: nav.screen ? { screen: nav.screen, params: nav.params } : undefined });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingNav]);
 
   return (
     <PlayerTab.Navigator screenOptions={commonScreenOptions}>

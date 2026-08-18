@@ -21,20 +21,31 @@ import { theme } from "../lib/theme";
 
 // Alineado con TournamentPodium.tsx (mobile, "Podio final" de Torneos) —
 // mismo lenguaje visual de bloque único: UN solo pedestal por lugar (nunca
-// "card + base separada"), altura variable por lugar
-// (PEDESTAL_HEIGHT, mismos valores exactos 104/72/56 que Torneos — el
-// contenido apilado es equivalente en tamaño, así que se reutilizan tal
-// cual) y toda la fila alineada por su borde inferior (podiumRow:
-// alignItems "flex-end"), así el pedestal más alto del 1.º queda
-// visualmente más arriba sin necesitar una columna más ancha — igual que
-// Torneos, las tres columnas son flex:1 parejo, la jerarquía viene de la
-// altura/tamaños, nunca del ancho. A diferencia de Torneos (que usa un
-// único tinte ámbar para los tres lugares), Ranking conserva sus propios
-// colores oro/plata/bronce por lugar — un jugador individual, no una
-// dupla, así que nunca corresponde la semántica de "pairLabel"/avatares
-// apilados de Torneos.
+// "card + base separada"), altura por lugar (PEDESTAL_HEIGHT) y toda la
+// fila alineada por su borde inferior (podiumRow: alignItems "flex-end"),
+// así el pedestal más alto del 1.º queda visualmente más arriba sin
+// necesitar una columna más ancha — igual que Torneos, las tres columnas
+// son flex:1 parejo, la jerarquía viene de la altura/tamaños, nunca del
+// ancho. A diferencia de Torneos (altura variable vía minHeight, válido
+// ahí porque el contenido de una dupla es más uniforme), aquí la altura es
+// FIJA y con overflow:hidden (ver PEDESTAL_HEIGHT) — un jugador individual
+// trae nombre de longitud variable y a veces el badge "Tú", y ese
+// contenido nunca debe poder estirar el bloque y romper 1>2>3 (bug real:
+// un nombre largo en el 3er puesto hacía que su pedestal terminara más
+// alto que el del 1º). A diferencia de Torneos (que usa un único tinte
+// ámbar para los tres lugares), Ranking conserva sus propios colores
+// oro/plata/bronce por lugar — un jugador individual, no una dupla, así
+// que nunca corresponde la semántica de "pairLabel"/avatares apilados de
+// Torneos.
 const MEDAL_COLOR = { 1: "#FBBF24", 2: "#CBD5E1", 3: "#FB923C" } as const;
-const PEDESTAL_HEIGHT = { 1: 104, 2: 72, 3: 56 } as const;
+// Altura FIJA (no minHeight): el bloque debe medir siempre exactamente esto,
+// nunca más, para que la jerarquía 1>2>3 sea puramente geométrica y nunca
+// dependa de cuánto contenido (nombre largo, badge "Tú", etc.) haya adentro
+// — ver pedestal.overflow:"hidden" en los estilos, que recorta ese
+// contenido en vez de dejar que estire el bloque. Valores con margen sobre
+// el contenido real (avatar+badge+nombre a 2 líneas+puntos) para que el
+// recorte sea la excepción, no la norma.
+const PEDESTAL_HEIGHT = { 1: 196, 2: 170, 3: 148 } as const;
 const AVATAR_SIZE: Record<1 | 2 | 3, "sm" | "md"> = { 1: "md", 2: "sm", 3: "sm" };
 const BADGE_SIZE = { 1: 26, 2: 20, 3: 20 } as const;
 
@@ -54,7 +65,7 @@ function PodiumCard({ place, row, category, isSelf }: { place: 1 | 2 | 3; row: R
       <View
         style={[
           styles.pedestal,
-          { minHeight: PEDESTAL_HEIGHT[place], backgroundColor: `${color}1A`, borderColor: `${color}59` },
+          { height: PEDESTAL_HEIGHT[place], backgroundColor: `${color}1A`, borderColor: `${color}59` },
         ]}
       >
         <View style={[styles.podiumBadge, { width: BADGE_SIZE[place], height: BADGE_SIZE[place], backgroundColor: color }]}>
@@ -445,6 +456,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 6,
     gap: 6,
+    // Recorta cualquier contenido interno que exceda la altura fija de
+    // arriba (nombre muy largo a 2 líneas + badge "Tú" al mismo tiempo, el
+    // peor caso) en vez de dejar que el bloque crezca y rompa la
+    // jerarquía 1>2>3.
+    overflow: "hidden",
   },
   podiumBadge: { borderRadius: theme.radius.full, alignItems: "center", justifyContent: "center" },
   // Ver comentario junto a su uso en PodiumCard — neutraliza el
