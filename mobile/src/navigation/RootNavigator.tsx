@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { NavigationContainer, DarkTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -9,6 +10,8 @@ import { ChangeClubScreen } from "../screens/ChangeClubScreen";
 import { NotificationsScreen } from "../screens/NotificationsScreen";
 import { AppTabs } from "./AppTabs";
 import { AppHeader } from "../components/AppHeader";
+import { supabase } from "../lib/supabase";
+import { registerPushToken } from "../lib/pushNotifications";
 import { theme } from "../lib/theme";
 
 // Root del stack autenticado — "App" (AppShell), más dos pantallas
@@ -76,6 +79,19 @@ function AppShell() {
 // válida.
 export function RootNavigator() {
   const { session, loading } = useAuth();
+
+  // Único call site de registro de push token — Fase 1 (solo
+  // infraestructura, ver mobile/src/lib/pushNotifications.ts). Corre una
+  // vez por sesión iniciada, nunca por pantalla individual, para que nunca
+  // haya dos intentos de registro compitiendo. registerPushToken nunca
+  // lanza (permiso denegado, sin projectId, sin red, error de upsert —
+  // todo se traga internamente), así que esto nunca puede bloquear el
+  // arranque ni el login.
+  const userId = session?.user.id ?? null;
+  useEffect(() => {
+    if (!userId) return;
+    registerPushToken(supabase, userId);
+  }, [userId]);
 
   if (loading) {
     return (
