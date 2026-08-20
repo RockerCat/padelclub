@@ -78,6 +78,7 @@ export async function createReservation(
   // p_player_count lets create_reservation_admin itself enforce "4+
   // jugadores siempre fuerza Cerrada" — never trusted purely from isOpen,
   // the RPC re-decides the real is_open/closed_reason server-side.
+  // SQL acepta NULL para p_title/p_notes; los tipos generados no lo reflejan.
   const { data: reservationId, error } = await supabase.rpc("create_reservation_admin", {
     p_club_id: clubId,
     p_court_id: courtId,
@@ -85,8 +86,8 @@ export async function createReservation(
     p_start_time: startTime,
     p_duration_minutes: durationMinutes,
     p_type: type,
-    p_title: title,
-    p_notes: notes,
+    p_title: title as string,
+    p_notes: notes as string,
     p_is_open: isOpen,
     p_player_count: playerIds.length,
   });
@@ -169,6 +170,7 @@ export async function updateReservation(
   if (!courtId || !date || !startTime) return { error: "Datos incompletos." };
   if (type === "block" && !title) return { error: "Un bloqueo necesita un título." };
 
+  // SQL acepta NULL para p_title/p_notes; los tipos generados no lo reflejan.
   const { error } = await supabase.rpc("update_reservation_admin", {
     p_reservation_id: reservationId,
     p_court_id: courtId,
@@ -176,8 +178,8 @@ export async function updateReservation(
     p_start_time: startTime,
     p_duration_minutes: durationMinutes,
     p_type: type,
-    p_title: title,
-    p_notes: notes,
+    p_title: title as string,
+    p_notes: notes as string,
   });
 
   if (error) {
@@ -615,11 +617,12 @@ export async function addReservationExtraTime(
     return { error: "El valor adicional no puede ser negativo." };
   }
 
+  // SQL acepta NULL para p_note; los tipos generados no lo reflejan.
   const { data, error } = await supabase.rpc("add_reservation_extra_time", {
     p_reservation_id: reservationId,
     p_extra_minutes: extraMinutes,
     p_extra_amount: extraAmount,
-    p_note: note.trim() || null,
+    p_note: (note.trim() || null) as string,
   });
 
   if (error) {

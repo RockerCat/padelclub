@@ -41,9 +41,11 @@ export async function claimClub(token: string): Promise<ClaimResult> {
   const tokenHash = hashClaimToken(token);
   const ip = await getClientIp();
 
+  // p_ip tiene DEFAULT NULL en SQL; omitirlo con `?? undefined` es
+  // equivalente a enviar NULL explícito.
   const { data, error } = await supabase.rpc("claim_club", {
     p_token_hash: tokenHash,
-    p_ip: ip,
+    p_ip: ip ?? undefined,
   });
 
   if (error || !data) {

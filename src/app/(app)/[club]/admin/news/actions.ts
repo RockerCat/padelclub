@@ -82,12 +82,13 @@ export async function createNews(
     return { error: "La imagen es obligatoria." };
   }
 
+  // SQL acepta NULL para p_tournament_id; los tipos generados no lo reflejan.
   const { error } = await supabase.rpc("create_club_news", {
     p_club_id: clubId,
     p_title: title,
     p_content: content,
     p_image_url: image_url,
-    p_tournament_id: tournamentId,
+    p_tournament_id: tournamentId as string,
   });
 
   if (error) return { error: newsErrorMessage(error) };

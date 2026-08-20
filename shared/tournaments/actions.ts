@@ -186,15 +186,15 @@ export async function createTournament(
     p_name: f.name.trim(),
     p_category: f.category,
     p_max_pairs: f.maxPairs,
-    p_description: f.description,
+    p_description: f.description ?? undefined,
     p_visibility: f.visibility,
-    p_registration_opens_at: f.registrationOpensAt,
-    p_registration_closes_at: f.registrationClosesAt,
-    p_starts_at: f.startsAt,
+    p_registration_opens_at: f.registrationOpensAt ?? undefined,
+    p_registration_closes_at: f.registrationClosesAt ?? undefined,
+    p_starts_at: f.startsAt ?? undefined,
     p_estimated_duration_minutes: f.estimatedDurationMinutes,
-    p_secondary_category: f.secondaryCategory,
-    p_prize_description: f.prizeDescription,
-    p_cover_image_url: f.coverImageUrl ?? null,
+    p_secondary_category: f.secondaryCategory ?? undefined,
+    p_prize_description: f.prizeDescription ?? undefined,
+    p_cover_image_url: f.coverImageUrl ?? undefined,
     p_entry_fee_amount: f.entryFeeAmount,
   });
 
@@ -210,20 +210,22 @@ export async function updateTournament(
   const validationError = validateCreateTournamentFields(f);
   if (validationError) return { tournament: null, error: validationError };
 
+  // SQL acepta NULL para estos parámetros obligatorios; los tipos
+  // generados de Supabase no lo reflejan (marcan `string`, sin `| null`).
   const { data, error } = await supabase.rpc("update_tournament", {
     p_tournament_id: tournamentId,
     p_name: f.name.trim(),
-    p_description: f.description,
+    p_description: f.description as string,
     p_category: f.category,
     p_max_pairs: f.maxPairs,
     p_visibility: f.visibility,
-    p_registration_opens_at: f.registrationOpensAt,
-    p_registration_closes_at: f.registrationClosesAt,
-    p_starts_at: f.startsAt,
+    p_registration_opens_at: f.registrationOpensAt as string,
+    p_registration_closes_at: f.registrationClosesAt as string,
+    p_starts_at: f.startsAt as string,
     p_estimated_duration_minutes: f.estimatedDurationMinutes,
-    p_secondary_category: f.secondaryCategory,
-    p_prize_description: f.prizeDescription,
-    p_cover_image_url: f.coverImageUrl ?? null,
+    p_secondary_category: f.secondaryCategory as string,
+    p_prize_description: f.prizeDescription as string,
+    p_cover_image_url: (f.coverImageUrl ?? null) as string,
     p_entry_fee_amount: f.entryFeeAmount,
   });
 
@@ -236,9 +238,11 @@ export async function updateTournamentCoverImage(
   tournamentId: string,
   coverImageUrl: string | null
 ): Promise<{ tournament: Tournament | null; error: string | null }> {
+  // SQL acepta NULL para p_cover_image_url (obligatorio); el tipo generado
+  // de Supabase no lo refleja (marca `string`, sin `| null`).
   const { data, error } = await supabase.rpc("update_tournament_cover_image", {
     p_tournament_id: tournamentId,
-    p_cover_image_url: coverImageUrl,
+    p_cover_image_url: coverImageUrl as string,
   });
   if (error) return { tournament: null, error: tournamentErrorMessage(error) };
   return { tournament: (data?.[0] as Tournament | undefined) ?? null, error: null };

@@ -91,7 +91,9 @@ export default async function PlatformClubDetailPage({ params }: PageProps) {
   if (!club && !error) notFound();
 
   const { data: claimStatusRows } = await supabase.rpc("get_club_claim_status", { p_club_id: clubId });
-  const claimStatus: ClubClaimStatus = claimStatusRows?.[0] ?? null;
+  // SQL restringe status a los valores de ClubClaimStatus; el tipo generado
+  // por Supabase no conserva ese union literal.
+  const claimStatus: ClubClaimStatus = (claimStatusRows?.[0] ?? null) as unknown as ClubClaimStatus;
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 md:py-12">

@@ -244,12 +244,14 @@ export async function createPricingRule(
   const pricesResult = parsePrices(formData, allowedDurations, parsed.currency);
   if ("error" in pricesResult) return { error: pricesResult.error };
 
+  // SQL acepta NULL para p_rule_id/p_court_id; los tipos generados no lo reflejan.
+  //
   // Atomic: rule + all its per-duration prices, or nothing — see
   // upsert_pricing_rule_with_prices (20260803000002).
   const { error: rpcError } = await supabase.rpc("upsert_pricing_rule_with_prices", {
-    p_rule_id: null,
+    p_rule_id: (null as string | null) as string,
     p_club_id: clubId,
-    p_court_id: parsed.court_id,
+    p_court_id: parsed.court_id as string,
     p_name: parsed.name,
     p_days_of_week: parsed.days_of_week,
     p_start_time: parsed.start_time.length === 5 ? `${parsed.start_time}:00` : parsed.start_time,
@@ -284,10 +286,11 @@ export async function updatePricingRule(
   // Atomic: rule update + prices upserted + stale-duration prices removed
   // (the club no longer allows them) — all in one RPC call, never several
   // independent client round trips that could leave a half-saved rule.
+  // SQL acepta NULL para p_court_id; el tipo generado no lo refleja.
   const { error: rpcError } = await supabase.rpc("upsert_pricing_rule_with_prices", {
     p_rule_id: ruleId,
     p_club_id: clubId,
-    p_court_id: parsed.court_id,
+    p_court_id: parsed.court_id as string,
     p_name: parsed.name,
     p_days_of_week: parsed.days_of_week,
     p_start_time: parsed.start_time.length === 5 ? `${parsed.start_time}:00` : parsed.start_time,

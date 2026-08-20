@@ -43,6 +43,8 @@
     // de mobile/, produciendo dos tipos SupabaseClient<Database>
     // incompatibles en una única compilación. Verificar mobile/ sigue
     // siendo `cd mobile && npx tsc --noEmit`, su propio proyecto.
-    "mobile"
+    "mobile",
+    // Supabase Edge Functions usan Deno y se typecheckean por separado.
+    "supabase/functions"
   ]
 }
