@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { Alert, AppState, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -17,10 +17,13 @@ import type { RootStackParamList } from "../navigation/RootNavigator";
 // UPDATE sobre `notifications`, filtrado por profile_id) — el poll y el
 // refetch al volver a foreground (equivalente RN de focus/visibilitychange
 // en WEB, vía AppState) son el respaldo obligatorio, nunca confiar solo en
-// Realtime. A diferencia de NotificationBell.tsx, AppHeader monta una sola
-// vez de verdad en mobile (no hay sidebar+topbar+drawer simultáneos como en
-// responsive web), así que no hace falta el truco useId() de WEB para
-// evitar colisiones de topic — un solo canal por usuario basta.
+// Realtime. El topic incluye `instanceId` (useId(), mismo truco que
+// NotificationBell.tsx en WEB) porque supabase-js cachea channels por topic
+// y devuelve el objeto existente aunque ya esté `joined` — sin este sufijo,
+// un remount rápido (Fast Refresh) reutiliza el channel viejo antes de que
+// el `removeChannel` async del cleanup anterior termine, y el `.on(...)`
+// siguiente explota con "cannot add postgres_changes callbacks ... after
+// subscribe()".
 const POLL_INTERVAL_MS = 45_000;
 
 function getInitials(name: string): string {
@@ -93,6 +96,7 @@ export function AppHeader() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const userId = session?.user.id ?? null;
+  const instanceId = useId();
 
   const loadUnread = useCallback(async () => {
     const count = await getUnreadNotificationCount(supabase);
@@ -131,7 +135,7 @@ export function AppHeader() {
   useEffect(() => {
     if (!userId) return;
     const channel = supabase
-      .channel(`notifications:${userId}`)
+      .channel(`notifications:${userId}:${instanceId}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `profile_id=eq.${userId}` }, () => loadUnread())
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "notifications", filter: `profile_id=eq.${userId}` }, () => loadUnread())
       .subscribe();

@@ -7,11 +7,15 @@ import { ClubProvider, useClub } from "../contexts/ClubContext";
 import { LoginScreen } from "../screens/LoginScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { ChangeClubScreen } from "../screens/ChangeClubScreen";
+import { PublicClubScreen } from "../screens/PublicClubScreen";
 import { NotificationsScreen } from "../screens/NotificationsScreen";
+import { ReservationDetailScreen } from "../screens/ReservationDetailScreen";
+import type { ClubDirectoryEntry } from "../lib/clubSwitcher";
 import { AppTabs } from "./AppTabs";
 import { AppHeader } from "../components/AppHeader";
 import { supabase } from "../lib/supabase";
 import { registerPushToken } from "../lib/pushNotifications";
+import { PushNotificationNavigator } from "./PushNotificationNavigator";
 import { theme } from "../lib/theme";
 
 // Root del stack autenticado — "App" (AppShell), más dos pantallas
@@ -25,7 +29,24 @@ export type RootStackParamList = {
   App: undefined;
   Profile: undefined;
   ChangeClub: undefined;
+  // Página pública de un club — alcanzada desde ChangeClub al tocar una
+  // fila que no es la propia membresía activa (ver ese archivo). `entry` es
+  // el mismo ClubDirectoryEntry que ChangeClub ya cargó (evita repetir esa
+  // query aquí); relationKind/relationRole es el mismo relationOf(clubId)
+  // que ChangeClub ya calculó, así esta pantalla no vuelve a leer
+  // memberships/pending por su cuenta. Vive en MainStack y en NoClubStack
+  // (un usuario sin club también debe poder llegar aquí desde "Explorar
+  // clubes") — nunca solo en uno de los dos.
+  PublicClub: { entry: ClubDirectoryEntry; relationKind: "member" | "pending" | "none"; relationRole?: string };
   Notifications: undefined;
+  // Screen de nivel raíz (no vive dentro de ReservationsStack/ReservasTab) —
+  // así una reserva abierta desde Notifications, push o Reservaciones queda
+  // en el MISMO historial real del stack raíz: back siempre cierra
+  // exactamente esta pantalla y revela lo que estaba debajo (Notifications,
+  // "App" con Reservaciones, o lo que corresponda), sin params/state
+  // anidados artificiales y sin tab bar (una screen del stack raíz cubre
+  // toda la pantalla, tapando el tab bar de "App" que sigue montado debajo).
+  ReservationDetail: { id: string };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -71,6 +92,76 @@ function AppShell() {
   );
 }
 
+// Stack normal (con club activo) — "App" (tabs) es la ruta inicial, el
+// resto de screens globales encima como siempre.
+function MainStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="App" component={AppShell} />
+      <Stack.Screen name="Profile" component={ProfileScreen} options={{ presentation: "modal" }} />
+      <Stack.Screen name="ChangeClub" component={ChangeClubScreen} options={{ presentation: "modal" }} />
+      <Stack.Screen name="PublicClub" component={PublicClubScreen} />
+      <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ presentation: "modal" }} />
+      {/* headerShown/headerStyle explícitos porque el Navigator por
+          defecto oculta el header (screenOptions arriba) — esta screen sí
+          necesita el header nativo real para su propio headerLeft (ver
+          ReservationDetailScreen.tsx), mismos colores que ya usaba dentro
+          de ReservationsStack.tsx. */}
+      <Stack.Screen
+        name="ReservationDetail"
+        component={ReservationDetailScreen}
+        options={{
+          headerShown: true,
+          headerStyle: { backgroundColor: theme.colors.bg },
+          headerTintColor: theme.colors.white,
+          headerShadowVisible: false,
+          contentStyle: { backgroundColor: theme.colors.bg },
+          title: "",
+        }}
+      />
+    </Stack.Navigator>
+  );
+}
+
+// Stack para un usuario autenticado SIN ninguna membresía activa —
+// ChangeClub es la ÚNICA ruta, así que queda como pantalla raíz (sin
+// presentation: "modal", sin tab bar, porque "App"/AppTabs ni siquiera
+// está montado en este árbol). Nunca "App" con AppTabs mostrando un
+// club vacío: eso dejaba tabs como Reservas/Torneos operando sobre nada.
+function NoClubStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="ChangeClub" component={ChangeClubScreen} />
+      <Stack.Screen name="PublicClub" component={PublicClubScreen} />
+    </Stack.Navigator>
+  );
+}
+
+// Decide estructuralmente cuál de los dos stacks montar — nunca un
+// navigate() imperativo para esto, así que no hay riesgo de loop ni de
+// re-disparar navegación en cada render. Cuando `club` pasa de null a un
+// club real (por ejemplo, justo después de unirse desde ChangeClubScreen
+// dentro de NoClubStack), este componente cambia qué componente devuelve
+// (NoClubStack → MainStack) — React desmonta el primero y monta el
+// segundo desde cero, aterrizando en "App" (su primera screen) sin
+// necesidad de que ChangeClubScreen sepa nada de este árbol ni tenga que
+// navegar manualmente a ningún lado. La transición inversa (un club se
+// vuelve inaccesible) es simétrica por el mismo mecanismo, aunque hoy no
+// hay ningún flujo que la dispare.
+function AuthenticatedNavigator() {
+  const { club, loading: clubLoading } = useClub();
+
+  if (clubLoading) {
+    return (
+      <View style={styles.splash}>
+        <ActivityIndicator color={theme.colors.primary} size="large" />
+      </View>
+    );
+  }
+
+  return club ? <MainStack /> : <NoClubStack />;
+}
+
 // Único punto de decisión "a dónde entra el usuario" — equivalente nativo
 // de resolveClubEntryPath/middleware en la web: sin sesión persistida
 // (AsyncStorage, ver lib/supabase.ts) → Login; con sesión → tabs. Mientras
@@ -105,12 +196,8 @@ export function RootNavigator() {
     <NavigationContainer theme={navTheme}>
       {session ? (
         <ClubProvider>
-          <Stack.Navigator screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="App" component={AppShell} />
-            <Stack.Screen name="Profile" component={ProfileScreen} options={{ presentation: "modal" }} />
-            <Stack.Screen name="ChangeClub" component={ChangeClubScreen} options={{ presentation: "modal" }} />
-            <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ presentation: "modal" }} />
-          </Stack.Navigator>
+          <AuthenticatedNavigator />
+          <PushNotificationNavigator />
         </ClubProvider>
       ) : (
         <AuthStack.Navigator screenOptions={{ headerShown: false }}>

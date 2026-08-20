@@ -67,23 +67,24 @@ export async function registerPushToken(supabase: SupabaseClient<Database>, prof
     // comentario en la migración. Nunca bloquea el registro si falta.
     const deviceId = Device.modelName ? `${Device.modelName} (${Device.osName ?? platform} ${Device.osVersion ?? ""})`.trim() : null;
 
-    // onConflict: expo_push_token (no profile_id) — reasigna el mismo
+    // register_push_token (RPC SECURITY DEFINER, ver
+    // 20261112000001_register_push_token_rpc.sql) — reasigna el mismo
     // dispositivo al perfil que se está autenticando ahora mismo en vez
-    // de crear una segunda fila, cubriendo tanto "token nuevo" como
-    // "token que ya existía pero cambió de dueño o quedó inactivo". Varios
-    // dispositivos por profile_id siguen siendo filas independientes,
-    // nunca chocan entre sí (cada una con su propio expo_push_token).
-    const { error } = await supabase.from("push_tokens").upsert(
-      {
-        profile_id: profileId,
-        expo_push_token: expoPushToken,
-        platform,
-        device_id: deviceId,
-        is_active: true,
-        last_seen_at: new Date().toISOString(),
-      },
-      { onConflict: "expo_push_token" }
-    );
+    // de crear una segunda fila, cubriendo tanto "token nuevo" como "token
+    // que ya existía pero cambió de dueño o quedó inactivo". Un upsert
+    // directo del cliente (onConflict: expo_push_token) chocaba con RLS
+    // (push_tokens_update_own) exactamente en ese caso de reasignación,
+    // porque la UPDATE se evalúa contra la fila existente, cuyo profile_id
+    // seguía siendo el del dueño anterior — la RPC resuelve esto tomando
+    // profile_id siempre de auth.uid() en el servidor, nunca de un
+    // parámetro del cliente. Varios dispositivos por profile_id siguen
+    // siendo filas independientes, nunca chocan entre sí (cada una con su
+    // propio expo_push_token).
+    const { error } = await supabase.rpc("register_push_token", {
+      p_expo_push_token: expoPushToken,
+      p_platform: platform,
+      p_device_id: deviceId ?? undefined,
+    });
 
     if (error) console.error("[registerPushToken] upsert failed:", error);
   } catch (err) {

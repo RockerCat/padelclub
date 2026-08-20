@@ -1,10 +1,15 @@
-import { Image, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useLayoutEffect } from "react";
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { RouteProp } from "@react-navigation/native";
-import { useRoute } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { ChevronLeft } from "lucide-react-native";
 import { formatLongDate } from "../lib/dateFormat";
 import { theme } from "../lib/theme";
 import type { ClubHomeStackParamList } from "../navigation/ClubHomeStack";
+import type { RootStackParamList } from "../navigation/RootNavigator";
+import { navigateIntoApp } from "../navigation/navigateIntoApp";
 
 // Equivalente nativo de src/app/clubs/[slug]/news/[newsSlug]/page.tsx (app
 // web) — mismo orden de contenido (imagen 3:4, fecha, título, contenido
@@ -24,6 +29,47 @@ export function NewsDetailScreen() {
   const { params } = useRoute<RouteProp<ClubHomeStackParamList, "NewsDetail">>();
   const { news } = params;
 
+  // Mismo patrón "volver" que ReservationDetailScreen.tsx/
+  // TournamentDetailScreen.tsx: goBack() si hay historial real en este
+  // stack; si no (entrada cross-tab, sin ClubHome debajo), cae al
+  // Dashboard en vez de dejar sin salida. navigation (stack-scoped) cubre
+  // canGoBack()/goBack(); rootNavigation (RootStackParamList) es el mismo
+  // escape hatch que esas pantallas usan para navigateIntoApp.
+  const navigation = useNavigation<NativeStackNavigationProp<ClubHomeStackParamList>>();
+  const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
+  function handleBack() {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigateIntoApp(rootNavigation);
+    }
+  }
+
+  // Oculta la bottom tab bar mientras este detalle está montado — mismo
+  // valor de tabBarStyle que commonScreenOptions en AppTabs.tsx (nunca un
+  // segundo estilo inventado), restaurado en cleanup al desmontar. getParent()
+  // desde el navigation de este stack (ClubHomeStackParamList) apunta al
+  // Tab.Navigator padre (ClubHomeTab), no al stack raíz.
+  useLayoutEffect(() => {
+    const parent = navigation.getParent();
+    parent?.setOptions({ tabBarStyle: { display: "none" } });
+    return () => {
+      parent?.setOptions({ tabBarStyle: { backgroundColor: theme.colors.surface, borderTopColor: theme.colors.border } });
+    };
+  }, [navigation]);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => (
+        <TouchableOpacity onPress={handleBack} hitSlop={10} style={styles.backButton} accessibilityLabel="Volver">
+          <ChevronLeft width={24} height={24} color={theme.colors.white} />
+        </TouchableOpacity>
+      ),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigation]);
+
   return (
     <SafeAreaView style={styles.screen} edges={["bottom"]}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -42,6 +88,7 @@ export function NewsDetailScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: theme.colors.bg },
+  backButton: { paddingHorizontal: 8, paddingVertical: 4 },
   content: { padding: 16, paddingBottom: 32, gap: 4 },
   imageWrap: {
     width: "100%",

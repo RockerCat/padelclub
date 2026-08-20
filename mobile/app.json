@@ -8,7 +8,11 @@
     "userInterfaceStyle": "dark",
     "backgroundColor": "#001A24",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "club.mipadel.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -22,6 +26,14 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": ["expo-notifications"]
+    "plugins": [
+      "expo-notifications"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "6603b3e9-97ac-4af9-9eca-3b4f0f069abd"
+      }
+    },
+    "owner": "alexsosa_me"
   }
 }

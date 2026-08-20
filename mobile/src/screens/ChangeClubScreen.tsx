@@ -12,7 +12,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import MapView, { Callout, Marker } from "react-native-maps";
 import { Check, ChevronDown, ChevronRight, Lock, Search, X } from "lucide-react-native";
@@ -24,11 +24,9 @@ import {
   getClubDirectory,
   getPendingJoinRequestClubIds,
   updateLastClub,
-  requestClubAccess,
   type MyClubMembership,
   type ClubDirectoryEntry,
 } from "../lib/clubSwitcher";
-import { updateOwnPhone } from "../lib/profileMutations";
 import { clubRoleLabel } from "../lib/roleLabels";
 import { Skeleton } from "../components/Skeleton";
 import { Toast } from "../components/Toast";
@@ -140,7 +138,7 @@ function FilterMenu({
 // nunca un segundo detalle paralelo.
 export function ChangeClubScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { session } = useAuth();
+  const { session, signOut } = useAuth();
   const { club: currentClub, reload: reloadClub } = useClub();
   const userId = session?.user.id ?? null;
   const { height: windowHeight } = useWindowDimensions();
@@ -163,13 +161,7 @@ export function ChangeClubScreen() {
   const mapRef = useRef<MapView | null>(null);
 
   const [switchingClubId, setSwitchingClubId] = useState<string | null>(null);
-  const [joiningClubId, setJoiningClubId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  const [phoneModal, setPhoneModal] = useState<{ open: boolean; clubId: string | null }>({ open: false, clubId: null });
-  const [phoneValue, setPhoneValue] = useState("");
-  const [phoneSaving, setPhoneSaving] = useState(false);
-  const [phoneError, setPhoneError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -192,6 +184,23 @@ export function ChangeClubScreen() {
     setLoading(true);
     load().finally(() => setLoading(false));
   }, [load]);
+
+  // Revalida membresías/solicitudes pendientes cada vez que esta pantalla
+  // recupera foco — mismo patrón que PlayerDashboardScreen.tsx/
+  // TournamentDetailScreen.tsx (recargar al recuperar foco, sin tocar
+  // `loading`, refresco silencioso). Sin esto, esta pantalla podía quedarse
+  // mostrando "Pendiente" (o memberships desactualizadas) indefinidamente
+  // tras una aprobación/rechazo real ocurrido en otra parte (Web, otra
+  // sesión, o esta misma sesión llegando aquí de vuelta tras la
+  // notificación push de aprobación) hasta que el usuario cerrara y
+  // reabriera la pantalla — el backend/Supabase es la fuente de verdad,
+  // nunca el snapshot cargado en el primer montaje.
+  useFocusEffect(
+    useCallback(() => {
+      load();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [load])
+  );
 
   const memberMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -274,51 +283,12 @@ export function ChangeClubScreen() {
     navigation.goBack();
   }
 
-  async function handleJoin(clubId: string) {
-    if (joiningClubId) return;
-    setJoiningClubId(clubId);
-    try {
-      const result = await requestClubAccess(supabase, clubId);
-      if (result.kind === "missing_phone") {
-        setPhoneValue("");
-        setPhoneError(null);
-        setPhoneModal({ open: true, clubId });
-        return;
-      }
-      if (result.kind === "error") {
-        setToastMessage(result.message);
-        return;
-      }
-      if (result.kind === "requested") {
-        setPendingIds((prev) => new Set(prev).add(clubId));
-        setToastMessage("Solicitud enviada");
-        return;
-      }
-      // "joined" — join_public_club ya creó la membresía activa; entra
-      // directo, igual que RequestAccessButton (WEB) hace redirectTo.
-      await switchToClub(clubId);
-    } finally {
-      setJoiningClubId(null);
-    }
-  }
-
-  async function handleSavePhoneAndRetry() {
-    if (!userId || !phoneModal.clubId) return;
-    setPhoneSaving(true);
-    setPhoneError(null);
-    const result = await updateOwnPhone(supabase, userId, phoneValue);
-    setPhoneSaving(false);
-    if (!result.success) {
-      setPhoneError(result.error);
-      return;
-    }
-    const clubId = phoneModal.clubId;
-    setPhoneModal({ open: false, clubId: null });
-    handleJoin(clubId);
-  }
-
   // Mismo handler para una fila de "Explorar clubes" y para el Callout de
-  // su marker — nunca dos implementaciones del mismo tap.
+  // su marker — nunca dos implementaciones del mismo tap. Una membresía
+  // propia sigue cambiando de club directo (switchToClub, sin pasos
+  // intermedios); cualquier otro club (sin relación o con solicitud
+  // pendiente) navega a su página pública — join/request y el modal de
+  // WhatsApp viven ahí ahora, nunca aquí (ver PublicClubScreen.tsx).
   function handleRowPress(clubId: string) {
     const relation = relationOf(clubId);
     if (relation.kind === "member") {
@@ -326,11 +296,9 @@ export function ChangeClubScreen() {
       switchToClub(clubId);
       return;
     }
-    if (relation.kind === "pending") {
-      setToastMessage("Ya tienes una solicitud pendiente para este club.");
-      return;
-    }
-    handleJoin(clubId);
+    const entry = (directory ?? []).find((c) => c.id === clubId);
+    if (!entry) return;
+    navigation.navigate("PublicClub", { entry, relationKind: relation.kind });
   }
 
   function handleMarkerPress(clubId: string) {
@@ -342,15 +310,39 @@ export function ChangeClubScreen() {
   const relationLabel = RELATION_OPTIONS.find((o) => o.value === relationFilter)?.label ?? "Todos";
   const mapHeight = Math.max(220, Math.round(windowHeight * 0.38));
 
+  // Sin membresías confirmado (no mientras carga, no si hubo error — en
+  // ambos casos todavía no sabemos si tiene alguna) → esta pantalla no
+  // está "cambiando" nada, es la primera exploración del usuario. Mismo
+  // criterio para el título y para ocultar "Mis clubes" vacía.
+  const hasNoMemberships = !loading && !loadError && memberships !== null && memberships.length === 0;
+
+  // Si hay historial real (se llegó desde AppHeader/una notificación con
+  // club ya activo), X cierra normal. Si esta es la pantalla obligatoria
+  // de un usuario recién autenticado sin ningún club (NoClubStack en
+  // RootNavigator.tsx, sin ninguna screen debajo), goBack() no tendría
+  // adónde volver — la salida razonable es cerrar sesión, reutilizando el
+  // mismo signOut ya usado en HomeScreen.tsx/AppHeader.tsx, nunca una
+  // navegación inventada hacia "App" sin club.
+  function handleClose() {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    signOut();
+  }
+
   const header = (
     <View>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Cambiar de club</Text>
-        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={10} style={styles.closeButton}>
-          <X width={20} height={20} color={theme.colors.white} />
-        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{hasNoMemberships ? "Explorar clubes" : "Cambiar de club"}</Text>
+        {!hasNoMemberships && (
+          <TouchableOpacity onPress={handleClose} hitSlop={10} style={styles.closeButton}>
+            <X width={20} height={20} color={theme.colors.white} />
+          </TouchableOpacity>
+        )}
       </View>
 
+      {!hasNoMemberships && (
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Mis clubes</Text>
         {loading ? (
@@ -360,11 +352,9 @@ export function ChangeClubScreen() {
           </View>
         ) : loadError ? (
           <Text style={styles.errorText}>{loadError}</Text>
-        ) : !memberships || memberships.length === 0 ? (
-          <Text style={styles.emptyText}>No tienes membresías activas todavía.</Text>
         ) : (
           <View style={{ gap: 8 }}>
-            {memberships.map(({ role, club }) => {
+            {(memberships ?? []).map(({ role, club }) => {
               const isCurrent = club.id === currentClub?.id;
               const isSwitching = switchingClubId === club.id;
               const content = (
@@ -419,6 +409,7 @@ export function ChangeClubScreen() {
           </View>
         )}
       </View>
+      )}
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Explorar clubes</Text>
@@ -527,13 +518,12 @@ export function ChangeClubScreen() {
         }
         renderItem={({ item }) => {
           const relation = relationOf(item.id);
-          const isJoining = joiningClubId === item.id;
           const isSelected = selectedId === item.id;
           const location = [item.city, item.state].filter(Boolean).join(", ");
           return (
             <TouchableOpacity
               style={[styles.row, styles.directoryRow, isSelected && styles.rowSelected]}
-              disabled={isJoining || switchingClubId !== null}
+              disabled={switchingClubId !== null}
               onPress={() => {
                 setSelectedId(item.id);
                 handleRowPress(item.id);
@@ -578,7 +568,7 @@ export function ChangeClubScreen() {
                   )}
                 </View>
               </View>
-              {isJoining ? <ActivityIndicator color={theme.colors.muted} size="small" /> : <ChevronRight width={16} height={16} color={theme.colors.muted} />}
+              <ChevronRight width={16} height={16} color={theme.colors.muted} />
             </TouchableOpacity>
           );
         }}
@@ -599,35 +589,6 @@ export function ChangeClubScreen() {
         value={relationFilter}
         onSelect={(v) => setRelationFilter(v as RelationFilter)}
       />
-
-      <Modal visible={phoneModal.open} transparent animationType="fade" onRequestClose={() => setPhoneModal({ open: false, clubId: null })}>
-        <View style={styles.confirmOverlay}>
-          <View style={styles.confirmCard}>
-            <Text style={styles.confirmTitle}>Completa tu WhatsApp</Text>
-            <Text style={styles.confirmBody}>
-              Agrega tu número de WhatsApp para unirte al club. El club lo utilizará para contactarte.
-            </Text>
-            <TextInput
-              value={phoneValue}
-              onChangeText={setPhoneValue}
-              placeholder="+57 317 367 2033"
-              placeholderTextColor={theme.colors.muted}
-              keyboardType="phone-pad"
-              autoFocus
-              style={styles.phoneInput}
-            />
-            {!!phoneError && <Text style={styles.errorText}>{phoneError}</Text>}
-            <View style={styles.confirmActions}>
-              <TouchableOpacity onPress={() => setPhoneModal({ open: false, clubId: null })} disabled={phoneSaving} style={styles.confirmCancel}>
-                <Text style={styles.confirmCancelText}>Cancelar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleSavePhoneAndRetry} disabled={phoneSaving} style={styles.saveButton}>
-                {phoneSaving ? <ActivityIndicator color={theme.colors.bg} size="small" /> : <Text style={styles.saveButtonText}>Guardar y continuar</Text>}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
 
       <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />
     </SafeAreaView>
@@ -757,32 +718,4 @@ const styles = StyleSheet.create({
   calloutBox: { minWidth: 140, maxWidth: 220, paddingVertical: 2 },
   calloutTitle: { color: "#0f172a", fontSize: 13, fontWeight: "700" },
   calloutSubtitle: { color: "#334155", fontSize: 11, marginTop: 2 },
-  confirmOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", alignItems: "center", justifyContent: "center", padding: 24 },
-  confirmCard: {
-    width: "100%",
-    maxWidth: 360,
-    backgroundColor: theme.colors.surface,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.lg,
-    padding: 20,
-    gap: 12,
-  },
-  confirmTitle: { color: theme.colors.white, fontSize: 16, fontWeight: "700" },
-  confirmBody: { color: theme.colors.muted, fontSize: 13, lineHeight: 18 },
-  phoneInput: {
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.sm,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    color: theme.colors.white,
-    fontSize: 14,
-    backgroundColor: theme.colors.surfaceAlt,
-  },
-  confirmActions: { flexDirection: "row", justifyContent: "flex-end", gap: 16, marginTop: 4 },
-  confirmCancel: { paddingVertical: 8, paddingHorizontal: 4 },
-  confirmCancelText: { color: theme.colors.muted, fontSize: 13, fontWeight: "600" },
-  saveButton: { backgroundColor: theme.colors.primary, borderRadius: theme.radius.sm, paddingHorizontal: 14, paddingVertical: 8 },
-  saveButtonText: { color: theme.colors.bg, fontSize: 12, fontWeight: "700" },
 });

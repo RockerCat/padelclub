@@ -34,7 +34,7 @@ import { PendingRequestsSection } from "../components/PendingRequestsSection";
 import { RejectedReservationsSection } from "../components/RejectedReservationsSection";
 import { ReservationTicketPanel, type TicketPanelState } from "../components/ReservationTicketPanel";
 import { getAdminReservationRequests, type PendingRequest, type RejectedReservation } from "../lib/reservationAdminRequests";
-import type { ReservationsStackParamList } from "../navigation/ReservationsStack";
+import type { RootStackParamList } from "../navigation/RootNavigator";
 
 type Court = { id: string; name: string; surface: string | null; is_indoor: boolean | null };
 
@@ -175,7 +175,10 @@ export function ReservationsListScreen() {
   const { session } = useAuth();
   const { club, role, loading: clubLoading } = useClub();
   const isOwnerOrAdmin = role === "OWNER" || role === "ADMIN";
-  const navigation = useNavigation<NativeStackNavigationProp<ReservationsStackParamList>>();
+  // RootStackParamList (no ReservationsStackParamList): ReservationDetail
+  // vive en el stack raíz (ver RootNavigator.tsx) — mismo "escape hatch" que
+  // AppHeader.tsx/PushNotificationNavigator.tsx usan para lo mismo.
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const viewerId = session?.user?.id ?? "";
 
   const [anchorStart, setAnchorStart] = useState(() => getWeekMonday(new Date()));

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AccessibilityInfo, ActivityIndicator, Alert, Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect } from "@react-navigation/native";
-import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp, NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Camera, ChevronLeft, Globe, ImageIcon, Lock, MessageCircle, Pencil, Plus } from "lucide-react-native";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../contexts/AuthContext";
@@ -47,6 +47,8 @@ import { Skeleton } from "../components/Skeleton";
 import { theme } from "../lib/theme";
 import type { Tournament, TournamentEntryRow } from "../types/domain";
 import type { TournamentsStackParamList } from "../navigation/TournamentsStack";
+import type { RootStackParamList } from "../navigation/RootNavigator";
+import { navigateIntoApp } from "../navigation/navigateIntoApp";
 
 type Props = NativeStackScreenProps<TournamentsStackParamList, "TournamentDetail">;
 
@@ -86,27 +88,61 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
   const { session } = useAuth();
   const isAdmin = role === "OWNER" || role === "ADMIN";
 
+  // rootNavigation: mismo escape hatch que ReservationDetailScreen.tsx
+  // (useNavigation tipado contra RootStackParamList) — necesario porque
+  // esta pantalla vive anidada (RootStack > App > tabs > TournamentsStack),
+  // y navigateIntoApp necesita ese tipo para su target "App".
+  const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
   // El detalle puede abrirse desde orígenes distintos (Torneos, Dashboard
   // → "Próxima actividad", Actividad reciente, etc.). Cuando se entra
   // cross-tab desde Dashboard (navigation.navigate("TournamentsTab",
   // {screen:"TournamentDetail", params})), TournamentDetail queda como la
   // ÚNICA route de TournamentsStack en ese momento — no hay una pantalla
-  // previa DENTRO de ese mismo stack, así que native-stack no dibuja
-  // ningún botón "atrás" (headerBackButtonDisplayMode no tiene efecto sin
-  // una previous route), pero el header nativo (fondo + altura) se sigue
-  // reservando igual — de ahí la franja vacía entre el header global del
-  // club y el título. Para PLAYER, el header nativo se oculta por completo
-  // (headerShown: false) y el propio contenido de la pantalla dibuja su
-  // propia flecha "←" (ver el render de abajo) que sí funciona sin
-  // importar el origen: llama a navigation.goBack() directamente, que
-  // React Navigation resuelve dentro del stack si hay una route previa
-  // (Torneos → detalle) o, si no la hay, la burbujea al Tab Navigator
-  // padre y cambia al tab anterior (Dashboard → detalle) — nunca una ruta
-  // hardcodeada, nunca un fallback inventado. OWNER/ADMIN conserva el
-  // header nativo intacto (mismo criterio que WEB: el back se retira solo
-  // para PLAYER).
+  // previa DENTRO de ese mismo stack. Mismo patrón "volver" que
+  // ReservationDetailScreen.tsx: goBack() si hay historial real en este
+  // stack; si no, cae al Dashboard en vez de dejar a PLAYER u OWNER/ADMIN
+  // sin salida.
+  function handleBack() {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigateIntoApp(rootNavigation);
+    }
+  }
+
+  // Oculta la bottom tab bar mientras este detalle está montado — mismo
+  // valor de tabBarStyle que commonScreenOptions en AppTabs.tsx (nunca un
+  // segundo estilo inventado), restaurado en cleanup al desmontar. getParent()
+  // desde el navigation de este stack (TournamentsStackParamList) apunta al
+  // Tab.Navigator padre (TournamentsTab), no al stack raíz.
   useLayoutEffect(() => {
-    navigation.setOptions({ headerShown: isAdmin, headerBackButtonDisplayMode: "default" });
+    const parent = navigation.getParent();
+    parent?.setOptions({ tabBarStyle: { display: "none" } });
+    return () => {
+      parent?.setOptions({ tabBarStyle: { backgroundColor: theme.colors.surface, borderTopColor: theme.colors.border } });
+    };
+  }, [navigation]);
+
+  // Para PLAYER, el header nativo se oculta por completo (headerShown:
+  // false) y el propio contenido de la pantalla dibuja su propia flecha
+  // "←" (ver `backButton` más abajo). OWNER/ADMIN conserva el header
+  // nativo intacto (mismo criterio que WEB: el back en contenido se
+  // reserva solo para PLAYER) — pero ahora con un headerLeft custom que
+  // siempre usa handleBack, en vez de depender del botón "atrás" nativo
+  // por defecto (que no aparece si esta pantalla es la única route del
+  // stack, exactamente el caso descrito arriba).
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerShown: isAdmin,
+      headerBackButtonDisplayMode: "default",
+      headerLeft: () => (
+        <TouchableOpacity onPress={handleBack} hitSlop={10} accessibilityLabel="Volver">
+          <ChevronLeft width={24} height={24} color={theme.colors.white} />
+        </TouchableOpacity>
+      ),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigation, isAdmin]);
 
   const [tournament, setTournament] = useState<Tournament | null | undefined>(undefined);
@@ -280,7 +316,7 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
   // un PLAYER con conexión lenta o un torneo inexistente quedaría sin
   // forma de volver mientras esta rama sigue montada.
   const backButton = !isAdmin && (
-    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton} hitSlop={8} accessibilityLabel="Volver">
+    <TouchableOpacity onPress={handleBack} style={styles.backButton} hitSlop={8} accessibilityLabel="Volver">
       <ChevronLeft width={24} height={24} color={theme.colors.white} />
     </TouchableOpacity>
   );

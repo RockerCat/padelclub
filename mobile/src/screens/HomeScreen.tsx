@@ -1,8 +1,11 @@
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../contexts/AuthContext";
 import { useClub } from "../contexts/ClubContext";
 import { theme } from "../lib/theme";
+import type { RootStackParamList } from "../navigation/RootNavigator";
 import { OwnerDashboardScreen } from "./OwnerDashboardScreen";
 import { PlayerDashboardScreen } from "./PlayerDashboardScreen";
 
@@ -17,6 +20,7 @@ import { PlayerDashboardScreen } from "./PlayerDashboardScreen";
 export function HomeScreen() {
   const { signOut } = useAuth();
   const { club, role, loading: clubLoading, error: clubError, reload } = useClub();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   if (clubError) {
     return (
@@ -37,8 +41,11 @@ export function HomeScreen() {
         <View style={styles.centered}>
           <Text style={styles.emptyTitle}>Sin club activo</Text>
           <Text style={styles.emptyText}>Tu cuenta no tiene una membresía activa en ningún club todavía.</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={signOut}>
-            <Text style={styles.retryButtonText}>Cerrar sesión</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => navigation.navigate("ChangeClub")}>
+            <Text style={styles.retryButtonText}>Explorar clubes</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.secondaryButton} onPress={signOut}>
+            <Text style={styles.secondaryButtonText}>Cerrar sesión</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -60,4 +67,6 @@ const styles = StyleSheet.create({
   emptyText: { color: theme.colors.muted, fontSize: 13, textAlign: "center" },
   retryButton: { backgroundColor: theme.colors.primary, borderRadius: theme.radius.md, paddingHorizontal: 20, paddingVertical: 10 },
   retryButtonText: { color: theme.colors.bg, fontWeight: "700" },
+  secondaryButton: { paddingHorizontal: 20, paddingVertical: 10 },
+  secondaryButtonText: { color: theme.colors.muted, fontWeight: "600" },
 });

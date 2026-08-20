@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { Lock, LockOpen, Pencil } from "lucide-react-native";
+import { ChevronLeft, Lock, LockOpen, Pencil } from "lucide-react-native";
 import { supabase } from "../lib/supabase";
 import { useClub } from "../contexts/ClubContext";
 import { getReservationShareDetail, type ReservationShareDetail } from "../lib/reservationShareDetail";
@@ -20,9 +20,15 @@ import { cancelReservation } from "../lib/cancelReservation";
 import { getClubMembers } from "../lib/players";
 import { WeekReservationModal, type Member } from "../components/WeekReservationModal";
 import type { CalendarCourt, CalendarReservation, WeekDay } from "../lib/weekCalendar";
-import type { ReservationsStackParamList } from "../navigation/ReservationsStack";
+import type { RootStackParamList } from "../navigation/RootNavigator";
+import { navigateIntoApp } from "../navigation/navigateIntoApp";
 
-type Props = NativeStackScreenProps<ReservationsStackParamList, "ReservationDetail">;
+// Screen del stack RAÍZ (RootNavigator.tsx), no de ReservationsStack — así
+// una reserva abierta desde Notifications/push/Reservaciones queda en el
+// MISMO historial real de RootStack: navigation acá YA es
+// NativeStackNavigationProp<RootStackParamList>, sin necesitar un segundo
+// "escape hatch" (rootNavigation) como antes.
+type Props = NativeStackScreenProps<RootStackParamList, "ReservationDetail">;
 
 // Idéntico a TYPE_LABELS en ReservationShareView.tsx (app web).
 const TYPE_LABELS: Record<string, string> = { match: "Partido", class: "Clase", block: "Bloqueo" };
@@ -67,7 +73,7 @@ function getInitials(name: string): string {
 // getReservationAdminEditPolicy internamente sin que esta pantalla
 // necesite duplicar esa regla. Cancelar/Abrir-Cerrar/tiempo extra para
 // OWNER/ADMIN siguen sin agregarse acá — fuera de alcance de este ajuste.
-export function ReservationDetailScreen({ route }: Props) {
+export function ReservationDetailScreen({ route, navigation }: Props) {
   const { id } = route.params;
   // currentClub: el club activo del viewer (useClub) — deliberadamente
   // distinto de `club` más abajo (detail.club, el club DUEÑO de la
@@ -75,6 +81,35 @@ export function ReservationDetailScreen({ route }: Props) {
   // — nunca renombrar detail.club para "simplificar" este alias.
   const { club: currentClub, role } = useClub();
   const isOwnerOrAdmin = role === "OWNER" || role === "ADMIN";
+
+  // Mismo patrón de "volver" que NotificationsScreen.tsx → handleBack:
+  // goBack() si hay historial real en el stack raíz (Notifications,
+  // Reservaciones, o lo que estuviera debajo) — siempre lo hay salvo
+  // entrada directa por push en cold start; si no, cae al Dashboard.
+  // navigation ya es NativeStackNavigationProp<RootStackParamList> (Props),
+  // así que navigateIntoApp lo usa directo, sin un segundo escape hatch.
+  // Esta screen vive en el stack raíz (no dentro de ReservationsStack), así
+  // que cubre toda la pantalla igual que cualquier otra screen del stack —
+  // el tab bar de "App" queda tapado automáticamente, sin necesidad de
+  // ocultarlo a mano.
+  function handleBack() {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigateIntoApp(navigation);
+    }
+  }
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => (
+        <TouchableOpacity onPress={handleBack} hitSlop={10} style={styles.backButton} accessibilityLabel="Volver">
+          <ChevronLeft width={24} height={24} color={theme.colors.white} />
+        </TouchableOpacity>
+      ),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigation]);
 
   const [detail, setDetail] = useState<ReservationShareDetail | null | undefined>(undefined);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -456,6 +491,7 @@ function Row({ label, value, last }: { label: string; value: React.ReactNode; la
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: theme.colors.bg },
+  backButton: { paddingHorizontal: 8, paddingVertical: 4 },
   content: { padding: 20, paddingTop: 24, gap: 16, maxWidth: 512, width: "100%", alignSelf: "center" },
   h1: { color: theme.colors.white, fontSize: 20, fontWeight: "700" },
   subtitle: { color: theme.colors.muted, fontSize: 13, marginTop: 4 },

@@ -31,7 +31,7 @@ const PAGE_SIZE = 20;
 export function NotificationsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { session } = useAuth();
-  const { club: currentClub, reload: reloadClub, setPendingNav } = useClub();
+  const { club: currentClub, reload: reloadClub, setPendingNav, setPendingRootNav } = useClub();
   const userId = session?.user.id ?? null;
 
   const [items, setItems] = useState<NotificationRow[]>([]);
@@ -89,6 +89,32 @@ export function NotificationsScreen() {
     setNavigatingId(n.id);
     try {
       const crossClub = !!n.club_id && n.club_id !== currentClub?.id;
+
+      // ReservationDetail vive en el stack raíz (RootNavigator.tsx), no
+      // dentro de ReservasTab/ReservationsStack — un push real y directo
+      // sobre navigation (ya NativeStackNavigationProp<RootStackParamList>)
+      // en vez de rutear a través del Tab Navigator.
+      if (target.kind === "reservation_detail") {
+        if (crossClub && n.club_id && userId) {
+          // Cross-club: NO navegar acá. AppTabs se remonta cuando cambia
+          // club.id (key={club?.id} en AppShell) — un navigate() inmediato
+          // después de este await corre en carrera contra ese remonte y
+          // puede perderse. setPendingRootNav lo deja para el único
+          // consumer (el useEffect en PushNotificationNavigator, siempre
+          // montado, nunca se remonta con el club) — nunca navegamos acá
+          // directo ni duplicamos ese efecto.
+          setPendingRootNav({ screen: "ReservationDetail", params: { id: target.reservationId } });
+          try {
+            await updateLastClub(supabase, userId, n.club_id);
+          } catch {
+            // Best-effort, igual que el resto de la app — nunca bloquea seguir.
+          }
+          await reloadClub();
+          return;
+        }
+        navigation.navigate("ReservationDetail", { id: target.reservationId });
+        return;
+      }
 
       if (crossClub && n.club_id && userId) {
         const navSpec = await buildTabNav(supabase, target, n.club_id);

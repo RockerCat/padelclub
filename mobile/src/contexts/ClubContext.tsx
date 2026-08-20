@@ -23,6 +23,17 @@ import { getIdentity, type IdentityData } from "../lib/userIdentity";
 // ya que cualquier navigate() emitido antes del remount se perdería con él.
 export type PendingTabNav = { tab: string; screen?: string; params?: Record<string, unknown> };
 
+// pendingRootNav: separado de pendingNav a propósito — pendingNav es para
+// screens de tabs anidados (consumido por el efecto de PlayerTabs, que se
+// remonta al cambiar de club). ReservationDetail vive en el stack RAÍZ
+// (RootNavigator.tsx), fuera de ese árbol que se remonta — necesita su
+// propio estado mínimo, consumido por un componente que nunca se remonta
+// (PushNotificationNavigator), una vez el club ya esté commiteado
+// (loading === false), nunca inmediatamente después de un `await
+// reloadClub()` (esa inmediatez es exactamente la carrera que este estado
+// existe para evitar).
+export type PendingRootNav = { screen: "ReservationDetail"; params: { id: string } };
+
 type ClubContextValue = {
   club: ActiveMembership["club"] | null;
   role: string | null;
@@ -33,6 +44,8 @@ type ClubContextValue = {
   reload: () => Promise<void>;
   pendingNav: PendingTabNav | null;
   setPendingNav: (nav: PendingTabNav | null) => void;
+  pendingRootNav: PendingRootNav | null;
+  setPendingRootNav: (nav: PendingRootNav | null) => void;
 };
 
 const ClubContext = createContext<ClubContextValue | null>(null);
@@ -46,6 +59,7 @@ export function ClubProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pendingNav, setPendingNav] = useState<PendingTabNav | null>(null);
+  const [pendingRootNav, setPendingRootNav] = useState<PendingRootNav | null>(null);
 
   const load = useCallback(async () => {
     if (!session?.user) {
@@ -79,7 +93,9 @@ export function ClubProvider({ children }: { children: ReactNode }) {
   }, [load]);
 
   return (
-    <ClubContext.Provider value={{ club, role, clubMemberId, identity, loading, error, reload: load, pendingNav, setPendingNav }}>
+    <ClubContext.Provider
+      value={{ club, role, clubMemberId, identity, loading, error, reload: load, pendingNav, setPendingNav, pendingRootNav, setPendingRootNav }}
+    >
       {children}
     </ClubContext.Provider>
   );
