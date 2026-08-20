@@ -198,6 +198,13 @@ export function ChangeClubScreen() {
   useFocusEffect(
     useCallback(() => {
       load();
+      // ClubContext (club/role "actual") es un snapshot aparte del
+      // load() de arriba — revalidarlo también aquí cubre cualquier
+      // entrada a esta pantalla (push, menú, back) sin depender de que
+      // el punto de entrada específico ya lo haya hecho (ver
+      // PushNotificationNavigator.tsx/NotificationsScreen.tsx para el
+      // caso de push de club desactivado, que ahora también lo hace).
+      reloadClub();
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [load])
   );

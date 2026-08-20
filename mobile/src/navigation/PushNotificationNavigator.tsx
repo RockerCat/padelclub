@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import * as Notifications from "expo-notifications";
 import { useNavigation } from "@react-navigation/native";
@@ -45,8 +45,26 @@ import type { NotificationRow } from "../lib/notifications";
 export function PushNotificationNavigator() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { session } = useAuth();
-  const { club: currentClub, loading: clubLoading, reload: reloadClub, setPendingNav, pendingRootNav, setPendingRootNav } = useClub();
+  const {
+    club: currentClub,
+    loading: clubLoading,
+    reloading,
+    reload: reloadClub,
+    setPendingNav,
+    pendingRootNav,
+    setPendingRootNav,
+  } = useClub();
   const userId = session?.user.id ?? null;
+
+  // Verdadero justo después de un reloadClub() que puede haber transicionado
+  // NoClubStack → MainStack (primer club) — el useEffect de abajo solo
+  // navega a "App" una vez `reloading` vuelve a false, es decir, una vez
+  // React ya comprometió el render con el club nuevo (y por lo tanto, si
+  // aplica, ya montó MainStack) — nunca inmediatamente después del `await`,
+  // que es exactamente la carrera que rompía este flujo (ver
+  // PushNotificationNavigator/NotificationsScreen — antes navegaba justo
+  // tras el await, sin esperar el commit real).
+  const [awaitingClubEntry, setAwaitingClubEntry] = useState(false);
 
   // Dedup por notification_id dentro de esta misma ejecución — listener,
   // cold start y el fallback de AppState pueden disparar para la misma
@@ -74,7 +92,9 @@ export function PushNotificationNavigator() {
       pendingWithoutAuth.current = notificationId;
       return;
     }
-    if (processedIds.current.has(notificationId)) return;
+    if (processedIds.current.has(notificationId)) {
+      return;
+    }
     processedIds.current.add(notificationId);
 
     try {
@@ -94,6 +114,17 @@ export function PushNotificationNavigator() {
       if (target.kind === "none") return;
 
       if (target.kind === "change_club") {
+        // Revalida ClubContext ANTES de navegar — este target cubre tanto
+        // "sin club todavía" como player_deactivated (metadata.destination
+        // = "/clubs"): en ambos casos el club/rol que ClubContext tiene en
+        // memoria puede haber quedado obsoleto (p. ej. el club recién
+        // desactivado sigue siendo "currentClub" hasta este await). Sin
+        // esto, ChangeClubScreen ya revalida su propio estado local
+        // (memberships/pending) pero AppHeader, AuthenticatedNavigator y el
+        // badge "Actual" seguían leyendo la membresía vieja hasta el
+        // próximo trigger de reload — Supabase debe ser la fuente de
+        // verdad también para este target, igual que los demás de abajo.
+        await reloadClub();
         navigation.navigate("ChangeClub");
         return;
       }
@@ -112,7 +143,7 @@ export function PushNotificationNavigator() {
           // club.id (key={club?.id} en AppShell) — un navigate() inmediato
           // después de este await corre en carrera contra ese remonte y
           // puede perderse. setPendingRootNav lo deja para el useEffect de
-          // abajo, que solo navega una vez clubLoading vuelve a false —
+          // abajo, que solo navega una vez `reloading` vuelve a false —
           // después del commit real del club nuevo.
           setPendingRootNav({ screen: "ReservationDetail", params: { id: target.reservationId } });
           try {
@@ -136,7 +167,17 @@ export function PushNotificationNavigator() {
           // Best-effort, igual que NotificationsScreen — nunca bloquea seguir.
         }
         await reloadClub();
-        navigateIntoApp(navigation);
+        // NO navegar aquí todavía — mismo tipo de carrera que ya documenta
+        // el bloque de reservation_detail arriba: un navigate() inmediato
+        // después de este await puede perder contra el remonte estructural
+        // que AuthenticatedNavigator dispara al ver `club` no-nulo
+        // (NoClubStack → MainStack, ver RootNavigator.tsx) — "App" ni
+        // siquiera existe todavía como ruta en NoClubStack en ese instante.
+        // setAwaitingClubEntry deja la navegación para el useEffect de abajo,
+        // que solo dispara una vez `reloading` vuelve a false — es decir,
+        // una vez React ya comprometió el render con el club nuevo (y si
+        // aplica, ya montó MainStack) — nunca antes.
+        setAwaitingClubEntry(true);
         return;
       }
 
@@ -152,15 +193,44 @@ export function PushNotificationNavigator() {
 
   function extractNotificationId(data: { [key: string]: unknown } | null | undefined): string | null {
     const value = data?.notification_id;
-    return typeof value === "string" ? value : null;
+    const result = typeof value === "string" ? value : null;
+    return result;
   }
 
   // Punto único de extracción + apertura — listener, cold start y el
   // fallback de AppState llaman exactamente esta misma función, nunca una
   // copia paralela.
+  //
+  // getLastNotificationResponseAsync() (usado por el cold-start check y el
+  // fallback de AppState, ver abajo) NO es "dame lo que cambió desde la
+  // última consulta" — es un getter de un único slot nativo persistente
+  // ("la respuesta más reciente"), que sigue devolviendo LA MISMA respuesta
+  // en cada llamada hasta que se limpia explícitamente (ver
+  // clearLastNotificationResponse más abajo — documentado así por Expo:
+  // "it is undesirable to continue selecting the route after the response
+  // has already been handled"). Sin limpiarlo, cada vuelta a foreground
+  // (por CUALQUIER motivo, no solo tocar una push) volvía a entregar la
+  // MISMA respuesta ya procesada — confirmado en runtime: una aprobación ya
+  // consumida seguía devolviéndose en cada `AppState → active`, eclipsando
+  // cualquier push nueva (p. ej. player_deactivated) que debiera ocupar ese
+  // mismo slot. `clearLastNotificationResponse()` se llama aquí, en el
+  // punto único de entrada, ANTES de decidir nada más — así el slot nativo
+  // queda vacío apenas se observa cualquier respuesta (llegue por el
+  // listener en vivo, por cold start o por el fallback de AppState),
+  // independientemente de si processedIds la dedup más abajo o de si
+  // termina siendo accionable. `processedIds` (en memoria, se pierde en
+  // cada reload de Metro o relanzamiento de la app) sigue existiendo como
+  // segunda red de seguridad para el caso de listener+cold start
+  // disparando para la MISMA respuesta dentro de la MISMA sesión — pero ya
+  // no es la única defensa contra que una respuesta vieja vuelva a
+  // navegar tras un reload/relanzamiento, que es exactamente lo que
+  // clearLastNotificationResponse() ahora garantiza a nivel nativo.
   function processResponse(response: Notifications.NotificationResponse): void {
+    Notifications.clearLastNotificationResponse();
     const notificationId = extractNotificationId(response.notification.request.content.data);
-    if (notificationId) openFromNotificationId(notificationId);
+    if (notificationId) {
+      openFromNotificationId(notificationId);
+    }
   }
 
   useEffect(() => {
@@ -204,16 +274,47 @@ export function PushNotificationNavigator() {
 
   // Consumidor único de pendingRootNav — PushNotificationNavigator nunca se
   // remonta al cambiar de club (a diferencia de AppTabs/PlayerTabs), así que
-  // es el lugar seguro para reaccionar recién cuando clubLoading vuelve a
+  // es el lugar seguro para reaccionar recién cuando `reloading` vuelve a
   // false: React ya comprometió el render con el club nuevo en ese punto.
   // Sirve tanto al flujo de push (arriba) como al de NotificationsScreen.tsx
   // (mismo ClubContext, mismo pendingRootNav, sin duplicar este consumer).
+  //
+  // Antes esta guarda usaba `clubLoading` — dejó de servir para esto desde
+  // que hasLoadedOnceRef (ver ClubContext.tsx) hace que `loading` ya NO se
+  // ponga en true durante un reload en segundo plano: `clubLoading` queda
+  // permanentemente en false post-bootstrap, así que la condición `!
+  // pendingRootNav || clubLoading` dejaba de esperar nada — el efecto
+  // disparaba en cuanto se seteaba pendingRootNav, ANTES de que
+  // reloadClub() siquiera terminara. `reloading` (nuevo campo en
+  // ClubContext, separado de `loading` a propósito) sí sigue alternando
+  // true/false en cada reload, con o sin bootstrap de por medio — restaura
+  // la espera real sin reintroducir el splash global.
   useEffect(() => {
-    if (!pendingRootNav || clubLoading) return;
+    if (!pendingRootNav || reloading) return;
     const nav = pendingRootNav;
     setPendingRootNav(null);
     navigation.navigate(nav.screen, nav.params);
-  }, [pendingRootNav, clubLoading, navigation, setPendingRootNav]);
+  }, [pendingRootNav, reloading, navigation, setPendingRootNav]);
+
+  // Consumidor de awaitingClubEntry (ver arriba) — misma razón/mismo patrón
+  // que el efecto de pendingRootNav: esperar a que `reloading` se asiente
+  // antes de navegar a "App", nunca justo después del `await reloadClub()`
+  // síncrono (esa inmediatez es la carrera real, ver comentario donde se
+  // llama setAwaitingClubEntry). pendingNav (el destino de tab real) ya fue
+  // seteado antes del reload y lo consume PlayerTabs en su propio efecto de
+  // montaje — este navigate() solo necesita aterrizar en "App", que ya es
+  // una ruta válida en el navigator que esté montado en este punto
+  // (MainStack, sea porque ya estaba o porque el reload recién lo montó).
+  useEffect(() => {
+    if (!awaitingClubEntry) {
+      return;
+    }
+    if (reloading) {
+      return;
+    }
+    setAwaitingClubEntry(false);
+    navigateIntoApp(navigation);
+  }, [awaitingClubEntry, reloading, navigation]);
 
   return null;
 }

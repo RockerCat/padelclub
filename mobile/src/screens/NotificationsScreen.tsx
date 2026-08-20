@@ -31,7 +31,7 @@ const PAGE_SIZE = 20;
 export function NotificationsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { session } = useAuth();
-  const { club: currentClub, reload: reloadClub, setPendingNav, setPendingRootNav } = useClub();
+  const { club: currentClub, reloading, reload: reloadClub, setPendingNav, setPendingRootNav } = useClub();
   const userId = session?.user.id ?? null;
 
   const [items, setItems] = useState<NotificationRow[]>([]);
@@ -39,6 +39,18 @@ export function NotificationsScreen() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [navigatingId, setNavigatingId] = useState<string | null>(null);
+  // Mismo patrón/misma razón que PushNotificationNavigator.tsx
+  // (awaitingClubEntry): espera a que `reloading` (ClubContext) vuelva a
+  // false — es decir, a que el render con el club nuevo ya esté
+  // comprometido — antes de navegar a "App", en vez de hacerlo justo
+  // después del `await reloadClub()` síncrono.
+  const [awaitingClubEntry, setAwaitingClubEntry] = useState(false);
+
+  useEffect(() => {
+    if (!awaitingClubEntry || reloading) return;
+    setAwaitingClubEntry(false);
+    navigateIntoApp(navigation);
+  }, [awaitingClubEntry, reloading, navigation]);
 
   const load = useCallback(async () => {
     const { items: rows, hasMore: more } = await getNotificationsPaginated(supabase, { limit: PAGE_SIZE, offset: 0 });
@@ -82,6 +94,11 @@ export function NotificationsScreen() {
     if (target.kind === "none") return;
 
     if (target.kind === "change_club") {
+      // Mismo fix que PushNotificationNavigator.tsx: revalidar ClubContext
+      // antes de navegar — cubre player_deactivated (destination "/clubs"),
+      // donde currentClub puede seguir apuntando al club recién
+      // desactivado hasta este reload.
+      await reloadClub();
       navigation.navigate("ChangeClub");
       return;
     }
@@ -125,7 +142,12 @@ export function NotificationsScreen() {
           // Best-effort, igual que el resto de la app — nunca bloquea seguir.
         }
         await reloadClub();
-        navigateIntoApp(navigation);
+        // NO navegar aquí todavía — mismo fix que PushNotificationNavigator.tsx:
+        // un navigate() inmediato después de este await puede perder contra
+        // el remonte estructural NoClubStack → MainStack. setAwaitingClubEntry
+        // deja la navegación para el useEffect de arriba, que solo dispara
+        // una vez `reloading` vuelve a false (render ya comprometido).
+        setAwaitingClubEntry(true);
         return;
       }
 

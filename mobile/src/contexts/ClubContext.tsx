@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "./AuthContext";
 import { resolveActiveMembership, type ActiveMembership } from "../lib/activeMembership";
@@ -40,6 +40,14 @@ type ClubContextValue = {
   clubMemberId: string | null;
   identity: IdentityData | null;
   loading: boolean;
+  // Distinto de `loading` (bootstrap-only, ver hasLoadedOnceRef abajo) —
+  // `reloading` sí se pone en true en CADA llamada a reload(), incluida una
+  // revalidación en segundo plano. Es la señal que PushNotificationNavigator/
+  // NotificationsScreen necesitan para saber cuándo un `await reload()` ya
+  // terminó de asentarse en un render real (y por lo tanto cuándo es seguro
+  // navegar) sin volver a acoplar eso a `loading`, que ya no sirve para eso
+  // (ver comentario en `hasLoadedOnceRef`).
+  reloading: boolean;
   error: string | null;
   reload: () => Promise<void>;
   pendingNav: PendingTabNav | null;
@@ -57,9 +65,30 @@ export function ClubProvider({ children }: { children: ReactNode }) {
   const [clubMemberId, setClubMemberId] = useState<string | null>(null);
   const [identity, setIdentity] = useState<IdentityData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [reloading, setReloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingNav, setPendingNav] = useState<PendingTabNav | null>(null);
   const [pendingRootNav, setPendingRootNav] = useState<PendingRootNav | null>(null);
+
+  // Distingue la carga INICIAL (bootstrap, primera vez que esta sesión
+  // resuelve su club — ahí sí debe bloquear con el splash de
+  // AuthenticatedNavigator) de una revalidación en segundo plano
+  // (`reload()`, llamado desde ChangeClubScreen/PushNotificationNavigator/
+  // NotificationsScreen para reflejar un cambio de acceso real). Antes,
+  // `loading` era una sola bandera para ambos casos — `reload()` ponía
+  // `loading = true` igual que el bootstrap, y AuthenticatedNavigator
+  // (`if (clubLoading) return <Splash/>`) desmontaba TODO el árbol
+  // (MainStack/NoClubStack) cada vez que se llamaba `reload()`, mostrando
+  // el splash global. Para un usuario sin club activo (NoClubStack, donde
+  // ChangeClubScreen es la única pantalla raíz), ese desmontaje forzaba un
+  // remontaje completo de ChangeClubScreen, cuyo propio useFocusEffect
+  // volvía a llamar `reload()` de inmediato — mount → focus → reload →
+  // loading=true → splash → desmonta → remonta → focus → reload → loop
+  // infinito, exactamente el síntoma reportado ("no llega a MainStack,
+  // NoClubStack ni ninguna pantalla"). Ref (no state) a propósito: no debe
+  // disparar un re-render por sí sola, solo decidir si ESTA llamada a
+  // load() toca `loading`.
+  const hasLoadedOnceRef = useRef(false);
 
   const load = useCallback(async () => {
     if (!session?.user) {
@@ -68,9 +97,13 @@ export function ClubProvider({ children }: { children: ReactNode }) {
       setClubMemberId(null);
       setIdentity(null);
       setLoading(false);
+      setReloading(false);
+      hasLoadedOnceRef.current = false;
       return;
     }
-    setLoading(true);
+    const isFirstLoad = !hasLoadedOnceRef.current;
+    if (isFirstLoad) setLoading(true);
+    setReloading(true);
     setError(null);
     try {
       const [membership, identityData] = await Promise.all([
@@ -82,9 +115,14 @@ export function ClubProvider({ children }: { children: ReactNode }) {
       setClubMemberId(membership?.clubMemberId ?? null);
       setIdentity(identityData);
     } catch {
-      setError("No pudimos cargar la información del club. Desliza para reintentar.");
+      // Un reload en segundo plano que falla nunca debe reemplazar datos
+      // ya buenos con un error visible — mismo criterio "nunca romper lo
+      // que ya funciona" que el resto del reload silencioso en la app.
+      if (isFirstLoad) setError("No pudimos cargar la información del club. Desliza para reintentar.");
     } finally {
-      setLoading(false);
+      if (isFirstLoad) setLoading(false);
+      setReloading(false);
+      hasLoadedOnceRef.current = true;
     }
   }, [session?.user]);
 
@@ -94,7 +132,20 @@ export function ClubProvider({ children }: { children: ReactNode }) {
 
   return (
     <ClubContext.Provider
-      value={{ club, role, clubMemberId, identity, loading, error, reload: load, pendingNav, setPendingNav, pendingRootNav, setPendingRootNav }}
+      value={{
+        club,
+        role,
+        clubMemberId,
+        identity,
+        loading,
+        reloading,
+        error,
+        reload: load,
+        pendingNav,
+        setPendingNav,
+        pendingRootNav,
+        setPendingRootNav,
+      }}
     >
       {children}
     </ClubContext.Provider>

@@ -108,13 +108,13 @@ export function PublicClubScreen() {
     // Fuente de verdad real, nunca el param de navegación — ver comentario
     // arriba del componente.
     const membership = membershipRows.find((m) => m.club.id === entry.id);
-    if (membership) {
-      setRelation({ kind: "member", role: membership.role });
-    } else if (pendingRows.includes(entry.id)) {
-      setRelation({ kind: "pending" });
-    } else {
-      setRelation({ kind: "none" });
-    }
+    const pendingFound = pendingRows.includes(entry.id);
+    const nextRelation: Relation = membership
+      ? { kind: "member", role: membership.role }
+      : pendingFound
+        ? { kind: "pending" }
+        : { kind: "none" };
+    setRelation(nextRelation);
   }, [entry.id, userId]);
 
   useEffect(() => {
