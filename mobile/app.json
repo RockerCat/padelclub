@@ -15,6 +15,7 @@
       }
     },
     "android": {
+      "package": "club.mipadel.app",
       "adaptiveIcon": {
         "backgroundColor": "#001A24",
         "foregroundImage": "./assets/android-icon-foreground.png",
