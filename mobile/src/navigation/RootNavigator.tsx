@@ -10,6 +10,7 @@ import { ChangeClubScreen } from "../screens/ChangeClubScreen";
 import { PublicClubScreen } from "../screens/PublicClubScreen";
 import { NotificationsScreen } from "../screens/NotificationsScreen";
 import { ReservationDetailScreen } from "../screens/ReservationDetailScreen";
+import { OwnerAdminWebScreen } from "../screens/OwnerAdminWebScreen";
 import type { ClubDirectoryEntry } from "../lib/clubSwitcher";
 import { AppTabs } from "./AppTabs";
 import { AppHeader } from "../components/AppHeader";
@@ -123,6 +124,24 @@ function MainStack() {
   );
 }
 
+// Stack para OWNER/ADMIN con club activo — V1 mobile no tiene dashboards ni
+// pantallas operativas para estos roles (ver CLAUDE.md, objetivo de este
+// cambio): en vez de "App" (AppShell con AppTabs) se monta directamente
+// OwnerAdminWebScreen, sin tab bar ni AppHeader ("navbar administrativa").
+// Reutiliza el mismo key "App" de RootStackParamList (evita agregar un tipo
+// nuevo solo para esto) y registra "ChangeClub" como screen propia —
+// ChangeClubScreen es genérica por rol (no filtra a PLAYER, ver ese
+// archivo), así que un OWNER con más de un club puede seguir cambiando de
+// club activo sin ninguna lógica nueva.
+function OwnerAdminStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="App" component={OwnerAdminWebScreen} />
+      <Stack.Screen name="ChangeClub" component={ChangeClubScreen} options={{ presentation: "modal" }} />
+    </Stack.Navigator>
+  );
+}
+
 // Stack para un usuario autenticado SIN ninguna membresía activa —
 // ChangeClub es la ÚNICA ruta, así que queda como pantalla raíz (sin
 // presentation: "modal", sin tab bar, porque "App"/AppTabs ni siquiera
@@ -149,7 +168,7 @@ function NoClubStack() {
 // vuelve inaccesible) es simétrica por el mismo mecanismo, aunque hoy no
 // hay ningún flujo que la dispare.
 function AuthenticatedNavigator() {
-  const { club, loading: clubLoading } = useClub();
+  const { club, role, loading: clubLoading } = useClub();
 
   if (clubLoading) {
     return (
@@ -159,7 +178,14 @@ function AuthenticatedNavigator() {
     );
   }
 
-  return club ? <MainStack /> : <NoClubStack />;
+  if (!club) return <NoClubStack />;
+  // Depende del rol en el CLUB ACTIVO, nunca de si el usuario tiene alguna
+  // membresía OWNER/ADMIN en otro club — `role` ya es exactamente el rol de
+  // `club` (ver ClubContext.tsx → resolveActiveMembership), así que un
+  // OWNER de otro club que hoy tiene activo un club donde es PLAYER cae en
+  // MainStack normal, no aquí.
+  if (role === "OWNER" || role === "ADMIN") return <OwnerAdminStack />;
+  return <MainStack />;
 }
 
 // Único punto de decisión "a dónde entra el usuario" — equivalente nativo

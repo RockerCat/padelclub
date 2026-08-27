@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { TournamentCard } from "../../admin/tournaments/TournamentCard";
+import { CompactCarouselCard } from "../../home/CompactCarouselCard";
 import { effectivePlayerTournamentStatus } from "../../../../../../shared/tournaments/actions";
 import type { PlayerTournamentCard } from "@/lib/playerDashboard";
 
@@ -32,6 +33,18 @@ function TournamentFooterExtra({ card }: { card: PlayerTournamentCard }) {
 // Cada tarjeta reutiliza exactamente la clasificación oficial ya calculada
 // en playerDashboard.ts (computeTournamentClassification) — nunca una
 // posición recalculada aquí.
+//
+// Mobile (sm:hidden): carrusel horizontal compacto — mismo
+// CompactCarouselCard (../../home/CompactCarouselCard) y mismo patrón
+// (overflow-x-auto snap-x snap-mandatory, -mx-4 px-4 para sangrar hasta el
+// borde real del contenedor p-4 del Dashboard, shrink-0 w-[44%] snap-start
+// por card) que ya usan Noticias recientes/Torneos activos/Torneos
+// finalizados en /[club]/home/page.tsx — nunca un patrón nuevo. Solo
+// imagen + título (igual que esos otros carruseles) — categoría/estado/
+// compañero/posición/puntos siguen disponibles en el detalle real, al que
+// el Link ya navega sin cambios.
+// Desktop (sm:+): el mismo grid completo de siempre con TournamentCard,
+// sin ningún cambio de comportamiento.
 export function MyTournamentsSection({ clubSlug, cards }: { clubSlug: string; cards: PlayerTournamentCard[] }) {
   if (cards.length === 0) return null;
 
@@ -43,7 +56,20 @@ export function MyTournamentsSection({ clubSlug, cards }: { clubSlug: string; ca
           Ver todos los torneos
         </Link>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+
+      <div className="sm:hidden flex overflow-x-auto snap-x snap-mandatory gap-3 -mx-4 px-4">
+        {cards.map((card) => (
+          <div key={card.tournament.id} className="shrink-0 w-[44%] snap-start">
+            <CompactCarouselCard
+              href={`/${clubSlug}/tournaments/${card.tournament.slug}`}
+              imageUrl={card.tournament.cover_image_url}
+              title={card.tournament.name}
+            />
+          </div>
+        ))}
+      </div>
+
+      <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {cards.map((card) => (
           <TournamentCard
             key={card.tournament.id}

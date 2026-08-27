@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, type NavigationProp, type ParamListBase } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { LayoutDashboard, Users, CalendarDays, Swords, Trophy, Building2, createLucideIcon } from "lucide-react-native";
 import { tennisBall, tennisRacket } from "@lucide/lab";
@@ -200,6 +200,23 @@ function PlayerTabs() {
         name="TournamentsTab"
         component={TournamentsStack}
         options={{ title: "Torneos", tabBarIcon: ({ color, size }) => <TennisRacketIcon width={size} height={size} color={color} /> }}
+        // TournamentsStack (dentro de este tab) puede tener "TournamentDetail"
+        // empujado encima de "TournamentsList" — un torneo abierto desde una
+        // card del Dashboard/ClubHome/una push (navigate("TournamentsTab",
+        // {screen:"TournamentDetail", params}), ver esos callers, sin
+        // cambios) deja esa pila así. Bottom-tabs por defecto PRESERVA esa
+        // pila al cambiar de tab y volver — así que un tap normal en el
+        // ícono "Torneos" podía reaparecer directo en el detalle de ese
+        // torneo en vez de la raíz de la sección. tabPress SOLO dispara con
+        // el toque real del ícono de tab (nunca con un navigate()
+        // programático) — navegar explícitamente a "TournamentsList" aquí
+        // hace pop de cualquier "TournamentDetail" apilado, sin afectar a
+        // ningún otro caller de este stack.
+        listeners={({ navigation }: { navigation: NavigationProp<ParamListBase> }) => ({
+          tabPress: () => {
+            navigation.navigate("TournamentsTab", { screen: "TournamentsList" });
+          },
+        })}
       />
     </PlayerTab.Navigator>
   );

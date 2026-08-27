@@ -30,18 +30,40 @@ type MembershipRow = {
   clubs: ActiveMembership["club"] & { archived_at: string | null };
 };
 
-export async function resolveActiveMembership(
-  supabase: SupabaseClient<Database>,
-  userId: string
-): Promise<ActiveMembership | null> {
-  const { data: memberships } = await supabase
+// Una consulta que FALLA (red, o el JWT recién emitido por signIn() todavía
+// no propagado a la primera request PostgREST del arranque en frío) nunca
+// debe leerse como "el usuario no tiene membresías" — antes, `{ data }`
+// descartaba silenciosamente el `error`, así que un fallo transitorio de
+// esta única consulta producía el mismo `[]` que un resultado realmente
+// vacío, y un PLAYER con una membership activa real quedaba varado en
+// NoClubStack (bug real, ver CLAUDE.md/reporte de bug). Un reintento
+// inmediato cubre el caso transitorio sin exigir que el usuario recargue
+// manualmente; si el segundo intento también falla, el error se propaga de
+// verdad — nunca se vuelve a interpretar como "cero membresías".
+async function fetchActiveMembershipRows(supabase: SupabaseClient<Database>, userId: string): Promise<MembershipRow[]> {
+  const { data, error } = await supabase
     .from("club_members")
     .select("id, role, clubs!inner(id, name, slug, logo_url, archived_at)")
     .eq("profile_id", userId)
     .eq("is_active", true)
     .order("joined_at", { ascending: true });
 
-  const rows = ((memberships ?? []) as unknown as MembershipRow[]).filter((m) => !m.clubs.archived_at);
+  if (error) throw error;
+  return (data ?? []) as unknown as MembershipRow[];
+}
+
+export async function resolveActiveMembership(
+  supabase: SupabaseClient<Database>,
+  userId: string
+): Promise<ActiveMembership | null> {
+  let membershipRows: MembershipRow[];
+  try {
+    membershipRows = await fetchActiveMembershipRows(supabase, userId);
+  } catch {
+    membershipRows = await fetchActiveMembershipRows(supabase, userId);
+  }
+
+  const rows = membershipRows.filter((m) => !m.clubs.archived_at);
 
   if (rows.length === 0) return null;
 

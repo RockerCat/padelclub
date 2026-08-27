@@ -1,47 +1,31 @@
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { FlatList, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from "react-native";
 import { useNavigation, type NavigationProp, type ParamListBase } from "@react-navigation/native";
-import { TournamentCard } from "./TournamentCard";
+import { CompactCarouselCard } from "./CompactCarouselCard";
 import type { PlayerTournamentCard } from "../lib/playerDashboard";
-import { effectivePlayerTournamentStatus } from "../lib/tournaments";
 import { theme } from "../lib/theme";
 
-// Línea extra bajo la fecha (compañero/posición/puntos) — traducción 1:1
-// de TournamentFooterExtra en MyTournamentsSection.tsx (app web), vía el
-// mismo slot `footerExtra` que TournamentCard.tsx (mobile) ahora expone.
-function TournamentFooterExtra({ card }: { card: PlayerTournamentCard }) {
-  const { partnerName, position, points, tournament } = card;
-  const showResult = tournament.status === "completed" && position !== null;
+// Mismas constantes de carrusel que los carruseles de Torneos activos/
+// finalizados en ClubHomeScreen.tsx — nunca un cálculo/valor distinto para
+// el mismo patrón visual.
+const CAROUSEL_GAP = 12;
+const CAROUSEL_SIDE_INSET = 16;
 
-  if (!partnerName && !showResult) return null;
-
-  return (
-    <View style={styles.footerExtraRow}>
-      {partnerName ? (
-        <Text style={styles.footerExtraMuted} numberOfLines={1}>
-          Con {partnerName}
-        </Text>
-      ) : (
-        <View />
-      )}
-      {showResult && (
-        <Text style={styles.footerExtraStrong}>
-          #{position} · {points} pts
-        </Text>
-      )}
-    </View>
-  );
-}
-
-// Traducción 1:1 de MyTournamentsSection.tsx (app web) — reutiliza
-// EXACTAMENTE la misma tarjeta compacta que ya usa el listado de Torneos
-// (TournamentCard, ver ../components/TournamentCard.tsx), nunca una
-// variante grande exclusiva del Dashboard. Cada tarjeta ya trae la
-// clasificación oficial calculada en playerDashboard.ts
-// (computeTournamentClassification) — nunca una posición recalculada
-// aquí. Sin torneos propios, la sección no se muestra (nunca una grilla
-// vacía), igual que la web.
+// Antes esta sección usaba TournamentCard (la card grande vertical del
+// listado de Torneos). Ahora reutiliza el mismo carrusel horizontal
+// compacto que ya usan "Torneos activos"/"Torneos finalizados" en
+// ClubHomeScreen.tsx: CompactCarouselCard (imagen + título) dentro de un
+// FlatList horizontal con snap — mismas constantes, mismo cálculo de ancho
+// (~44% de pantalla), nunca un diseño nuevo. Categoría/estado/compañero/
+// posición/puntos siguen disponibles en TournamentDetail, al que el tap
+// sigue navegando sin cambios — igual que el mismo recorte ya aceptado
+// para Torneos en ClubHomeScreen. Cada tarjeta ya trae la clasificación
+// oficial calculada en playerDashboard.ts (computeTournamentClassification)
+// — nunca una posición recalculada aquí. Sin torneos propios, la sección
+// no se muestra (nunca un carrusel vacío), igual que antes.
 export function MyTournamentsSection({ cards }: { cards: PlayerTournamentCard[] }) {
   const navigation = useNavigation<NavigationProp<ParamListBase>>();
+  const { width: windowWidth } = useWindowDimensions();
+  const carouselCardWidth = Math.round(windowWidth * 0.44);
 
   if (cards.length === 0) return null;
 
@@ -53,19 +37,25 @@ export function MyTournamentsSection({ cards }: { cards: PlayerTournamentCard[] 
           <Text style={styles.link}>Ver todos los torneos</Text>
         </TouchableOpacity>
       </View>
-      <View style={{ gap: 12 }}>
-        {cards.map((card) => (
-          <TournamentCard
-            key={card.tournament.id}
-            tournament={card.tournament}
+      <FlatList
+        horizontal
+        style={styles.carousel}
+        data={cards}
+        keyExtractor={(card) => card.tournament.id}
+        showsHorizontalScrollIndicator={false}
+        snapToInterval={carouselCardWidth + CAROUSEL_GAP}
+        snapToAlignment="start"
+        decelerationRate="fast"
+        contentContainerStyle={{ paddingHorizontal: CAROUSEL_SIDE_INSET, gap: CAROUSEL_GAP }}
+        renderItem={({ item: card }) => (
+          <CompactCarouselCard
+            imageUrl={card.tournament.cover_image_url}
+            title={card.tournament.name}
+            width={carouselCardWidth}
             onPress={() => navigation.navigate("TournamentsTab", { screen: "TournamentDetail", params: { tournamentId: card.tournament.id } })}
-            footerExtra={<TournamentFooterExtra card={card} />}
-            // Esta sección es exclusiva de PLAYER (Dashboard deportivo) —
-            // siempre el estado EFECTIVO, mismo criterio que WEB.
-            displayStatus={effectivePlayerTournamentStatus(card.tournament)}
           />
-        ))}
-      </View>
+        )}
+      />
     </View>
   );
 }
@@ -74,7 +64,10 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
   title: { color: theme.colors.muted, fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
   link: { color: theme.colors.muted, fontSize: 12, fontWeight: "600" },
-  footerExtraRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 6 },
-  footerExtraMuted: { color: theme.colors.muted, fontSize: 12, flexShrink: 1 },
-  footerExtraStrong: { color: theme.colors.primary, fontSize: 12, fontWeight: "700" },
+  // Cancela el padding horizontal (16) del ScrollView contenedor
+  // (PlayerDashboardScreen.tsx → `content`) — mismo truco exacto que
+  // `carousel`/CAROUSEL_SIDE_INSET en ClubHomeScreen.tsx, para que el
+  // carrusel llegue hasta el borde real de pantalla y se asome la
+  // siguiente card.
+  carousel: { marginHorizontal: -16 },
 });

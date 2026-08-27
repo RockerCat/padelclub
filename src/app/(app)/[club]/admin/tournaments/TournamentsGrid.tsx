@@ -140,7 +140,7 @@ export function TournamentsGrid({
           {tournamentsInTab.length === 0 ? (
             <p className="text-sm text-brand-muted py-10 text-center">No hay torneos en este estado.</p>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
               {tournamentsInTab.map((t) => (
                 <TournamentCard
                   key={t.id}
