@@ -25,10 +25,11 @@ type TeamMemberRow = {
   role: "OWNER" | "ADMIN";
   is_active: boolean;
   joined_at: string;
+  // phone deliberadamente ausente — nunca se usó en esta vista (Equipo no
+  // muestra contacto) y ya no tiene GRANT general (ver 20261114000002).
   profiles: {
     full_name: string | null;
     avatar_url: string | null;
-    phone: string | null;
   } | null;
 };
 
@@ -107,7 +108,7 @@ export default async function ClubHubPage({ params, searchParams }: ClubHubPageP
     const [teamResult, inviteResult] = await Promise.all([
       supabase
         .from("club_members")
-        .select("id, club_id, profile_id, role, is_active, joined_at, profiles(full_name, avatar_url, phone)")
+        .select("id, club_id, profile_id, role, is_active, joined_at, profiles(full_name, avatar_url)")
         .eq("club_id", club.id)
         .in("role", ["OWNER", "ADMIN"])
         .order("joined_at", { ascending: true }),

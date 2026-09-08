@@ -77,9 +77,13 @@ export async function resolveActiveMembership(
 
   if (rows.length === 1) return toResult(rows[0]);
 
-  const { data: profile } = await supabase.from("profiles").select("last_club_id").eq("id", userId).single();
+  // last_club_id ya no tiene GRANT general (ver 20261114000002 en el repo
+  // web) — get_my_profile() es self-only por construcción; `userId` aquí
+  // siempre es el propio usuario autenticado.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- get_my_profile added in 20261114000002, not yet in generated types until types are regenerated against a DB with this migration applied.
+  const { data: myProfileRows } = await (supabase.rpc as any)("get_my_profile");
 
-  const lastClubId = profile?.last_club_id;
+  const lastClubId = myProfileRows?.[0]?.last_club_id;
   if (lastClubId) {
     const match = rows.find((m) => m.clubs.id === lastClubId);
     if (match) return toResult(match);

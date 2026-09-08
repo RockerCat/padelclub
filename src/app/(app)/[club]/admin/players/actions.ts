@@ -375,6 +375,30 @@ export async function getClubMemberEmail(clubId: string, clubMemberId: string): 
   return { email: data ?? null };
 }
 
+// ─── getClubMemberPhone ─────────────────────────────────────────────────────
+// Ficha de contacto del modal (botón "Contactar por WhatsApp") — desde la
+// migración de privacidad (20261114000002) profiles.phone ya no tiene GRANT
+// general (ni siquiera vía el embed de club_members), así que se resuelve
+// vía get_club_member_phone (SECURITY DEFINER, mismo patrón exacto que
+// getClubMemberEmail). Una sola fila, bajo demanda al abrir el modal.
+export async function getClubMemberPhone(clubId: string, clubMemberId: string): Promise<{ phone: string | null }> {
+  const { supabase, error: authError } = await requireAdminRole(clubId);
+  if (authError || !supabase) return { phone: null };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- get_club_member_phone added in 20261114000002, not yet in generated types until `npm run types:generate` runs against a DB with this migration applied.
+  const { data, error } = await (supabase.rpc as any)("get_club_member_phone", {
+    p_club_id: clubId,
+    p_club_member_id: clubMemberId,
+  });
+
+  if (error) {
+    console.error("[getClubMemberPhone] RPC failed:", { clubId, clubMemberId, code: error.code, message: error.message });
+    return { phone: null };
+  }
+
+  return { phone: data ?? null };
+}
+
 // ─── getClubMemberForModal ──────────────────────────────────────────────────
 // Lets any caller that only has a club_member_id (Ranking's rows, which come
 // from get_club_category_ranking_view and don't carry joined_at/phone) open
@@ -390,9 +414,11 @@ export async function getClubMemberForModal(
   const { supabase, error: authError } = await requireAdminRole(clubId);
   if (authError || !supabase) return { member: null, error: authError! };
 
+  // phone no viene incluido (ver 20261114000002) — MemberModal lo resuelve
+  // aparte vía getClubMemberPhone, igual que el email.
   const { data, error } = await supabase
     .from("club_members")
-    .select("id, club_id, profile_id, role, is_active, joined_at, category, profiles(full_name, avatar_url, phone)")
+    .select("id, club_id, profile_id, role, is_active, joined_at, category, profiles(full_name, avatar_url)")
     .eq("id", clubMemberId)
     .eq("club_id", clubId)
     .single();

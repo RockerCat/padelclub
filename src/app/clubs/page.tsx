@@ -59,18 +59,19 @@ export default async function ClubsPage({
         .eq("profile_id", user.id)
         .eq("is_active", true)
         .order("joined_at", { ascending: true }),
-      supabase
-        .from("profiles")
-        .select("last_club_id, account_type")
-        .eq("id", user.id)
-        .single(),
+      // last_club_id/account_type have no general SELECT grant since the
+      // profiles privacy fix (20261114000002) — get_my_profile() is
+      // self-only by construction (derives id from auth.uid()).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- get_my_profile added in 20261114000002, not yet in generated types until `npm run types:generate` runs against a DB with this migration applied.
+      (supabase.rpc as any)("get_my_profile"),
       isPlatformAdmin(),
       getUnreadNotificationCount(supabase),
       getRecentNotifications(supabase),
     ]);
     memberships = (membershipsResult.data ?? []) as unknown as MembershipRow[];
-    lastClubId = profileResult.data?.last_club_id ?? null;
-    accountType = profileResult.data?.account_type ?? null;
+    const myProfileRow = profileResult.data?.[0] ?? null;
+    lastClubId = myProfileRow?.last_club_id ?? null;
+    accountType = myProfileRow?.account_type ?? null;
     platformAdmin = isAdmin;
     notificationCount = unreadCount;
     notificationItems = recentNotifications;

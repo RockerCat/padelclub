@@ -20,6 +20,7 @@ import { useClub } from "../contexts/ClubContext";
 import { getMyProfileActivity, type ProfileActivity } from "../lib/profileActivity";
 import { updateOwnPhone, updateProfileAvatar } from "../lib/profileMutations";
 import { pickAndUploadProfileAvatar, deleteOwnedAvatarObject } from "../lib/profileAvatarUpload";
+import { deleteOwnAccount } from "../lib/deleteAccount";
 import { clubRoleLabel } from "../lib/roleLabels";
 import { durationLabel } from "../lib/durations";
 import { PlayerAvatar } from "../components/PlayerAvatar";
@@ -85,7 +86,7 @@ function StatTile({ label, value }: { label: string; value: string }) {
 // shared/players/profileActivity.ts — nunca una segunda fuente de verdad.
 export function ProfileScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { session } = useAuth();
+  const { session, signOut } = useAuth();
   const { identity, reload: reloadClub } = useClub();
   const userId = session?.user.id ?? null;
 
@@ -99,6 +100,9 @@ export function ProfileScreen() {
   const [deletingAvatar, setDeletingAvatar] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
+  const [confirmDeleteAccountOpen, setConfirmDeleteAccountOpen] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+
   const [editingPhone, setEditingPhone] = useState(false);
   const [phoneValue, setPhoneValue] = useState("");
   const [savingPhone, setSavingPhone] = useState(false);
@@ -108,14 +112,18 @@ export function ProfileScreen() {
 
   const load = useCallback(async () => {
     if (!userId) return;
-    const [activityResult, phoneRow] = await Promise.all([
+    // phone ya no tiene GRANT general (ver 20261114000002 en el repo web)
+    // — se resuelve vía get_my_profile(), self-only por construcción.
+    const [activityResult, myProfileResult] = await Promise.all([
       getMyProfileActivity(supabase),
-      supabase.from("profiles").select("phone, avatar_url").eq("id", userId).single(),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- get_my_profile added in 20261114000002, not yet in generated types until types are regenerated against a DB with this migration applied.
+      (supabase.rpc as any)("get_my_profile"),
     ]);
     if (activityResult.error) setError(activityResult.error);
     else setActivity(activityResult.data);
-    setPhone(phoneRow.data?.phone ?? null);
-    setAvatarUrl(phoneRow.data?.avatar_url ?? null);
+    const myProfileRow = myProfileResult.data?.[0] ?? null;
+    setPhone(myProfileRow?.phone ?? null);
+    setAvatarUrl(myProfileRow?.avatar_url ?? null);
   }, [userId]);
 
   useEffect(() => {
@@ -183,6 +191,27 @@ export function ProfileScreen() {
     setPhone(result.phone);
     setEditingPhone(false);
     setToastMessage("Número guardado");
+  }
+
+  // Invoca la misma Edge Function delete-account que WEB — nunca un
+  // Server Action (Mobile no puede alcanzarlo). La sesión actual se
+  // adjunta automáticamente como Authorization por supabase.functions.
+  // invoke(); el id nunca sale de este dispositivo hacia el body de la
+  // petición. `loading` bloquea un doble envío; una falla deja la sesión
+  // intacta (no se cierra sesión) y muestra el mensaje de error real.
+  async function handleConfirmDeleteAccount() {
+    setDeletingAccount(true);
+    try {
+      const result = await deleteOwnAccount(supabase);
+      if (!result.success) {
+        Alert.alert("No se pudo eliminar la cuenta", result.error);
+        return;
+      }
+      setConfirmDeleteAccountOpen(false);
+      await signOut();
+    } finally {
+      setDeletingAccount(false);
+    }
   }
 
   const hasMemberships = !!activity && activity.activeMemberships.length > 0;
@@ -414,6 +443,15 @@ export function ProfileScreen() {
                 </Text>
               </View>
             )}
+
+            {/* Zona de peligro — al final de la pantalla, deliberadamente
+                separada del resto (mismo tono/rojo que "Eliminar foto"
+                arriba, ver styles.dangerLink/confirmDelete). */}
+            <View style={styles.dangerZone}>
+              <TouchableOpacity onPress={() => setConfirmDeleteAccountOpen(true)}>
+                <Text style={styles.dangerLink}>Eliminar cuenta</Text>
+              </TouchableOpacity>
+            </View>
           </>
         )}
       </ScrollView>
@@ -429,6 +467,41 @@ export function ProfileScreen() {
               </TouchableOpacity>
               <TouchableOpacity onPress={handleConfirmDeleteAvatar} disabled={deletingAvatar} style={styles.confirmDelete}>
                 {deletingAvatar ? <ActivityIndicator color={theme.colors.white} size="small" /> : <Text style={styles.confirmDeleteText}>Eliminar foto</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={confirmDeleteAccountOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setConfirmDeleteAccountOpen(false)}
+      >
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmTitle}>Eliminar cuenta</Text>
+            <Text style={styles.confirmBody}>
+              Perderás acceso a tu cuenta de forma permanente y tu información personal (nombre, foto,
+              teléfono) será eliminada o anonimizada. Registros históricos del club, como reservas,
+              ranking y torneos, pueden conservarse de forma anónima para mantener la integridad de esos
+              datos. Esta acción no se puede deshacer.
+            </Text>
+            <View style={styles.confirmActions}>
+              <TouchableOpacity
+                onPress={() => setConfirmDeleteAccountOpen(false)}
+                disabled={deletingAccount}
+                style={styles.confirmCancel}
+              >
+                <Text style={styles.confirmCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleConfirmDeleteAccount} disabled={deletingAccount} style={styles.confirmDelete}>
+                {deletingAccount ? (
+                  <ActivityIndicator color={theme.colors.white} size="small" />
+                ) : (
+                  <Text style={styles.confirmDeleteText}>Eliminar cuenta</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -587,6 +660,7 @@ const styles = StyleSheet.create({
   },
   emptyActivityTitle: { color: theme.colors.white, fontWeight: "700", marginBottom: 4, textAlign: "center" },
   emptyActivityBody: { color: theme.colors.muted, fontSize: 13, textAlign: "center" },
+  dangerZone: { alignItems: "center", paddingTop: 8, paddingBottom: 4 },
   confirmOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", alignItems: "center", justifyContent: "center", padding: 24 },
   confirmCard: {
     width: "100%",

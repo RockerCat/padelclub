@@ -18,10 +18,12 @@ export type MemberRow = {
   is_active: boolean;
   joined_at: string;
   category: PlayerCategory;
+  // phone deliberadamente ausente — ya no tiene GRANT general (ver
+  // 20261114000002); MemberModal lo resuelve aparte vía
+  // getClubMemberPhone.
   profiles: {
     full_name: string | null;
     avatar_url: string | null;
-    phone: string | null;
   } | null;
 };
 

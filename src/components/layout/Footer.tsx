@@ -5,8 +5,10 @@ import Image from "next/image";
 // solo en el marketing. Deliberadamente mínimo (CLAUDE.md-style: "discreto,
 // limpio, poca altura") — misma filosofía visual que el footer de SolarDesk
 // (marca + firma + copyright en una sola franja horizontal) pero sin copiar
-// su contenido: sin enlaces de navegación, sin redes sociales, sin
-// elementos decorativos. Cada layout de nivel superior lo renderiza
+// su contenido: sin redes sociales, sin elementos decorativos. Únicos
+// enlaces de navegación: Política de Privacidad (/privacy) y Eliminar
+// cuenta (/delete-account), ambos requeridos para Apple App Store /
+// Google Play. Cada layout de nivel superior lo renderiza
 // explícitamente (nunca desde el layout raíz) porque el shell de la app
 // autenticada ((app)/[club] y (app)/profile) tiene su propia tab bar mobile
 // fija que necesita reservar espacio exactamente alrededor de este footer
@@ -36,9 +38,17 @@ export default function Footer() {
             </p>
           </div>
 
-          <p className="text-xs text-brand-muted">
-            © {new Date().getFullYear()} Mi Pádel Club. Todos los derechos reservados.
-          </p>
+          <div className="flex items-center gap-4">
+            <Link href="/privacy" className="text-xs text-brand-muted hover:text-white transition-colors">
+              Política de Privacidad
+            </Link>
+            <Link href="/delete-account" className="text-xs text-brand-muted hover:text-white transition-colors">
+              Eliminar cuenta
+            </Link>
+            <p className="text-xs text-brand-muted">
+              © {new Date().getFullYear()} Mi Pádel Club. Todos los derechos reservados.
+            </p>
+          </div>
         </div>
       </div>
     </footer>

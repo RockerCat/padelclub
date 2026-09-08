@@ -9,6 +9,7 @@ import { ProfileSummaryGrid } from "./ProfileSummaryGrid";
 import { MonthlyActivityChart } from "./MonthlyActivityChart";
 import { TypeDistributionChart } from "./TypeDistributionChart";
 import { RecentActivityList } from "./RecentActivityList";
+import { DeleteAccountSection } from "./DeleteAccountSection";
 
 export const metadata: Metadata = {
   title: "Mi Perfil | MiPadelClub",
@@ -50,12 +51,16 @@ export default async function ProfilePage() {
   // activity RPC below, so a failure in one never hides the other. phone
   // no es parte de getSidebarIdentity (esa función también alimenta el
   // sidebar, que no lo necesita) — se resuelve aparte, en paralelo, solo
-  // para esta pantalla.
-  const [identity, { data: activity, error }, { data: phoneRow }] = await Promise.all([
+  // para esta pantalla. profiles.phone no tiene GRANT general desde la
+  // migración de privacidad (20261114000002) — se resuelve vía
+  // get_my_profile(), self-only por construcción.
+  const [identity, { data: activity, error }, { data: myProfileRows }] = await Promise.all([
     getSidebarIdentity(supabase, user.id, user.email ?? null),
     getMyProfileActivity(supabase),
-    supabase.from("profiles").select("phone").eq("id", user.id).single(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- get_my_profile added in 20261114000002, not yet in generated types until `npm run types:generate` runs against a DB with this migration applied.
+    (supabase.rpc as any)("get_my_profile"),
   ]);
+  const phoneRow = myProfileRows?.[0] ?? null;
 
   const hasMemberships = !!activity && activity.activeMemberships.length > 0;
   const hasActivity = !!activity && activity.summary.totalReservations > 0;
@@ -100,6 +105,8 @@ export default async function ProfilePage() {
               )}
             </SectionCard>
           )}
+
+          <DeleteAccountSection />
         </div>
 
         {activity && (

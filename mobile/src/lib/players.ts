@@ -14,7 +14,10 @@ export type MemberRow = {
   role: "OWNER" | "ADMIN" | "PLAYER";
   is_active: boolean;
   joined_at: string;
-  profiles: { full_name: string | null; avatar_url: string | null; phone: string | null } | null;
+  // phone deliberadamente ausente — ya no tiene GRANT general (ver
+  // 20261114000002 en el repo web); mobile v1 no tiene ninguna pantalla
+  // OWNER/ADMIN operativa (ver CLAUDE.md) donde exponerlo sería legítimo.
+  profiles: { full_name: string | null; avatar_url: string | null } | null;
 };
 
 export type SportCategoryRow = { code: string; sort_order: number };
@@ -36,7 +39,7 @@ export async function getClubMembers(
 ): Promise<MemberRow[]> {
   let query = supabase
     .from("club_members")
-    .select("id, club_id, profile_id, role, is_active, joined_at, profiles(full_name, avatar_url, phone)")
+    .select("id, club_id, profile_id, role, is_active, joined_at, profiles(full_name, avatar_url)")
     .eq("club_id", clubId)
     .eq("role", "PLAYER");
   if (statusFilter !== "all") query = query.eq("is_active", statusFilter === "active");
@@ -57,7 +60,7 @@ export async function getMemberById(
 ): Promise<{ member: MemberRow; sportState: MemberSportState | undefined } | null> {
   const { data: member } = await supabase
     .from("club_members")
-    .select("id, club_id, profile_id, role, is_active, joined_at, profiles(full_name, avatar_url, phone)")
+    .select("id, club_id, profile_id, role, is_active, joined_at, profiles(full_name, avatar_url)")
     .eq("id", clubMemberId)
     .single();
   if (!member) return null;

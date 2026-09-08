@@ -47,9 +47,14 @@ export default async function PlayersPage({ params, searchParams }: PlayersPageP
   // (never fetched whole and hidden with CSS) whenever it actually narrows
   // the result; "all" intentionally omits the .eq so both states come back
   // in one query rather than two.
+  // phone no viene incluido aquí desde la migración de privacidad
+  // (20261114000002) — profiles.phone ya no tiene GRANT general, ni
+  // siquiera para OWNER/ADMIN vía este embed. MemberModal lo resuelve
+  // aparte, bajo demanda, vía getClubMemberPhone (mismo patrón que
+  // getClubMemberEmail).
   let membersQuery = supabase
     .from("club_members")
-    .select("id, club_id, profile_id, role, is_active, joined_at, category, profiles(full_name, avatar_url, phone)")
+    .select("id, club_id, profile_id, role, is_active, joined_at, category, profiles(full_name, avatar_url)")
     .eq("club_id", club.id)
     .eq("role", "PLAYER");
   if (statusFilter !== "all") {

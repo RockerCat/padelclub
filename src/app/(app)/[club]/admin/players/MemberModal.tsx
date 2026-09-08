@@ -12,6 +12,7 @@ import {
   getMatchesPlayedCount,
   getClubMemberSportState,
   getClubMemberEmail,
+  getClubMemberPhone,
 } from "./actions";
 import { AdjustPlayerPointsModal } from "./AdjustPlayerPointsModal";
 import { ChangePlayerCategoryModal } from "./ChangePlayerCategoryModal";
@@ -136,20 +137,21 @@ export function MemberModal({ member, clubId, clubSlug, sportCategories, ranking
     };
   }, [clubId, member.id]);
 
-  // Ficha de contacto — el correo no llega con `member` (profiles no tiene
-  // esa columna, ver getClubMemberEmail), así que se resuelve aparte, bajo
-  // demanda, igual que sportState/matchesPlayed arriba. El teléfono sí
-  // viene ya incluido en member.profiles.phone (misma consulta de
-  // page.tsx que ya se usaba) — no requiere ningún fetch.
+  // Ficha de contacto — ni el correo ni el teléfono llegan con `member`
+  // (profiles no tiene columna de email; profiles.phone ya no tiene GRANT
+  // general desde la migración de privacidad, 20261114000002), así que
+  // ambos se resuelven aparte, bajo demanda, igual que sportState/
+  // matchesPlayed arriba.
   //
   // Todo jugador registrado tiene correo (se registra e inicia sesión con
   // uno) — emailLoading solo cubre el breve instante del fetch; una vez
   // resuelto, `email` siendo null sí sería una inconsistencia real de
   // datos (o un fallo del RPC, ya registrado con console.error dentro de
-  // getClubMemberEmail), nunca el estado esperado.
+  // getClubMemberEmail), nunca el estado esperado. El teléfono sí puede
+  // ser legítimamente null (jugador aún sin número registrado).
   const [email, setEmail] = useState<string | null>(null);
   const [emailLoading, setEmailLoading] = useState(true);
-  const phone = member.profiles?.phone ?? null;
+  const [phone, setPhone] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -157,6 +159,17 @@ export function MemberModal({ member, clubId, clubSlug, sportCategories, ranking
       if (cancelled) return;
       setEmail(result.email);
       setEmailLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [clubId, member.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getClubMemberPhone(clubId, member.id).then((result) => {
+      if (cancelled) return;
+      setPhone(result.phone);
     });
     return () => {
       cancelled = true;

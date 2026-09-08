@@ -388,6 +388,14 @@ deno_version = 2
 [functions.send-push]
 verify_jwt = false
 
+# delete-account authenticates a real end-user session (never a shared
+# secret like send-push above) — verify_jwt = true (the default; explicit
+# here so the difference from send-push is never mistaken for an oversight)
+# rejects any request without a valid Authorization Bearer token before the
+# function body ever runs.
+[functions.delete-account]
+verify_jwt = true
+
 [analytics]
 enabled = true
 port = 54327

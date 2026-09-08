@@ -64,13 +64,14 @@ export async function resolveClubEntryPath(
     return getClubEntryPath(rows[0].clubs.slug, rows[0].role);
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("last_club_id")
-    .eq("id", userId)
-    .single();
+  // last_club_id has no general SELECT grant since the profiles privacy
+  // fix (20261114000002) — get_my_profile() is self-only by construction
+  // (derives id from auth.uid()); `userId` here is always the caller's own
+  // id, so this still resolves the same value.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- get_my_profile added in 20261114000002, not yet in generated types until `npm run types:generate` runs against a DB with this migration applied.
+  const { data: myProfileRows } = await (supabase.rpc as any)("get_my_profile");
 
-  const lastClubId = profile?.last_club_id;
+  const lastClubId = myProfileRows?.[0]?.last_club_id;
   if (lastClubId) {
     const match = rows.find((m) => m.clubs.id === lastClubId);
     if (match) {
@@ -195,13 +196,14 @@ export async function resolveActiveMembership(
     return toResult(rows[0]);
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("last_club_id")
-    .eq("id", userId)
-    .single();
+  // last_club_id has no general SELECT grant since the profiles privacy
+  // fix (20261114000002) — get_my_profile() is self-only by construction
+  // (derives id from auth.uid()); `userId` here is always the caller's own
+  // id, so this still resolves the same value.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- get_my_profile added in 20261114000002, not yet in generated types until `npm run types:generate` runs against a DB with this migration applied.
+  const { data: myProfileRows } = await (supabase.rpc as any)("get_my_profile");
 
-  const lastClubId = profile?.last_club_id;
+  const lastClubId = myProfileRows?.[0]?.last_club_id;
   if (lastClubId) {
     const match = rows.find((m) => m.clubs.id === lastClubId);
     if (match) {

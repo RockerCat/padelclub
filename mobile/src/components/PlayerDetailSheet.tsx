@@ -1,5 +1,5 @@
-import { Linking, Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { X, MessageCircle } from "lucide-react-native";
+import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { X } from "lucide-react-native";
 import { PlayerSportAvatar } from "./PlayerSportAvatar";
 import { theme } from "../lib/theme";
 import type { MemberRow, MemberSportState } from "../lib/players";
@@ -15,9 +15,13 @@ function formatDate(iso: string): string {
 // fuera de alcance de esta pasada (ver reporte). Esto es solo la
 // navegación mínima para que tocar una fila no quede muerta: los mismos
 // datos ya visibles en la fila (avatar deportivo, categoría, ranking,
-// puntos, estado, fecha de ingreso) más "Contactar por WhatsApp" — una
-// acción real ya establecida en el resto de la app (Player Contact
-// Principles), no una mutación nueva.
+// puntos, estado, fecha de ingreso).
+//
+// "Contactar por WhatsApp" se retiró (privacidad, 20261114000002):
+// profiles.phone ya no viene incluido en MemberRow, y este componente es
+// alcanzable por cualquier rol (incluida PLAYER, desde Torneos) — mobile
+// v1 no tiene ninguna pantalla OWNER/ADMIN operativa (ver CLAUDE.md) donde
+// mostrar el teléfono de otro jugador aquí sería legítimo.
 export function PlayerDetailSheet({
   member,
   sportState,
@@ -29,13 +33,6 @@ export function PlayerDetailSheet({
 }) {
   if (!member) return null;
   const name = member.profiles?.full_name ?? "Sin nombre";
-  const phone = member.profiles?.phone;
-
-  function handleWhatsApp() {
-    if (!phone) return;
-    const digits = phone.replace(/[^\d]/g, "");
-    Linking.openURL(`https://wa.me/${digits}`);
-  }
 
   return (
     <Modal visible={!!member} transparent animationType="slide" onRequestClose={onClose}>
@@ -77,13 +74,6 @@ export function PlayerDetailSheet({
               <Text style={styles.rowLabel}>Desde</Text>
               <Text style={styles.rowValue}>{formatDate(member.joined_at)}</Text>
             </View>
-
-            {phone && (
-              <TouchableOpacity style={styles.whatsappButton} onPress={handleWhatsApp} activeOpacity={0.85}>
-                <MessageCircle width={16} height={16} color="#34D399" />
-                <Text style={styles.whatsappText}>Contactar por WhatsApp</Text>
-              </TouchableOpacity>
-            )}
           </View>
         </View>
       </View>
@@ -130,16 +120,4 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", justifyContent: "space-between", paddingTop: 12, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.06)" },
   rowLabel: { fontSize: 13, color: theme.colors.muted },
   rowValue: { fontSize: 14, color: theme.colors.white, fontWeight: "500" },
-  whatsappButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: "rgba(16,185,129,0.15)",
-    borderWidth: 1,
-    borderColor: "rgba(16,185,129,0.3)",
-  },
-  whatsappText: { color: "#34D399", fontSize: 14, fontWeight: "600" },
 });

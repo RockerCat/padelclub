@@ -15,10 +15,11 @@ type AdminMember = {
   role: "OWNER" | "ADMIN";
   is_active: boolean;
   joined_at: string;
+  // phone deliberadamente ausente — nunca se usó en esta vista y ya no
+  // tiene GRANT general (ver 20261114000002).
   profiles: {
     full_name: string | null;
     avatar_url: string | null;
-    phone: string | null;
   } | null;
 };
 

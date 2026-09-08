@@ -13,11 +13,13 @@ export async function checkProfileIsPlatformAdmin(
   supabase: SupabaseClient<Database>,
   userId: string
 ): Promise<boolean> {
-  const { data } = await supabase
-    .from("profiles")
-    .select("is_platform_admin")
-    .eq("id", userId)
-    .single();
-
-  return data?.is_platform_admin ?? false;
+  // is_platform_admin has no general SELECT grant since the profiles
+  // privacy fix (20261114000002) — get_my_profile() is self-only by
+  // construction (derives id from auth.uid()), so `userId` here must
+  // always be the current session's own id, same as every existing caller
+  // already passes.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- get_my_profile added in 20261114000002, not yet in generated types until `npm run types:generate` runs against a DB with this migration applied.
+  const { data } = await (supabase.rpc as any)("get_my_profile");
+  const row = data?.[0];
+  return row?.is_platform_admin ?? false;
 }
