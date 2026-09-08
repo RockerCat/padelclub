@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
 import { MARKETING_WA_URL } from "@/lib/constants/marketingWhatsapp";
 
 export const metadata: Metadata = {
@@ -7,17 +8,34 @@ export const metadata: Metadata = {
   description: "Cómo eliminar tu cuenta de Mi Pádel Club y qué sucede con tu información.",
 };
 
-// Página pública, sin autenticación ni datos privados — Server Component
-// estático, sin llamadas a Supabase (mismo patrón exacto que /privacy).
-// Requerida por Google Play (URL pública de borrado de cuenta/datos) y
-// como referencia visible del flujo que ya existe en la app para Apple.
-// El CTA enlaza a /profile — si el visitante no ha iniciado sesión,
-// /profile ya redirige a /auth/login?next=/profile (comportamiento
-// existente, sin cambios), y desde ahí vuelve a /profile donde vive la
-// acción real de borrado. Requerir inicio de sesión aquí es aceptable:
-// es exactamente el mismo requisito que ya existe para usar la cuenta,
-// nunca uno adicional.
-export default function DeleteAccountPage() {
+// Página pública — viewing it never requires authentication, same as
+// /privacy. The one Supabase call here (auth.getUser()) is read-only and
+// only decides where the CTA below points; it never gates the page's own
+// content, so this stays fully reachable to an anonymous visitor.
+//
+// The CTA can't just link to /profile and rely on that route's own
+// redirect-with-next: /profile IS already correct in isolation
+// (profile/layout.tsx and profile/page.tsx both already redirect to
+// "/auth/login?next=/profile"), but the shared parent (app)/layout.tsx
+// wraps every route under (app) — including /profile — with its own
+// earlier `if (!user) redirect("/auth/login")` (no next). Since a parent
+// layout always runs before its nested layout/page, that bare redirect
+// fires first and (app)/layout.tsx's redirect always wins, so /profile's
+// own next=/profile logic never gets a chance to run. Fixing that shared
+// layout would change redirect behavior for every [club]/* route too —
+// out of scope here (feature freeze, delete-account-only fix) — so this
+// page instead decides its own CTA target directly, exactly as the
+// approved fix describes: authenticated → /profile directly;
+// unauthenticated → /auth/login?next=/profile explicitly, which
+// LoginForm.tsx already honors safely via getSafeInternalPath
+// (src/lib/utils/safeRedirect.ts) — untouched here.
+export default async function DeleteAccountPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const deleteAccountHref = user ? "/profile" : "/auth/login?next=/profile";
+
   return (
     <div className="min-h-screen bg-brand-bg">
       <div className="max-w-3xl mx-auto px-5 pt-28 pb-20 sm:pt-32">
@@ -65,7 +83,7 @@ export default function DeleteAccountPage() {
         </div>
 
         <Link
-          href="/profile"
+          href={deleteAccountHref}
           className="inline-flex items-center gap-2 rounded-xl bg-red-500 px-6 py-3 text-sm font-semibold text-white hover:bg-red-500/90 transition-colors"
         >
           Eliminar mi cuenta
