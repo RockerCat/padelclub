@@ -160,7 +160,7 @@ Features such as:
 
 should not be prioritized over operational workflows unless explicitly requested.
 
-The following are explicitly out of MVP scope — do not implement yet, even opportunistically: club ownership transfer, guest players, global "delete my Mi Pádel Club account" (see Club Membership Principles), and any membership/subscription-tier strategy. Per-club category ranking (see Sport / Ranking Module Principles) and single-elimination tournaments per club (see Tournament Module Principles) were explicitly requested and are now implemented; global cross-club ranking, ladders, and any match/tournament result or point award outside the tournament module remain out of scope.
+The following are explicitly out of MVP scope — do not implement yet, even opportunistically: club ownership transfer, guest players, global "delete my Mi Pádel Club account" (see Club Membership Principles), and any membership/subscription-tier strategy. Per-club category ranking (see Sport / Ranking Module Principles), single-elimination tournaments per club (see Tournament Module Principles), and the sales-assisted commercial funnel — landing → demo request → SUPERADMIN-managed lead → conversion into Entrega de Club (see Funnel Comercial Principles) — were explicitly requested and are now implemented; global cross-club ranking, ladders, any match/tournament result or point award outside the tournament module, and any commercial/trial/subscription mechanism (Wompi, entitlement) remain out of scope.
 
 When there is uncertainty:
 
@@ -538,6 +538,24 @@ A related pitfall, same root cause, proven repeatedly and at scale — not just 
 
 ---
 
+## Funnel Comercial Principles
+
+Mi Pádel Club's go-to-market for new clubs is sales-assisted, not self-service: the landing's primary CTA for club owners is "Solicitar una demo" → `/demo`, a plain public page (never a modal) so it can be shared directly from Instagram/Facebook/WhatsApp/email/campaigns, and it never requires an email/password. Self-service signup (`RegisterMenu` → `/auth/signup`, `/clubs/create`) still exists and still works exactly as before — it simply stopped being the Hero's primary CTA.
+
+`commercial_leads` is the one table behind this, RLS-closed to every client role — same pattern as `club_claim_links`/`club_claim_events` (no policies at all; every access goes through a `SECURITY DEFINER` function). `create_commercial_lead` (the only function granted to `anon`, also `authenticated`) is the sole public write surface, and its signature has no `status`/`source`/`notes`/`converted_club_id` parameter at all — not merely validated away, structurally impossible for a caller to self-declare `won`/`lost`/converted or inject internal notes; `status='new'`, `source='website'` and `converted_club_id=NULL` are hardcoded in its `INSERT`. A honeypot field silently no-ops instead of erroring, so a bot gets no signal it was caught.
+
+States are deliberately minimal, not a CRM: `new`, `contacted`, `demo_scheduled`, `demo_completed`, `won`, `lost`. Never add `qualified`/`proposal`/`negotiation`/`trial`/pipeline stages beyond these six. `demo_at` and `lost_reason` are never cleared automatically when the lead moves to a different status — they're only overwritten when the caller supplies a new, non-empty value — preserving history the same way the rest of the product prefers preservation over silent loss (see Club Membership Principles, Reservation Status Principles).
+
+SUPERADMIN manages leads exclusively from `/platform/leads` (list, search, filter) and `/platform/leads/[leadId]` (status, `demo_at`, `lost_reason`, notes, WhatsApp contact) — gated the same way every other platform RPC already is (an explicit `EXISTS` against `profiles.is_platform_admin`, never a client-trusted role). Lead data (name, club, city, WhatsApp, notes) never appears in any OWNER/ADMIN/PLAYER surface, any public page, or Mobile.
+
+Conversion reuses Entrega de Club verbatim, never a second onboarding: `platform_convert_lead_to_pending_club` locks the lead row (`FOR UPDATE`), then calls `platform_create_pending_club` — the exact same function `/platform/clubs/create` already uses for a lead-less pending club — and only after that succeeds does it set `converted_club_id`/`converted_at`/`status='won'`, all inside the same transaction (one function invocation), so a club can never end up created with its lead left unconverted, or vice versa. Conversion is only allowed once a lead has reached `demo_completed` — enforced twice: the UI never shows "Crear club" any earlier (and the `?lead=` entry to `/platform/clubs/create` shows an explanatory message instead of the form for an ineligible lead), and the RPC itself rejects any earlier status with `not_demo_completed`, so this can never be bypassed by calling the RPC directly or by URL. `won` is never a precondition for conversion — a successful conversion is precisely what produces `won`, never the other way around. An already-converted lead is rejected idempotently (`already_converted`) rather than silently re-processed or allowed to spawn a second club.
+
+WhatsApp contact from a lead's detail page targets one specific, already-normalized number — see WhatsApp Share Principles for why that case uses `wa.me/<phone>?text=`, never `api.whatsapp.com/send?phone=...&text=...` (confirmed to duplicate the prefilled message) and never bare `wa.me/?text=` (the corruption-prone, phone-less variant).
+
+**Explicitly not built yet, by design — do not add opportunistically:** Wompi, payment collection, subscriptions, any commercial/trial entitlement, or any restriction on reservations/tournaments tied to a plan. The future 30-day free trial does **not** start when the lead arrives, when the demo happens, when the lead is converted, when the pending club is created, or when a claim link is generated — it starts only once the definitive OWNER successfully completes `claim_club()`, since that is the moment the product is actually handed over. No trial/subscription column or table exists yet anywhere in the schema; this is a deliberate decision for a future phase, not a partial implementation to build around.
+
+---
+
 ## Player Dashboard Principles
 
 The PLAYER's canonical entry point to a club is `/[club]/dashboard` — the exact same route OWNER/ADMIN already use, never a second URL. The page branches by role: OWNER/ADMIN keep their existing operational dashboard completely untouched; PLAYER gets a personal sport dashboard (header, upcoming activity, points/ranking evolution, sport summary, own tournaments, dynamically-computed achievements, personal activity timeline) that is never a reduced copy of the operational one. `/[club]/home` still exists (club branding/news/reservations activity) but is no longer the PLAYER's entry point.
@@ -611,6 +629,8 @@ A missing price for the requested duration is a normal, explicit outcome, not an
 ## WhatsApp Share Principles
 
 Every "compartir por WhatsApp" link must use `https://api.whatsapp.com/send?text=<encodeURIComponent(message)>`, never `https://wa.me/?text=...` — `wa.me`'s redirect can decode UTF-8 inconsistently on some clients, corrupting emojis/tildes/ñ into `�` even when the message itself is a normal Unicode string encoded exactly once. This was a real, confirmed bug, found and fixed across reservations, noticias, and torneos. Never use `btoa`, `escape`/`unescape`, or a second `encodeURIComponent` pass — build the message as a plain Unicode string first, and encode it exactly once, at the point it's assigned to `text`.
+
+The rule above is specifically for a link with no fixed destination (a generic "share" action). A link that targets one specific, already-known phone number (e.g. contacting a commercial lead from `/platform/leads/[leadId]` — see Funnel Comercial Principles) is a different case with its own confirmed bug: `https://api.whatsapp.com/send?phone=<phone>&text=<encoded>` — combining `phone` and `text` on that endpoint — was found in production to duplicate the prefilled message in the recipient's compose box. For a fixed phone number, use `https://wa.me/<phone>?text=<encodeURIComponent(message)>` instead (the same format `MARKETING_WA_URL` already uses successfully) — this is not the buggy phone-less `wa.me/?text=` case above; putting the phone number in the URL path is a different, unaffected code path.
 
 ---
 
