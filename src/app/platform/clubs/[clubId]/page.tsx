@@ -36,6 +36,44 @@ function getInitials(name: string) {
   return name.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
 }
 
+function formatMoney(amount: number | null, currency: string | null) {
+  if (amount == null) return "—";
+  return new Intl.NumberFormat("es-CO", {
+    style: "currency",
+    currency: currency ?? "COP",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+// Comercial v2 / Fase 1 — estados posibles hoy en club_subscriptions.status;
+// solo 'trialing' se produce realmente en esta fase, el resto queda
+// preparado para cuando exista cobro real (ver CLAUDE.md → Funnel Comercial
+// Principles / futuro checkpoint post-claim_club()).
+const COMMERCIAL_STATUS: Record<string, { label: string; variant: "warning" | "success" | "danger" | "default" }> = {
+  trialing: { label: "En prueba", variant: "warning" },
+  active: { label: "Activa", variant: "success" },
+  past_due: { label: "Pago vencido", variant: "warning" },
+  suspended: { label: "Suspendida", variant: "danger" },
+  cancelled: { label: "Cancelada", variant: "default" },
+};
+
+type CommercialStatus = {
+  has_subscription: boolean;
+  status: string | null;
+  trial_started_at: string | null;
+  trial_ends_at: string | null;
+  trial_days_remaining: number | null;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  next_billing_at: string | null;
+  payer_name: string | null;
+  payer_email: string | null;
+  base_monthly_price: number | null;
+  promo_enabled: boolean | null;
+  promo_monthly_price: number | null;
+  currency: string | null;
+};
+
 function StatBox({
   label,
   value,
@@ -95,6 +133,16 @@ export default async function PlatformClubDetailPage({ params }: PageProps) {
   // por Supabase no conserva ese union literal.
   const claimStatus: ClubClaimStatus = (claimStatusRows?.[0] ?? null) as unknown as ClubClaimStatus;
 
+  // get_platform_club_commercial_status added in 20261115000005, not yet in
+  // generated types until `npm run types:generate` runs against a DB with
+  // this migration applied — same documented gap as get_my_profile in
+  // src/lib/platformAdminQuery.ts.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: commercialRows } = await (supabase.rpc as any)("get_platform_club_commercial_status", {
+    p_club_id: clubId,
+  });
+  const commercial: CommercialStatus | null = commercialRows?.[0] ?? null;
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 md:py-12">
       <Link
@@ -153,6 +201,72 @@ export default async function PlatformClubDetailPage({ params }: PageProps) {
 
           {/* ── Entrega del club ─────────────────────────────────────── */}
           <ClubClaimSection clubId={club.id} clubSlug={club.slug} initialStatus={claimStatus} />
+
+          {/* ── Estado comercial (Comercial v2 / Fase 1) ────────────────
+              Puramente informativo — sin acciones todavía (sin Wompi, sin
+              edición manual de estado). Un pending club sin claim todavía
+              no tiene fila en club_subscriptions; claim_club() la crea. */}
+          <div className="bg-brand-surface border border-white/10 rounded-2xl p-6 mb-6">
+            <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-3">
+              Estado comercial
+            </h2>
+            {!commercial?.has_subscription ? (
+              <p className="text-sm text-brand-muted">Sin suscripción comercial inicializada</p>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+                <div>
+                  <p className="text-xs text-brand-muted uppercase tracking-wider mb-1">Estado</p>
+                  <Badge variant={COMMERCIAL_STATUS[commercial.status ?? ""]?.variant ?? "default"} size="sm">
+                    {COMMERCIAL_STATUS[commercial.status ?? ""]?.label ?? commercial.status}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-xs text-brand-muted uppercase tracking-wider mb-1">Trial</p>
+                  <p className="text-white">
+                    {commercial.trial_started_at ? formatDate(commercial.trial_started_at) : "—"}
+                    {" → "}
+                    {commercial.trial_ends_at ? formatDate(commercial.trial_ends_at) : "—"}
+                  </p>
+                  {commercial.trial_days_remaining !== null && (
+                    <p className="text-xs text-brand-muted/70 mt-0.5">
+                      {commercial.trial_days_remaining} días restantes
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-xs text-brand-muted uppercase tracking-wider mb-1">Período actual</p>
+                  <p className="text-white">
+                    {commercial.current_period_start ? formatDate(commercial.current_period_start) : "—"}
+                    {" → "}
+                    {commercial.current_period_end ? formatDate(commercial.current_period_end) : "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-brand-muted uppercase tracking-wider mb-1">Próximo cobro</p>
+                  <p className="text-white">
+                    {commercial.next_billing_at ? formatDate(commercial.next_billing_at) : "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-brand-muted uppercase tracking-wider mb-1">Payer</p>
+                  <p className="text-white">{commercial.payer_name ?? "—"}</p>
+                  <p className="text-xs text-brand-muted">{commercial.payer_email ?? "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-brand-muted uppercase tracking-wider mb-1">Precio configurado</p>
+                  <p className="text-white">
+                    {formatMoney(commercial.base_monthly_price, commercial.currency)}
+                    {commercial.promo_enabled && (
+                      <span className="text-brand-muted">
+                        {" "}
+                        · promo {formatMoney(commercial.promo_monthly_price, commercial.currency)}
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* ── Estadísticas ─────────────────────────────────────────── */}
           <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-3">
