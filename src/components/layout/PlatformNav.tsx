@@ -8,6 +8,7 @@ import {
   X,
   LayoutDashboard,
   Building2,
+  Handshake,
   Users,
   BarChart3,
   CreditCard,
@@ -31,13 +32,14 @@ interface NavItem {
   soon?: boolean;
 }
 
-// Dashboard/Clubes/Usuarios are functional today. Estadísticas/Suscripciones/
-// Configuración are placeholders reserving their spot in the nav for a later
-// story — kept disabled rather than omitted, same pattern AppNav already
-// uses for not-yet-built items.
+// Dashboard/Clubes/Prospectos/Usuarios are functional today. Estadísticas/
+// Suscripciones/Configuración are placeholders reserving their spot in the
+// nav for a later story — kept disabled rather than omitted, same pattern
+// AppNav already uses for not-yet-built items.
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/platform", icon: LayoutDashboard },
   { label: "Clubes", href: "/platform/clubs", icon: Building2 },
+  { label: "Prospectos", href: "/platform/leads", icon: Handshake },
   { label: "Usuarios", href: "/platform/users", icon: Users },
   { label: "Estadísticas", icon: BarChart3, disabled: true, soon: true },
   { label: "Suscripciones", icon: CreditCard, disabled: true, soon: true },

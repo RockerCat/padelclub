@@ -29,15 +29,36 @@ const SLUG_STATUS_LABEL: Record<SlugStatus, { text: string; className: string } 
   unavailable: { text: "Identificador no disponible", className: "text-xs text-red-400" },
 };
 
+interface PendingClubFieldsProps {
+  // Funnel Comercial — presente cuando se llega desde /platform/leads/
+  // [leadId] ("Crear club"). Viaja como campo oculto del form: actions.ts
+  // lo usa para llamar platform_convert_lead_to_pending_club (que además
+  // liga el lead al club creado) en vez de platform_create_pending_club.
+  leadId?: string;
+  initialName?: string;
+}
+
 // Same slug UX as onboarding's CreateClubFields (generate-from-name +
 // debounced availability check via the same shared checkSlugAvailability),
 // reused rather than reimplemented — only the target action and the
 // absence of an owner-facing framing differ.
-export function PendingClubFields() {
+export function PendingClubFields({ leadId, initialName = "" }: PendingClubFieldsProps) {
   const [state, action, pending] = useActionState(createPendingClub, initialState);
-  const [slugValue, setSlugValue] = useState("");
+  const [nameValue, setNameValue] = useState(initialName);
+  const [slugValue, setSlugValue] = useState(() => (initialName ? generateSlug(initialName) : ""));
   const [slugEdited, setSlugEdited] = useState(false);
-  const [slugStatus, setSlugStatus] = useState<SlugStatus>("idle");
+  // Prellenado desde un lead: el estado sincrónico (idle/short/checking) se
+  // deriva en el inicializador, no en un efecto — solo el resultado
+  // asíncrono de checkSlugAvailability se resuelve más abajo, y ese sí
+  // ocurre dentro de un callback (nunca sincrónicamente en el cuerpo del
+  // efecto).
+  const [slugStatus, setSlugStatus] = useState<SlugStatus>(() => {
+    if (!initialName) return "idle";
+    const suggested = generateSlug(initialName);
+    if (suggested.length === 0) return "idle";
+    if (suggested.length < 3) return "short";
+    return "checking";
+  });
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function scheduleAvailabilityCheck(slug: string) {
@@ -60,6 +81,7 @@ export function PendingClubFields() {
   }
 
   function handleNameChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setNameValue(e.target.value);
     if (!slugEdited) {
       const suggested = generateSlug(e.target.value);
       setSlugValue(suggested);
@@ -75,6 +97,21 @@ export function PendingClubFields() {
   }
 
   useEffect(() => {
+    // Prellenado desde un lead — dispara la verificación de disponibilidad
+    // del slug ya sugerido, exactamente como si el usuario hubiera tecleado
+    // el nombre él mismo. El estado sincrónico ya se resolvió en el
+    // inicializador de slugStatus; aquí solo se agenda el chequeo async.
+    if (!initialName) return;
+    const suggested = generateSlug(initialName);
+    if (suggested.length < 3) return;
+    debounceRef.current = setTimeout(async () => {
+      const { available } = await checkSlugAvailability(suggested);
+      setSlugStatus(available ? "available" : "unavailable");
+    }, 500);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
@@ -85,12 +122,15 @@ export function PendingClubFields() {
 
   return (
     <form action={action} className="flex flex-col gap-4">
+      {leadId && <input type="hidden" name="leadId" value={leadId} />}
+
       <Input
         name="name"
         label="Nombre del club"
         type="text"
         placeholder="Club Padel Madrid"
         required
+        value={nameValue}
         onChange={handleNameChange}
         error={state.fieldErrors?.name}
       />

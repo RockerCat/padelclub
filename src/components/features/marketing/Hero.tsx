@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { ChevronDown, Calendar, BarChart2, Trophy, Users } from "lucide-react";
-import { RegisterMenu } from "./RegisterMenu";
+import { Calendar, BarChart2, Trophy, Users } from "lucide-react";
 import { MARKETING_WA_URL as WA_URL } from "@/lib/constants/marketingWhatsapp";
 
 // ─── Mockup cards ────────────────────────────────────────────────────────────
@@ -184,35 +183,37 @@ export default function Hero() {
             <div className="inline-flex items-center gap-2 rounded-full border border-brand-primary/30 bg-brand-primary/10 px-4 py-1.5 mb-8">
               <span className="h-1.5 w-1.5 rounded-full bg-brand-primary" />
               <span className="text-xs font-medium text-brand-primary tracking-widest uppercase">
-                Para clubs y jugadores de pádel
+                Para dueños de clubes de pádel
               </span>
             </div>
 
             {/* Headline */}
             <h1 className="text-5xl sm:text-6xl lg:text-[3.5rem] font-bold leading-[1.06] tracking-tight text-white">
-              La plataforma que conecta
+              Administra tu club de pádel
               <br />
-              <span className="text-brand-primary">tu club y tus jugadores.</span>
+              <span className="text-brand-primary">en un solo lugar.</span>
             </h1>
 
             {/* Subheadline */}
             <p className="mt-6 text-lg text-brand-muted leading-relaxed max-w-[460px]">
-              Desde un solo lugar: administra tu club, gestiona reservas, organiza
-              torneos, publica noticias y mantén tu ranking al día — mientras cada
-              jugador vive una experiencia deportiva completa.
+              Reservas, jugadores, ranking y torneos — sin depender de WhatsApp,
+              Excel o procesos separados. Cada jugador de tu club vive además una
+              experiencia deportiva completa.
             </p>
 
-            {/* Primary CTA */}
+            {/* Primary CTA — sales-assisted onboarding: a demo request, never
+                a self-service form, is the commercial entry point for club
+                owners. Plain Link so /demo is directly shareable from
+                Instagram/Facebook/WhatsApp/email/campaigns. Self-service
+                (RegisterMenu → /auth/signup, /clubs/create) still exists and
+                still works — it's simply no longer the Hero's primary CTA. */}
             <div className="mt-10 flex flex-col sm:flex-row sm:items-center gap-4 max-w-[460px]">
-              <RegisterMenu
-                triggerClassName="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-brand-primary px-7 py-3.5 text-base font-semibold text-brand-bg hover:bg-brand-primary/90 transition-colors shadow-lg shadow-brand-primary/20"
-                triggerContent={
-                  <>
-                    Registrarme
-                    <ChevronDown className="h-4 w-4" />
-                  </>
-                }
-              />
+              <Link
+                href="/demo"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-brand-primary px-7 py-3.5 text-base font-semibold text-brand-bg hover:bg-brand-primary/90 transition-colors shadow-lg shadow-brand-primary/20"
+              >
+                Solicitar una demo
+              </Link>
               <Link
                 href="/clubs"
                 className="inline-flex items-center justify-center rounded-xl border border-white/20 px-5 py-3.5 text-base font-semibold text-white text-center hover:bg-white/5 transition-colors"

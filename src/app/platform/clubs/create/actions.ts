@@ -35,6 +35,9 @@ export async function createPendingClub(
   const slug = (formData.get("slug") as string | null)?.trim() ?? "";
   const rawVisibility = formData.get("visibility") as string | null;
   const visibility = rawVisibility === "public" ? "public" : "private";
+  // Funnel Comercial — presente solo cuando este form se llegó desde
+  // /platform/leads/[leadId] ("Crear club"). Ver PendingClubFields.
+  const leadId = (formData.get("leadId") as string | null)?.trim() || null;
 
   if (!name) {
     return { fieldErrors: { name: "Ingresa el nombre del club." } };
@@ -47,11 +50,25 @@ export async function createPendingClub(
   }
 
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("platform_create_pending_club", {
-    p_name: name,
-    p_slug: slug,
-    p_visibility: visibility,
-  });
+
+  // Con lead: platform_convert_lead_to_pending_club envuelve
+  // platform_create_pending_club (nunca reimplementa su lógica) y, en la
+  // misma transacción, marca el lead como convertido — ver
+  // 20261115000001_commercial_leads_funnel.sql. Sin lead: el flujo
+  // original, sin cambios.
+  const { data, error } = leadId
+    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any -- platform_convert_lead_to_pending_club added in 20261115000001, not yet in generated types.
+      await (supabase.rpc as any)("platform_convert_lead_to_pending_club", {
+        p_lead_id: leadId,
+        p_name: name,
+        p_slug: slug,
+        p_visibility: visibility,
+      })
+    : await supabase.rpc("platform_create_pending_club", {
+        p_name: name,
+        p_slug: slug,
+        p_visibility: visibility,
+      });
 
   if (error) {
     if (error.message.includes("clubs_slug_key") || error.message.includes("duplicate key")) {
@@ -59,6 +76,9 @@ export async function createPendingClub(
     }
     if (error.message.includes("clubs_slug_format")) {
       return { fieldErrors: { slug: "Solo letras minúsculas, números y guiones." } };
+    }
+    if (error.message.includes("already_converted")) {
+      return { error: "Este prospecto ya fue convertido a un club." };
     }
     return { error: "No se pudo crear el club. Intenta de nuevo." };
   }
