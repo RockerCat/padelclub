@@ -202,7 +202,7 @@ export function LeadDetail({ lead }: { lead: PlatformLeadDetailRow }) {
               </Button>
             </Link>
           </div>
-        ) : (
+        ) : lead.status === "demo_completed" ? (
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <p className="text-xs text-brand-muted leading-relaxed max-w-sm">
               Crea el club pendiente para este prospecto — reutiliza el mismo flujo de Entrega de Club, prellenado con el nombre del club.
@@ -214,6 +214,14 @@ export function LeadDetail({ lead }: { lead: PlatformLeadDetailRow }) {
               </Button>
             </Link>
           </div>
+        ) : (
+          // Antes de "Demo realizada" no hay nada que convertir todavía —
+          // sin botón, para no invitar a saltarse el flujo comercial
+          // (Nuevo/Contactado/Demo agendada/Perdido/Ganado-sin-club-aún
+          // pasan por aquí). El RPC exige exactamente lo mismo server-side.
+          <p className="text-xs text-brand-muted leading-relaxed max-w-sm">
+            Disponible cuando el prospecto llegue a &quot;Demo realizada&quot;.
+          </p>
         )}
       </div>
 

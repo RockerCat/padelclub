@@ -17,6 +17,7 @@ export default async function PlatformCreatePendingClubPage({ searchParams }: Pa
   const { lead: leadId } = await searchParams;
 
   let initialName = "";
+  let leadNotReady = false;
   if (leadId) {
     const supabase = await createClient();
     // get_platform_lead_detail added in 20261115000001, not yet in
@@ -28,6 +29,13 @@ export default async function PlatformCreatePendingClubPage({ searchParams }: Pa
 
     if (lead?.converted_club_id) {
       redirect(`/platform/clubs/${lead.converted_club_id}`);
+    }
+
+    // Mismo requisito que platform_convert_lead_to_pending_club exige
+    // server-side (20261115000002) — cubre a quien llegue por URL directa
+    // saltándose el botón ya oculto en /platform/leads/[leadId].
+    if (lead && lead.status !== "demo_completed") {
+      leadNotReady = true;
     }
 
     initialName = lead?.club_name ?? "";
@@ -44,12 +52,21 @@ export default async function PlatformCreatePendingClubPage({ searchParams }: Pa
       </Link>
 
       <h1 className="text-xl font-bold text-white mb-1">Crear club</h1>
-      <p className="text-sm text-brand-muted mb-8">
-        Prepara un club antes de entregárselo a su propietario definitivo (ver &quot;Entrega del club&quot; en el
-        detalle del club una vez creado).
-      </p>
 
-      <PendingClubFields leadId={leadId} initialName={initialName} />
+      {leadNotReady ? (
+        <p className="text-sm text-brand-muted">
+          Este prospecto todavía no llega a &quot;Demo realizada&quot; — la conversión a club solo está disponible desde ese punto del flujo comercial.
+        </p>
+      ) : (
+        <>
+          <p className="text-sm text-brand-muted mb-8">
+            Prepara un club antes de entregárselo a su propietario definitivo (ver &quot;Entrega del club&quot; en el
+            detalle del club una vez creado).
+          </p>
+
+          <PendingClubFields leadId={leadId} initialName={initialName} />
+        </>
+      )}
     </div>
   );
 }

@@ -80,6 +80,9 @@ export async function createPendingClub(
     if (error.message.includes("already_converted")) {
       return { error: "Este prospecto ya fue convertido a un club." };
     }
+    if (error.message.includes("not_demo_completed")) {
+      return { error: "Este prospecto todavía no llega a \"Demo realizada\" — la conversión no está disponible todavía." };
+    }
     return { error: "No se pudo crear el club. Intenta de nuevo." };
   }
 
