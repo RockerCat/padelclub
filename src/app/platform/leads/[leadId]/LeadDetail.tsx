@@ -64,14 +64,24 @@ function toDatetimeLocalValue(iso: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-// Construye el enlace de contacto inicial hacia el prospecto. Nunca
-// wa.me/?text= — api.whatsapp.com/send es el único formato usado en todo
-// el proyecto para un mensaje prellenado (ver WhatsApp Share Principles);
-// el mensaje se arma como string Unicode plano y se codifica una sola vez.
+// Construye el enlace de contacto inicial hacia el prospecto. A diferencia
+// de un enlace de "compartir" genérico (que no tiene destinatario fijo y
+// por eso usa api.whatsapp.com/send?text= — ver WhatsApp Share Principles),
+// este SÍ apunta a un número específico ya normalizado, así que usa el
+// formato oficial de click-to-chat de WhatsApp: wa.me/<phone>?text=. Nunca
+// api.whatsapp.com/send con phone+text combinados: confirmado en QA real
+// que esa combinación concreta duplica el texto prellenado en el
+// compositor de WhatsApp (la app procesa el parámetro `text` dos veces a
+// lo largo de su cadena de redirección interna cuando ambos parámetros
+// viajan juntos ahí). wa.me/<phone>?text= es el mismo formato que ya usa
+// MARKETING_WA_URL en producción sin ese problema — el bug de codificación
+// UTF-8 documentado en WhatsApp Share Principles es específico de
+// wa.me/?text= SIN número de teléfono en la ruta, un caso distinto. El
+// mensaje se arma como string Unicode plano y se codifica una sola vez.
 function buildLeadWhatsappUrl(phone: string, contactName: string): string {
   const greeting = contactName ? `Hola ${contactName}` : "Hola";
   const message = `${greeting}, soy Alex de Mi Pádel Club. Recibimos tu solicitud para conocer nuestra plataforma. Quisiera coordinar contigo una breve demo para mostrarte cómo puede funcionar en tu club.`;
-  return `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(message)}`;
+  return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 }
 
 export function LeadDetail({ lead }: { lead: PlatformLeadDetailRow }) {
