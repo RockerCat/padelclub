@@ -16,6 +16,7 @@ import {
   ChevronDown,
   Trophy,
   Swords,
+  CreditCard,
   createLucideIcon,
 } from "lucide-react";
 import { tennisBall, tennisRacket } from "@lucide/lab";
@@ -26,7 +27,7 @@ import { clubHubPath } from "@/lib/clubHubPaths";
 import { ClubHeader } from "./ClubHeader";
 import { NotificationBell } from "./NotificationBell";
 import { JoinRequestsListener } from "./JoinRequestsListener";
-import { SidebarIdentity } from "./SidebarIdentity";
+import { SidebarIdentity, type SidebarSubscriptionPill } from "./SidebarIdentity";
 // LeaveClubButton (./LeaveClubButton) intencionalmente sin importar — ver
 // comentario junto a "Salir del club" más abajo: oculto de la navegación,
 // componente y funcionalidad intactos.
@@ -36,6 +37,13 @@ import type { NotificationRow } from "@/lib/notifications";
 import type { SidebarIdentityData } from "@/lib/userIdentity";
 import { clubRoleLabel, PLATFORM_ADMIN_LABEL } from "@/lib/roleLabels";
 import { CLUB_PRIMARY_COLOR } from "@/lib/constants/clubTheme";
+
+// Pill de suscripción (Comercial v2) — dato ya resuelto por el caller
+// ([club]/layout.tsx, único responsable de decidir visibilidad OWNER real
+// vs SUPERADMIN elevado/ADMIN/PLAYER). AppNav/NavContent solo lo reciben y
+// lo pasan a SidebarIdentity (dueño real del tipo), nunca deciden a quién
+// mostrarlo.
+type SubscriptionPill = SidebarSubscriptionPill;
 
 // "tennis-ball" no es un ícono core de lucide-react — vive en @lucide/lab
 // (paquete oficial de Lucide, sin dependencias propias, mismo trazo/
@@ -125,6 +133,10 @@ interface AppNavProps {
    *  read as "Propietario". Overrides the roleLabel shown next to their
    *  name/avatar everywhere it's computed. */
   isSuperadminAccess?: boolean;
+  /** Pill de estado comercial, solo para el OWNER real (nunca ADMIN/PLAYER/
+   *  SUPERADMIN elevado — ese gate ya lo aplicó el caller). `null`/`undefined`
+   *  = no renderizar ningún pill. */
+  subscriptionPill?: SubscriptionPill | null;
 }
 
 // pendingJoinRequests only ever has a meaningful value for OWNER/ADMIN (the
@@ -134,7 +146,18 @@ interface AppNavProps {
 // shows the real club name instead of a fixed copy string) — always the
 // same `club.name` already loaded into AppNavProps.club for every role, so
 // this never triggers a new query.
-function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequests: number, clubName: string): NavItem[] {
+function getNavItems(
+  slug: string,
+  role: AppNavProps["role"],
+  pendingJoinRequests: number,
+  clubName: string,
+  // Comercial v2 — "Mi suscripción" es OWNER-only y, a diferencia del resto
+  // de este menú (que un SUPERADMIN con acceso elevado ve igual que el
+  // OWNER real, sin excepción), nunca se muestra a ese acceso elevado — no
+  // exponer navegación hacia información financiera (ver CLAUDE.md → Role
+  // Philosophy y el pill ya existente en SidebarIdentity, mismo criterio).
+  isSuperadminAccess: boolean
+): NavItem[] {
   const base: NavItem[] = [];
 
   if (role === "OWNER") {
@@ -180,6 +203,14 @@ function getNavItems(slug: string, role: AppNavProps["role"], pendingJoinRequest
         icon: Building2,
       }
     );
+    if (!isSuperadminAccess) {
+      base.push({
+        id: "subscription",
+        label: "Mi suscripción",
+        href: `/${slug}/subscription`,
+        icon: CreditCard,
+      });
+    }
   } else if (role === "ADMIN") {
     base.push(
       {
@@ -415,6 +446,7 @@ interface NavContentProps {
   // OWNER-only — abre el modal "Crear otro club" en vez de navegar a
   // /clubs/create (ver CreateClubModal).
   onOpenCreateClub: (trigger: HTMLElement) => void;
+  subscriptionPill?: SubscriptionPill | null;
 }
 
 function NavContent({
@@ -431,6 +463,7 @@ function NavContent({
   onLogout,
   onOpenChangeClub,
   onOpenCreateClub,
+  subscriptionPill,
 }: NavContentProps) {
   return (
     <nav className="flex flex-col h-full">
@@ -518,6 +551,7 @@ function NavContent({
           email={identity.email}
           avatarUrl={identity.avatarUrl}
           roleLabel={roleLabel}
+          subscriptionPill={subscriptionPill}
         />
         <Link
           href="/profile"
@@ -611,6 +645,7 @@ export function AppNav({
   notificationItems = [],
   identity,
   isSuperadminAccess = false,
+  subscriptionPill = null,
 }: AppNavProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -749,7 +784,7 @@ export function AppNav({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [userMenuOpen]);
 
-  const navItems = getNavItems(club.slug, role, pendingJoinRequests, club.name);
+  const navItems = getNavItems(club.slug, role, pendingJoinRequests, club.name, isSuperadminAccess);
   const tabBarItems = getTabBarItems(navItems, role);
   const displayName = getDisplayName(identity);
 
@@ -780,6 +815,7 @@ export function AppNav({
           onLogout={handleLogout}
           onOpenChangeClub={handleOpenChangeClub}
           onOpenCreateClub={handleOpenCreateClub}
+          subscriptionPill={subscriptionPill}
         />
       </aside>
 

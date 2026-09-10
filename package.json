@@ -11,6 +11,7 @@
     "seed:future-demo": "npx --yes tsx scripts/seed-future-demo-reservations.ts",
     "test:pricing": "npx --yes tsx scripts/test-reservation-pricing.ts",
     "test:commercial-entitlement": "npx --yes tsx scripts/test-commercial-entitlement.ts",
+    "test:commercial-payments": "npx --yes tsx scripts/test-commercial-payments.ts",
     "backfill:local-phones": "npx --yes tsx scripts/backfillLocalPlayerPhones.ts",
     "types:generate": "bash scripts/generate-types.sh"
   },

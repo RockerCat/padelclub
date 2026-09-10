@@ -1,5 +1,7 @@
 import { notFound, redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { deriveCommercialPhase, getCommercialPillContent } from "../../../../shared/commercial/lifecycle";
 import { AppNav } from "@/components/layout/AppNav";
 import { ClubThemeProvider } from "@/components/layout/ClubThemeProvider";
 import { UpdateLastClub } from "@/components/layout/UpdateLastClub";
@@ -140,10 +142,36 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
 
   const membershipCount = count ?? 1;
   // Si la RPC todavía no existe (migración no aplicada) o falla por
-  // cualquier razón, esto queda null y el banner simplemente no se
-  // muestra — nunca rompe el shell del club por un fallo de lectura
-  // puramente informativa.
-  const commercialStatus: string | null = commercialAccessResult?.data?.[0]?.commercial_status ?? null;
+  // cualquier razón, esto queda en sus valores neutrales y el banner
+  // simplemente no se muestra — nunca rompe el shell del club por un fallo
+  // de lectura puramente informativa.
+  const commercialAccessRow = commercialAccessResult?.data?.[0] ?? null;
+  // Comercial v2 / Fase 3 — deriva SOLO qué banner mostrar (trial real vs.
+  // gracia post-trial vs. past_due vs. suspended); nunca decide acceso —
+  // eso lo sigue haciendo exclusivamente el entitlement server-side ya
+  // existente (can_create_booking/can_create_tournament, sin cambios).
+  const { phase: commercialPhase, graceDeadline: commercialGraceDeadline } = deriveCommercialPhase({
+    status: commercialAccessRow?.commercial_status ?? null,
+    trialEndsAt: commercialAccessRow?.trial_ends_at ?? null,
+    currentPeriodEnd: commercialAccessRow?.current_period_end ?? null,
+  });
+
+  // Pill de suscripción (sidebar) — solo para el OWNER real, nunca para
+  // SUPERADMIN con acceso elevado (a diferencia de los banners arriba, que
+  // deliberadamente no excluyen isSuperadminAccess — ver CLAUDE.md → Role
+  // Philosophy: no exponer información financiera a ese acceso). Reutiliza
+  // commercialAccessRow ya fetcheado para los banners, nunca un segundo RPC.
+  const subscriptionPill =
+    role === "OWNER" && !isSuperadminAccess
+      ? (() => {
+          const content = getCommercialPillContent({
+            status: commercialAccessRow?.commercial_status ?? null,
+            trialEndsAt: commercialAccessRow?.trial_ends_at ?? null,
+            currentPeriodEnd: commercialAccessRow?.current_period_end ?? null,
+          });
+          return content ? { label: content.label, tone: content.tone, href: `/${club.slug}/subscription` } : null;
+        })()
+      : null;
 
   return (
     <ClubThemeProvider>
@@ -162,6 +190,7 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
           notificationItems={notificationItems}
           identity={identity}
           isSuperadminAccess={isSuperadminAccess}
+          subscriptionPill={subscriptionPill}
         />
         <div className="flex-1 min-w-0 flex flex-col">
           {isSuperadminAccess && (
@@ -183,25 +212,76 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
             </div>
           )}
 
-          {/* Comercial v2 / Fase 2 — banner global, OWNER-only, visible en
-              todo el shell del club (Dashboard, Reservaciones, Jugadores,
-              Ranking, Torneos, Club, etc. — cualquier página que renderice
-              dentro de este layout). Mismo criterio que el banner de club
-              archivado justo arriba: la autoridad real es el bloqueo
-              server-side (_require_commercial_access dentro de las RPCs de
-              creación); esto es únicamente visibilidad, nunca bloquea
-              navegación ni oculta contenido. Sin CTA de pago todavía —
-              Wompi no existe (Comercial v2 / Fase 3 lo agregará aquí mismo
-              cuando exista un destino real). ADMIN/PLAYER nunca lo ven —
-              conservan sus propios mensajes ya existentes al intentar una
-              acción bloqueada. */}
-          {role === "OWNER" && commercialStatus === "suspended" && (
+          {/* Comercial v2 — banner global, OWNER-only, visible en todo el
+              shell del club (Dashboard, Reservaciones, Jugadores, Ranking,
+              Torneos, Club, etc. — cualquier página que renderice dentro de
+              este layout, una sola vez por pantalla). Mismo criterio que el
+              banner de club archivado justo arriba: la autoridad real es el
+              bloqueo server-side (_require_commercial_access dentro de las
+              RPCs de creación); esto es únicamente visibilidad, nunca
+              bloquea navegación ni oculta contenido. `commercialPhase` solo
+              decide COPY (ver shared/commercial/lifecycle.ts) — nunca
+              acceso. ADMIN/PLAYER nunca ven ninguno de estos tres — sin
+              comportamiento nuevo para SUPERADMIN. El CTA de cada banner
+              lleva a /[club]/subscription (Comercial v2 / Fase 3), nunca un
+              enlace muerto: la ruta existe y ya tiene un checkout real. */}
+          {role === "OWNER" && commercialPhase === "trial_grace" && (
             <div className="px-4 md:px-6 pt-4">
-              <div className="rounded-xl border border-amber-400/20 bg-amber-400/5 px-4 py-3 text-sm text-amber-300">
-                <p className="font-medium text-amber-200">Tu suscripción no está activa</p>
-                <p className="mt-0.5">
-                  Algunas funciones están temporalmente limitadas. Reactiva tu suscripción para volver a crear reservas y torneos.
-                </p>
+              <div className="rounded-xl border border-amber-400/20 bg-amber-400/5 px-4 py-3 text-sm text-amber-300 flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <p className="font-medium text-amber-200">Tu período gratuito terminó</p>
+                  <p className="mt-0.5">
+                    Puedes seguir usando todas las funciones hasta el{" "}
+                    {commercialGraceDeadline?.toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" })}.
+                    Realiza el pago para mantener activo tu club.
+                  </p>
+                </div>
+                <Link
+                  href={`/${club.slug}/subscription`}
+                  className="shrink-0 inline-flex items-center h-9 px-4 rounded-lg bg-brand-primary text-brand-bg text-sm font-semibold hover:brightness-110 transition-all"
+                >
+                  Pagar suscripción
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {role === "OWNER" && commercialPhase === "past_due" && (
+            <div className="px-4 md:px-6 pt-4">
+              <div className="rounded-xl border border-amber-400/20 bg-amber-400/5 px-4 py-3 text-sm text-amber-300 flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <p className="font-medium text-amber-200">Tienes un pago pendiente</p>
+                  <p className="mt-0.5">
+                    Todavía tienes acceso completo hasta el{" "}
+                    {commercialGraceDeadline?.toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" })}
+                    . Realiza el pago para evitar que tu club se suspenda.
+                  </p>
+                </div>
+                <Link
+                  href={`/${club.slug}/subscription`}
+                  className="shrink-0 inline-flex items-center h-9 px-4 rounded-lg bg-brand-primary text-brand-bg text-sm font-semibold hover:brightness-110 transition-all"
+                >
+                  Pagar suscripción
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {role === "OWNER" && commercialPhase === "suspended" && (
+            <div className="px-4 md:px-6 pt-4">
+              <div className="rounded-xl border border-amber-400/20 bg-amber-400/5 px-4 py-3 text-sm text-amber-300 flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <p className="font-medium text-amber-200">Tu suscripción no está activa</p>
+                  <p className="mt-0.5">
+                    Algunas funciones están temporalmente limitadas. Reactiva tu suscripción para volver a crear reservas y torneos.
+                  </p>
+                </div>
+                <Link
+                  href={`/${club.slug}/subscription`}
+                  className="shrink-0 inline-flex items-center h-9 px-4 rounded-lg bg-brand-primary text-brand-bg text-sm font-semibold hover:brightness-110 transition-all"
+                >
+                  Reactivar suscripción
+                </Link>
               </div>
             </div>
           )}

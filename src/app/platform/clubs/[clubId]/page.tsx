@@ -45,16 +45,25 @@ function formatMoney(amount: number | null, currency: string | null) {
   }).format(amount);
 }
 
-// Comercial v2 / Fase 1 — estados posibles hoy en club_subscriptions.status;
-// solo 'trialing' se produce realmente en esta fase, el resto queda
-// preparado para cuando exista cobro real (ver CLAUDE.md → Funnel Comercial
-// Principles / futuro checkpoint post-claim_club()).
+// club_subscriptions.status — desde Comercial v2 / Fase 3, trialing/
+// active/past_due/suspended son todos alcanzables en producción (vía
+// claim_club(), pagos reales y run_commercial_lifecycle_transitions);
+// 'cancelled' sigue sin ningún camino de código que lo produzca (ver
+// CLAUDE.md → Commercial Subscription Principles).
 const COMMERCIAL_STATUS: Record<string, { label: string; variant: "warning" | "success" | "danger" | "default" }> = {
   trialing: { label: "En prueba", variant: "warning" },
   active: { label: "Activa", variant: "success" },
   past_due: { label: "Pago vencido", variant: "warning" },
   suspended: { label: "Suspendida", variant: "danger" },
   cancelled: { label: "Cancelada", variant: "default" },
+};
+
+const LAST_PAYMENT_STATUS_LABEL: Record<string, string> = {
+  approved: "Aprobado",
+  pending: "Pendiente",
+  declined: "Rechazado",
+  voided: "Anulado",
+  error: "Error",
 };
 
 type CommercialStatus = {
@@ -68,6 +77,8 @@ type CommercialStatus = {
   next_billing_at: string | null;
   payer_name: string | null;
   payer_email: string | null;
+  last_payment_at: string | null;
+  last_payment_status: string | null;
   base_monthly_price: number | null;
   promo_enabled: boolean | null;
   promo_monthly_price: number | null;
@@ -251,6 +262,18 @@ export default async function PlatformClubDetailPage({ params }: PageProps) {
                   <p className="text-xs text-brand-muted uppercase tracking-wider mb-1">Payer</p>
                   <p className="text-white">{commercial.payer_name ?? "—"}</p>
                   <p className="text-xs text-brand-muted">{commercial.payer_email ?? "—"}</p>
+                </div>
+                {/* Comercial v2 / Fase 3 — último resultado de pago, sin
+                    abrir la tabla `payments` completa a SUPERADMIN; ni
+                    refunds, ni edición, ni aprobación manual acá. */}
+                <div>
+                  <p className="text-xs text-brand-muted uppercase tracking-wider mb-1">Último pago</p>
+                  <p className="text-white">
+                    {LAST_PAYMENT_STATUS_LABEL[commercial.last_payment_status ?? ""] ?? "—"}
+                  </p>
+                  {commercial.last_payment_at && (
+                    <p className="text-xs text-brand-muted">{formatDate(commercial.last_payment_at)}</p>
+                  )}
                 </div>
                 <div>
                   <p className="text-xs text-brand-muted uppercase tracking-wider mb-1">Precio configurado</p>
