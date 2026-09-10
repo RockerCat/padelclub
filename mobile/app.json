@@ -8,7 +8,7 @@
     "userInterfaceStyle": "dark",
     "backgroundColor": "#001A24",
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "club.mipadel.app",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
