@@ -5,18 +5,60 @@
 // ejemplos antiguos:
 //   - Widget & Checkout Web (firma de integridad del checkout)
 //   - Events (checksum de webhooks)
-//   - Ambientes y llaves (prefijos pub_test_/pub_prod_, etc. — sin llave
-//     privada: Web Checkout solo necesita public-key + integrity secret del
-//     lado servidor, nunca prv_*)
+//   - Ambientes y llaves (prefijos pub_test_/pub_prod_, etc.)
 //
-// Ambas funciones son puras (sin I/O, sin `fetch`, sin Supabase) para poder
-// probarlas con fixtures reales sin secretos reales — ver
-// scripts/test-commercial-payments.ts. El secreto real (WOMPI_INTEGRITY_
-// SECRET/WOMPI_EVENTS_SECRET) vive solo en variables de entorno de servidor
-// (src/lib/wompi/config.ts) y nunca llega a estas funciones más que como un
-// parámetro en tiempo de ejecución — nunca hardcodeado, nunca en el cliente.
+// Fase 5.1 — el Checkout en sí SIGUE sin usar llave privada (Web Checkout
+// redirect-based solo necesita public-key + integrity secret, confirmado de
+// nuevo contra la documentación vigente). La llave privada (prv_test_/
+// prv_prod_) se agrega en esta fase EXCLUSIVAMENTE para la consulta
+// server-side GET /v1/transactions/{id} (ver src/lib/wompi/
+// verifyTransaction.ts) — nunca para el checkout, nunca al cliente.
+//
+// Todas las funciones de este archivo son puras (sin I/O, sin `fetch`, sin
+// Supabase) para poder probarlas con fixtures reales sin secretos reales —
+// ver scripts/test-commercial-payments.ts. Los secretos reales viven solo en
+// variables de entorno de servidor (src/lib/wompi/config.ts) y nunca llegan
+// a estas funciones más que como un parámetro en tiempo de ejecución —
+// nunca hardcodeados, nunca en el cliente.
 
 import { createHash, timingSafeEqual } from "crypto";
+
+// ─── Coherencia de prefijos ambiente/llaves (Fase 5) ───────────────────────
+// Protección operacional fail-fast: evita que un error humano de
+// configuración (WOMPI_ENVIRONMENT=production con llaves de Sandbox
+// copiadas, o viceversa) active un ambiente incoherente sin que nadie lo
+// note hasta que un pago real falle o, peor, un evento de un ambiente se
+// procese contra el secreto del otro. Prefijos verificados contra la
+// documentación oficial vigente de Wompi (Ambientes y Llaves) en esta misma
+// fase — nunca asumidos de memoria:
+//   Sandbox:    pub_test_ / test_integrity_ / test_events_
+//   Production: pub_prod_ / prod_integrity_ / prod_events_
+// Función pura — nunca imprime ni devuelve el valor de las llaves, solo un
+// booleano. El caller (src/lib/wompi/config.ts) es responsable de no
+// loguear el valor real si esto devuelve false.
+//
+// Fase 5.1 — se agrega privateKey (prv_test_/prv_prod_) a la coherencia: la
+// llave privada nueva (usada solo para verificar transacciones server-side,
+// nunca en el checkout) debe corresponder al mismo ambiente que las otras
+// tres, exactamente con el mismo criterio "todo o nada" — un mismatch en
+// CUALQUIERA de las 4 llaves invalida la configuración completa.
+const WOMPI_KEY_PREFIXES = {
+  sandbox: { publicKey: "pub_test_", privateKey: "prv_test_", integritySecret: "test_integrity_", eventsSecret: "test_events_" },
+  production: { publicKey: "pub_prod_", privateKey: "prv_prod_", integritySecret: "prod_integrity_", eventsSecret: "prod_events_" },
+} as const;
+
+export function wompiKeysMatchEnvironment(
+  environment: "sandbox" | "production",
+  keys: { publicKey: string; privateKey: string; integritySecret: string; eventsSecret: string }
+): boolean {
+  const expected = WOMPI_KEY_PREFIXES[environment];
+  return (
+    keys.publicKey.startsWith(expected.publicKey) &&
+    keys.privateKey.startsWith(expected.privateKey) &&
+    keys.integritySecret.startsWith(expected.integritySecret) &&
+    keys.eventsSecret.startsWith(expected.eventsSecret)
+  );
+}
 
 function sha256Hex(input: string): string {
   return createHash("sha256").update(input).digest("hex");
@@ -261,4 +303,83 @@ export function getIncompleteWompiTransactionFields(transaction: {
   if (transaction.amount_in_cents == null) missing.push("amount_in_cents");
   if (!transaction.currency) missing.push("currency");
   return missing;
+}
+
+// ─── Verificación server-side de la transacción real (Fase 5.1) ───────────
+// HALLAZGO que motiva esto: verificado contra la documentación oficial
+// vigente de Wompi (Events) que `signature.properties` de un evento
+// `transaction.updated` real es `[transaction.id, transaction.status,
+// transaction.amount_in_cents]` — `transaction.reference` (y `currency`)
+// NO están firmados. El webhook usa `reference` para decidir a qué
+// `payments` row aplicar la transición; como no está firmado, alguien con
+// CUALQUIER evento propio válidamente firmado podría en teoría alterar solo
+// el campo `reference` (dejando id/status/amount_in_cents intactos, que es
+// todo lo que el checksum protege) y así apuntar la aprobación a la
+// suscripción de OTRO club. GET /v1/transactions/{id} (documentado,
+// requiere llave privada) es la única fuente verdaderamente autoritativa —
+// se consulta usando el `id` YA validado por checksum, nunca el `reference`
+// del payload, y su respuesta es lo único que decide si se procede.
+//
+// Hosts confirmados contra la documentación oficial: Production es
+// "production.wompi.co" (ejemplo verbatim en la documentación de
+// Transacciones). Sandbox: la documentación de Transacciones solo muestra
+// el ejemplo de Production, pero "sandbox.wompi.co" está confirmado como el
+// host Sandbox real de esta misma familia de API (mismo dominio ya usado
+// para GET /v1/payment_sources/{id}, documentado explícitamente, y la
+// propia documentación de Ambientes confirma que "el único cambio es la
+// URL base" entre ambientes para una API con idéntica forma) — no un host
+// inventado, pero si Alex hace la primera verificación real y este host no
+// responde como se espera, es el primer punto a revisar.
+export const WOMPI_TRANSACTION_HOSTS = {
+  sandbox: "https://sandbox.wompi.co",
+  production: "https://production.wompi.co",
+} as const;
+
+export interface VerifiedWompiTransaction {
+  id: string;
+  reference: string;
+  status: string;
+  amount_in_cents: number;
+  currency: string;
+  payment_method_type: string | null;
+}
+
+export interface WompiWebhookTransactionClaim {
+  id: string;
+  reference: string;
+  status: string;
+  amount_in_cents: number;
+  currency: string;
+}
+
+export type WompiTransactionVerificationOutcome =
+  | { ok: true }
+  // retryable=true → la causa más probable es una carrera de propagación
+  // (ej. status), no manipulación — responder con un HTTP que Wompi
+  // reintente (ver route.ts) en vez de un rechazo definitivo.
+  | { ok: false; retryable: boolean; reason: string };
+
+// Comparación pura — nunca decide sola qué HTTP status devolver (eso es de
+// route.ts), solo el resultado y si tiene sentido reintentar.
+//
+// id/amount_in_cents SÍ están firmados en el webhook (signature.properties
+// real observado) — un mismatch acá indicaría un problema grave (nunca
+// debería ocurrir para un evento con checksum válido), así que nunca se
+// trata como reintentable. reference/currency NO están firmados — un
+// mismatch acá es exactamente el vector de ataque que esto previene, nunca
+// reintentable tampoco (reintentar no arregla un intento de manipulación).
+// status SÍ está firmado, pero a diferencia de id/amount_in_cents es el
+// campo más propenso a una carrera legítima de "eventual consistency" del
+// lado de Wompi entre el envío del webhook y la lectura fresca vía API —
+// mismatch de status se trata como reintentable, nunca como manipulación.
+export function compareVerifiedWompiTransaction(
+  verified: VerifiedWompiTransaction,
+  webhook: WompiWebhookTransactionClaim
+): WompiTransactionVerificationOutcome {
+  if (verified.id !== webhook.id) return { ok: false, retryable: false, reason: "id_mismatch" };
+  if (verified.reference !== webhook.reference) return { ok: false, retryable: false, reason: "reference_mismatch" };
+  if (verified.amount_in_cents !== webhook.amount_in_cents) return { ok: false, retryable: false, reason: "amount_mismatch" };
+  if (verified.currency !== webhook.currency) return { ok: false, retryable: false, reason: "currency_mismatch" };
+  if (verified.status !== webhook.status) return { ok: false, retryable: true, reason: "status_mismatch" };
+  return { ok: true };
 }

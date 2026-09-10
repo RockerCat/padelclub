@@ -1,0 +1,40 @@
+-- ============================================================
+-- Comercial v2 / Fase 5.1 — hardening de identidad de transacción Wompi
+-- Mi Pádel Club
+-- ============================================================
+-- Contexto (ver también shared/commercial/wompi.ts y src/app/api/wompi/
+-- webhook/route.ts, código de esta misma fase): `transaction.reference` NO
+-- forma parte de `signature.properties` en un evento `transaction.updated`
+-- real de Wompi (confirmado contra la documentación oficial vigente y
+-- contra el evento real de Sandbox observado en Fase 3) — solo `id`,
+-- `status` y `amount_in_cents` están firmados. El webhook usaba
+-- `reference` (no firmado) como única clave para decidir a qué `payments`
+-- row aplicar una transición, lo cual en teoría permitía que un evento
+-- ajeno, válidamente firmado, con solo el campo `reference` alterado,
+-- apuntara la aprobación hacia la suscripción de OTRO club.
+--
+-- La protección PRIMARIA ya es de aplicación (código, sin SQL): el webhook
+-- ahora consulta GET /v1/transactions/{id} server-side antes de procesar
+-- cualquier estado final (APPROVED/DECLINED/VOIDED/ERROR) y compara la
+-- respuesta autoritativa de Wompi contra lo que el evento afirma — un
+-- mismatch de reference/id/amount/currency corta el proceso antes de
+-- invocar process_wompi_transaction_event.
+--
+-- Este índice es defensa EN PROFUNDIDAD, no la protección primaria: impide,
+-- a nivel de base de datos, que una misma transacción real de Wompi
+-- (provider_transaction_id) quede asociada a más de un payment — sin
+-- importar qué camino de código futuro pudiera llegar a escribirla. Parcial
+-- porque provider_transaction_id es NULL para cualquier payment que nunca
+-- recibió un webhook, o que solo recibió un PENDING sin id todavía — nunca
+-- se le exige unicidad a NULL (comportamiento estándar de un índice único
+-- en Postgres, pero documentado explícitamente porque es la razón de ser
+-- del WHERE parcial, igual que payments_one_pending_per_subscription_idx
+-- en 20261115000007, que este índice complementa sin tocarla).
+--
+-- Verificado antes de esta migración (consulta de solo lectura contra la
+-- base real, ver el reporte de esta fase): cero valores duplicados de
+-- provider_transaction_id existentes — seguro de aplicar sin backfill ni
+-- limpieza previa.
+CREATE UNIQUE INDEX payments_provider_transaction_id_unique_idx
+  ON public.payments (provider_transaction_id)
+  WHERE provider = 'wompi' AND provider_transaction_id IS NOT NULL;

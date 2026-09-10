@@ -24,8 +24,13 @@ import {
   resolveOrderedPropertyValues,
   getIncompleteWompiTransactionFields,
   sanitizeWompiEventPayload,
+  wompiKeysMatchEnvironment,
+  compareVerifiedWompiTransaction,
+  type VerifiedWompiTransaction,
 } from "../shared/commercial/wompi";
 import { deriveCommercialPhase, getTrialDaysRemaining, getCommercialPillContent } from "../shared/commercial/lifecycle";
+import { verifyWompiTransaction } from "../src/lib/wompi/verifyTransaction";
+import type { WompiConfig } from "../src/lib/wompi/config";
 
 let passed = 0;
 let failed = 0;
@@ -766,5 +771,341 @@ assertEqual(leaked, [], "sanitizer elimina todos los campos/valores sensibles li
   );
 }
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) process.exit(1);
+// ─── Fase 5 — coherencia ambiente/llaves (fail-fast) ───────────────────────
+// Prefijos verificados contra la documentación oficial vigente de Wompi
+// (Ambientes y Llaves) en esta misma fase, no asumidos de memoria.
+const SANDBOX_KEYS = {
+  publicKey: "pub_test_abc123",
+  privateKey: "prv_test_abc123",
+  integritySecret: "test_integrity_abc123",
+  eventsSecret: "test_events_abc123",
+};
+const PRODUCTION_KEYS = {
+  publicKey: "pub_prod_abc123",
+  privateKey: "prv_prod_abc123",
+  integritySecret: "prod_integrity_abc123",
+  eventsSecret: "prod_events_abc123",
+};
+
+assertEqual(wompiKeysMatchEnvironment("sandbox", SANDBOX_KEYS), true, "sandbox + llaves de sandbox → coherente");
+assertEqual(wompiKeysMatchEnvironment("production", PRODUCTION_KEYS), true, "production + llaves de production → coherente");
+assertEqual(
+  wompiKeysMatchEnvironment("production", SANDBOX_KEYS),
+  false,
+  "production + llaves de sandbox → INCOHERENTE (el error de config que esto previene)"
+);
+assertEqual(
+  wompiKeysMatchEnvironment("sandbox", PRODUCTION_KEYS),
+  false,
+  "sandbox + llaves de production → INCOHERENTE (el error de config inverso)"
+);
+// Mismatch parcial (solo una de las cuatro llaves con el prefijo
+// equivocado) también debe rechazarse — nunca basta con que 3 de 4 coincidan.
+assertEqual(
+  wompiKeysMatchEnvironment("production", { ...PRODUCTION_KEYS, privateKey: SANDBOX_KEYS.privateKey }),
+  false,
+  "mismatch parcial (solo privateKey equivocada, Fase 5.1) → también INCOHERENTE"
+);
+assertEqual(
+  wompiKeysMatchEnvironment("production", { ...PRODUCTION_KEYS, eventsSecret: SANDBOX_KEYS.eventsSecret }),
+  false,
+  "mismatch parcial (solo eventsSecret equivocado) → también INCOHERENTE"
+);
+assertEqual(
+  wompiKeysMatchEnvironment("production", { ...PRODUCTION_KEYS, integritySecret: SANDBOX_KEYS.integritySecret }),
+  false,
+  "mismatch parcial (solo integritySecret equivocado) → también INCOHERENTE"
+);
+assertEqual(
+  wompiKeysMatchEnvironment("production", { ...PRODUCTION_KEYS, publicKey: SANDBOX_KEYS.publicKey }),
+  false,
+  "mismatch parcial (solo publicKey equivocada) → también INCOHERENTE"
+);
+
+// ─── Fase 5.1 — hardening de identidad de transacción (tests de exploit) ───
+// Reproduce exactamente el vulnerability path documentado en el reporte de
+// esta fase: `transaction.reference` no está firmado por Wompi, así que un
+// evento con checksum válido para id/status/amount_in_cents podría en
+// teoría traer un `reference` distinto. compareVerifiedWompiTransaction es
+// la función pura que corta esto — se prueba directamente, con fixtures,
+// sin necesidad de un checksum real. verifyWompiTransaction (con fetch
+// mockeado, nunca una llamada de red real) cubre los fallos de la API
+// remota — nunca debe aprobar nada cuando no puede verificar.
+
+const BASE_VERIFIED: VerifiedWompiTransaction = {
+  id: "01-real-tx-1",
+  reference: "sub_real_reference_1",
+  status: "APPROVED",
+  amount_in_cents: 9999000,
+  currency: "COP",
+  payment_method_type: "CARD",
+};
+const BASE_WEBHOOK = {
+  id: "01-real-tx-1",
+  reference: "sub_real_reference_1",
+  status: "APPROVED",
+  amount_in_cents: 9999000,
+  currency: "COP",
+};
+
+// Caso 1 — reference alterada (EL exploit conceptual que motiva esta fase):
+// checksum habría sido válido (id/status/amount_in_cents intactos, que es
+// todo lo que Wompi firma), pero Wompi (la fuente autoritativa) dice que la
+// transacción real pertenece a OTRA reference — debe rechazarse en firme,
+// nunca reintentable (reintentar no cambia una manipulación).
+assertEqual(
+  compareVerifiedWompiTransaction(BASE_VERIFIED, { ...BASE_WEBHOOK, reference: "sub_attacker_victim_reference" }),
+  { ok: false, retryable: false, reason: "reference_mismatch" },
+  "Caso 1 — reference alterada → reference_mismatch, NO reintentable, RPC nunca se llamaría"
+);
+
+// Caso 2 — transaction id diferente (nunca debería ocurrir con checksum
+// válido, ya que id SÍ está firmado — tratado igual de firme que reference).
+assertEqual(
+  compareVerifiedWompiTransaction(BASE_VERIFIED, { ...BASE_WEBHOOK, id: "01-otra-tx" }),
+  { ok: false, retryable: false, reason: "id_mismatch" },
+  "Caso 2 — transaction id diferente → id_mismatch, NO reintentable"
+);
+
+// Caso 3 — amount diferente (amount_in_cents SÍ está firmado — igual de firme).
+assertEqual(
+  compareVerifiedWompiTransaction(BASE_VERIFIED, { ...BASE_WEBHOOK, amount_in_cents: 1 }),
+  { ok: false, retryable: false, reason: "amount_mismatch" },
+  "Caso 3 — amount diferente → amount_mismatch, NO reintentable"
+);
+
+// Caso 4 — currency diferente (no firmada, mismo vector que reference).
+assertEqual(
+  compareVerifiedWompiTransaction(BASE_VERIFIED, { ...BASE_WEBHOOK, currency: "USD" }),
+  { ok: false, retryable: false, reason: "currency_mismatch" },
+  "Caso 4 — currency diferente → currency_mismatch, NO reintentable"
+);
+
+// Caso 5 — status diferente: SÍ está firmado (no es manipulable sin romper
+// el checksum), así que un mismatch acá es una carrera de propagación
+// legítima entre el envío del webhook y la lectura fresca de la API, nunca
+// tratado como intento de manipulación — reintentable.
+assertEqual(
+  compareVerifiedWompiTransaction({ ...BASE_VERIFIED, status: "DECLINED" }, BASE_WEBHOOK),
+  { ok: false, retryable: true, reason: "status_mismatch" },
+  "Caso 5 — status diferente (carrera legítima) → status_mismatch, SÍ reintentable"
+);
+
+// Caso 12 — evento legítimo APPROVED, todo coincide → ok, el único camino
+// que en route.ts continúa hacia la RPC.
+assertEqual(
+  compareVerifiedWompiTransaction(BASE_VERIFIED, BASE_WEBHOOK),
+  { ok: true },
+  "Caso 12 — evento legítimo APPROVED, todo coincide → ok (flujo normal preservado)"
+);
+
+// Caso 13 — DECLINED legítimo, todo coincide → mismo comportamiento, la
+// función no distingue por valor de status mientras coincida.
+assertEqual(
+  compareVerifiedWompiTransaction({ ...BASE_VERIFIED, status: "DECLINED" }, { ...BASE_WEBHOOK, status: "DECLINED" }),
+  { ok: true },
+  "Caso 13 — DECLINED legítimo, todo coincide → ok (comportamiento existente preservado)"
+);
+
+// ─── Fase 5.1.1 — PENDING también debe verificarse (hallazgo de esta fase) ─
+// Encontrado en la auditoría: PENDING no llevaba una suscripción a `active`
+// ni creaba un período, pero SÍ escribía provider_transaction_id sobre el
+// payment localizado por `reference` (ver el branch `v_normalized_status =
+// 'pending'` en process_wompi_transaction_event, 20261115000007, no
+// tocado). Un PENDING con `reference` alterada podía "envenenar" el
+// provider_transaction_id de OTRO payment con el id real de una
+// transacción ajena; al llegar después el evento final legítimo de esa
+// misma transacción, el índice único parcial nuevo de 20261115000008
+// (provider_transaction_id) lo bloquearía con un unique_violation no
+// manejado — dejando el propio pago del atacante atascado en 'pending'
+// para siempre (DoS real). La corrección (route.ts) fue quitar el
+// special-case que eximía a PENDING de la verificación remota — ahora se
+// verifica exactamente igual que un estado final, en el mismo punto.
+
+const PENDING_VERIFIED: VerifiedWompiTransaction = { ...BASE_VERIFIED, status: "PENDING" };
+const PENDING_WEBHOOK = { ...BASE_WEBHOOK, status: "PENDING" };
+
+// 1. PENDING con reference alterada (el mismo exploit conceptual, pero
+// contra el evento intermedio en vez del final) → debe rechazarse en
+// firme, exactamente igual que para un estado final — nunca se llegaría a
+// invocar la RPC con esta reference, así que provider_transaction_id de la
+// víctima nunca se toca.
+assertEqual(
+  compareVerifiedWompiTransaction(PENDING_VERIFIED, { ...PENDING_WEBHOOK, reference: "sub_attacker_victim_reference" }),
+  { ok: false, retryable: false, reason: "reference_mismatch" },
+  "Fase 5.1.1 — PENDING con reference alterada → reference_mismatch, NO reintentable (envenenamiento evitado)"
+);
+
+// 4. PENDING legítimo (todo coincide) sigue funcionando — la verificación
+// nueva no rompe el camino normal, solo lo protege.
+assertEqual(
+  compareVerifiedWompiTransaction(PENDING_VERIFIED, PENDING_WEBHOOK),
+  { ok: true },
+  "Fase 5.1.1 — PENDING legítimo, todo coincide → ok (PENDING real sigue funcionando)"
+);
+
+// 2/5. Evento final legítimo posterior a un PENDING (bloqueado o no) sigue
+// aprobando con normalidad — misma aserción que el Caso 12, repetida acá
+// para dejar explícito que el orden PENDING→APPROVED nunca deja un estado
+// intermedio que rompa la verificación del evento final (la función es
+// pura y sin memoria entre llamadas: el resultado de esta comparación
+// nunca depende de qué PENDING haya llegado antes).
+assertEqual(
+  compareVerifiedWompiTransaction(BASE_VERIFIED, BASE_WEBHOOK),
+  { ok: true },
+  "Fase 5.1.1 — evento final legítimo (APPROVED) tras un intento de PENDING envenenado sigue aprobando con normalidad"
+);
+
+// 3. Confirmar, por lectura del código real (nunca solo por la lógica
+// pura), que no existe ningún camino que invoque la RPC sin pasar primero
+// por la verificación — ancla de texto sobre route.ts: el special-case que
+// eximía a PENDING ya no existe, y la llamada a process_wompi_transaction_event
+// ocurre textualmente DESPUÉS del `if (!comparison.ok)`, nunca antes.
+{
+  const routePath = join(__dirname, "..", "src", "app", "api", "wompi", "webhook", "route.ts");
+  const routeText = readFileSync(routePath, "utf8");
+
+  assertEqual(
+    routeText.includes("FINAL_WOMPI_STATUSES"),
+    false,
+    "3. route.ts ya no exime a ningún status de la verificación remota (special-case eliminado)"
+  );
+
+  const comparisonCheckIndex = routeText.indexOf("if (!comparison.ok)");
+  const rpcCallIndex = routeText.indexOf('"process_wompi_transaction_event"');
+  assertEqual(
+    comparisonCheckIndex > -1 && rpcCallIndex > -1 && comparisonCheckIndex < rpcCallIndex,
+    true,
+    "3. la verificación (if (!comparison.ok)) ocurre textualmente antes de cualquier llamada a la RPC — sin excepción de status"
+  );
+}
+
+// 6. El exploit original (Caso 1, contra un estado final) sigue bloqueado
+// — reconfirmado explícitamente en este bloque de Fase 5.1.1 para dejar
+// registrado que ambos hallazgos (estado final y PENDING) están cubiertos
+// por el mismo mecanismo, sin regresión entre uno y otro.
+assertEqual(
+  compareVerifiedWompiTransaction(BASE_VERIFIED, { ...BASE_WEBHOOK, reference: "sub_attacker_victim_reference" }),
+  { ok: false, retryable: false, reason: "reference_mismatch" },
+  "6. exploit original (reference alterada en estado final) sigue bloqueado tras el fix de Fase 5.1.1"
+);
+
+// ─── Casos 6-11 — fallas de la API remota de Wompi (fetch mockeado, nunca
+// red real) — verifyWompiTransaction nunca debe devolver ok:true ante
+// ninguna de estas fallas, y route.ts nunca llama a la RPC si esto no es ok.
+const FAKE_CONFIG: WompiConfig = {
+  publicKey: "pub_test_fixture",
+  privateKey: "prv_test_fixture",
+  integritySecret: "test_integrity_fixture",
+  eventsSecret: "test_events_fixture",
+  environment: "sandbox",
+};
+
+const originalFetch = global.fetch;
+function mockFetchOnce(impl: () => Promise<Response> | never) {
+  global.fetch = (async () => impl()) as typeof fetch;
+}
+
+async function runWompiApiFailureTests() {
+  // Caso 6 — timeout (AbortError simulado).
+  mockFetchOnce(async () => {
+    const err = new Error("aborted");
+    err.name = "AbortError";
+    throw err;
+  });
+  let result = await verifyWompiTransaction("01-any", FAKE_CONFIG);
+  assertEqual(result, { ok: false, reason: "timeout" }, "Caso 6 — timeout de la API → ok:false, nunca aprueba");
+
+  // Caso 7 — 401 de la API (ej. private key inválida/rotada).
+  mockFetchOnce(async () => new Response(null, { status: 401 }));
+  result = await verifyWompiTransaction("01-any", FAKE_CONFIG);
+  assertEqual(result, { ok: false, reason: "http_error", httpStatus: 401 }, "Caso 7 — API responde 401 → ok:false, nunca aprueba");
+
+  // Caso 8 — 404 (transacción no encontrada todavía / id incorrecto).
+  mockFetchOnce(async () => new Response(null, { status: 404 }));
+  result = await verifyWompiTransaction("01-any", FAKE_CONFIG);
+  assertEqual(result, { ok: false, reason: "http_error", httpStatus: 404 }, "Caso 8 — API responde 404 → ok:false, nunca aprueba");
+
+  // Caso 9 — 500 de la API de Wompi.
+  mockFetchOnce(async () => new Response(null, { status: 500 }));
+  result = await verifyWompiTransaction("01-any", FAKE_CONFIG);
+  assertEqual(result, { ok: false, reason: "http_error", httpStatus: 500 }, "Caso 9 — API responde 500 → ok:false, nunca aprueba");
+
+  // Caso 10 — JSON inválido en la respuesta.
+  mockFetchOnce(async () => new Response("not-json{{{", { status: 200 }));
+  result = await verifyWompiTransaction("01-any", FAKE_CONFIG);
+  assertEqual(result, { ok: false, reason: "invalid_json" }, "Caso 10 — respuesta con JSON inválido → ok:false, nunca aprueba");
+
+  // Caso 11 — respuesta incompleta (falta reference, por ejemplo).
+  mockFetchOnce(async () => new Response(JSON.stringify({ data: { id: "01-any", status: "APPROVED" } }), { status: 200 }));
+  result = await verifyWompiTransaction("01-any", FAKE_CONFIG);
+  assertEqual(result, { ok: false, reason: "invalid_shape" }, "Caso 11 — respuesta incompleta (sin reference/amount/currency) → ok:false, nunca aprueba");
+
+  // Camino feliz — confirma que el mock en sí funciona y que una respuesta
+  // completa y válida SÍ produce ok:true con los campos esperados.
+  mockFetchOnce(
+    async () =>
+      new Response(
+        JSON.stringify({
+          data: { id: "01-real-tx-1", reference: "sub_real_reference_1", status: "APPROVED", amount_in_cents: 9999000, currency: "COP", payment_method_type: "CARD" },
+        }),
+        { status: 200 }
+      )
+  );
+  result = await verifyWompiTransaction("01-real-tx-1", FAKE_CONFIG);
+  assertEqual(
+    result,
+    { ok: true, transaction: BASE_VERIFIED },
+    "camino feliz — respuesta completa y válida → ok:true con los campos esperados"
+  );
+
+  global.fetch = originalFetch;
+}
+
+async function main() {
+  await runWompiApiFailureTests();
+
+  // Caso 14 — evento final duplicado: idempotencia sin cambios (ver
+  // payment_events_dedup_idx, no tocado por la migración 00008 nueva).
+  {
+    const paymentsMigrationText = readFileSync(
+      join(__dirname, "..", "supabase", "migrations", "20261115000007_commercial_payments.sql"),
+      "utf8"
+    );
+    assertEqual(
+      paymentsMigrationText.includes(
+        "CREATE UNIQUE INDEX payment_events_dedup_idx\n  ON public.payment_events (provider, provider_transaction_id, status)"
+      ),
+      true,
+      "Caso 14 — payment_events_dedup_idx sigue exactamente igual (idempotencia de eventos intacta)"
+    );
+    assertEqual(
+      paymentsMigrationText.includes("IF v_payment.status IN ('approved', 'declined', 'voided', 'error') THEN"),
+      true,
+      "Caso 14 — un payment ya finalizado sigue sin reprocesarse (guard de status intacto)"
+    );
+  }
+
+  // Caso 15 — misma transaction id para dos payments: el índice único
+  // parcial nuevo (migración 00008) debe existir con exactamente esta
+  // forma. No hay Postgres real en este entorno (ver convención del repo)
+  // — ancla de texto + ya validado con libpg-query (parser real de
+  // gramática Postgres) que la migración es SQL válido, ver el reporte de
+  // esta fase.
+  {
+    const newMigrationPath = join(__dirname, "..", "supabase", "migrations", "20261115000008_wompi_transaction_identity_hardening.sql");
+    const newMigrationText = readFileSync(newMigrationPath, "utf8");
+    assertEqual(
+      newMigrationText.includes(
+        "CREATE UNIQUE INDEX payments_provider_transaction_id_unique_idx\n  ON public.payments (provider_transaction_id)\n  WHERE provider = 'wompi' AND provider_transaction_id IS NOT NULL;"
+      ),
+      true,
+      "Caso 15 — índice único parcial de provider_transaction_id existe con la forma exacta esperada"
+    );
+  }
+
+  console.log(`\n${passed} passed, ${failed} failed`);
+  if (failed > 0) process.exit(1);
+}
+
+main();
