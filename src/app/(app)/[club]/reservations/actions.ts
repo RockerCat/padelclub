@@ -5,6 +5,10 @@ import { createClient } from "@/lib/supabase/server";
 import { resolveReservationPrice } from "@/lib/reservationPricing";
 import type { ResolveReservationPriceResult } from "@/lib/reservationPricing";
 import { mapUpdateReservationError } from "@/lib/reservationErrors";
+import {
+  COMMERCIAL_ACCESS_DENIED_CODE,
+  PLAYER_COMMERCIAL_BLOCKED_MESSAGE,
+} from "../../../../../shared/commercial/access";
 
 export type RequestFormState = { error?: string; success?: boolean };
 
@@ -90,6 +94,12 @@ export async function requestReservation(
 
   if (error) {
     console.error("[requestReservation] create_reservation_player failed:", { clubId, supabaseError: error });
+    // Comercial v2 / Fase 2 — club suspendido comercialmente. PLAYER nunca
+    // ve deuda/pago/suscripción, solo un mensaje neutral (ver
+    // shared/commercial/access.ts).
+    if (error.code === COMMERCIAL_ACCESS_DENIED_CODE) {
+      return { error: PLAYER_COMMERCIAL_BLOCKED_MESSAGE };
+    }
     return { error: mapUpdateReservationError(error) };
   }
 

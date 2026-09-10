@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../types/database";
 import { mapUpdateReservationError } from "./reservationErrors";
+import {
+  COMMERCIAL_ACCESS_DENIED_CODE,
+  PLAYER_COMMERCIAL_BLOCKED_MESSAGE,
+} from "../../../shared/commercial/access";
 
 // Portado de requestReservation/updateMyReservation en
 // src/app/(app)/[club]/reservations/actions.ts (app web) — mismas dos
@@ -22,7 +26,15 @@ export async function requestReservation(
     p_is_open: params.isOpen,
   });
 
-  if (error) return { error: mapUpdateReservationError(error) };
+  if (error) {
+    // Comercial v2 / Fase 2 — club suspendido comercialmente. PLAYER nunca
+    // ve deuda/pago/suscripción, solo un mensaje neutral (ver
+    // shared/commercial/access.ts).
+    if (error.code === COMMERCIAL_ACCESS_DENIED_CODE) {
+      return { error: PLAYER_COMMERCIAL_BLOCKED_MESSAGE };
+    }
+    return { error: mapUpdateReservationError(error) };
+  }
 
   const reservationId = data as string;
   await supabase.rpc("notify_reservation_request_created", { p_reservation_id: reservationId });

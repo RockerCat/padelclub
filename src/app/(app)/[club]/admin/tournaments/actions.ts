@@ -11,6 +11,10 @@ import {
   updateTournamentCoverImage as sharedUpdateTournamentCoverImage,
   runTournamentTransition,
 } from "../../../../../../shared/tournaments/actions";
+import {
+  COMMERCIAL_ACCESS_DENIED_CODE,
+  getCommercialBlockedMessage,
+} from "../../../../../../shared/commercial/access";
 import type { Tournament } from "@/types/database";
 
 // El cómputo real (validación + los 11 RPCs de nivel torneo: create/
@@ -44,10 +48,10 @@ async function requireAdminRole(clubId: string) {
   const access = await resolveClubAccess(supabase, clubId);
 
   if (!access.authorized || !["OWNER", "ADMIN"].includes(access.role)) {
-    return { supabase: null, error: access.authorized ? "Sin permiso." : access.error };
+    return { supabase: null, role: null, error: access.authorized ? "Sin permiso." : access.error };
   }
 
-  return { supabase, error: null };
+  return { supabase, role: access.role, error: null };
 }
 
 // ─── FormData parsing (específico de Next.js) ────────────────────────────────
@@ -92,11 +96,19 @@ export async function createTournament(
   _prevState: TournamentActionState,
   formData: FormData
 ): Promise<TournamentActionState> {
-  const { supabase, error: authError } = await requireAdminRole(clubId);
+  const { supabase, role, error: authError } = await requireAdminRole(clubId);
   if (authError || !supabase) return { error: authError! };
 
-  const { tournament, error } = await sharedCreateTournament(supabase, clubId, parseTournamentFields(formData));
-  if (error) return { error };
+  const { tournament, error, errorCode } = await sharedCreateTournament(supabase, clubId, parseTournamentFields(formData));
+  if (error) {
+    // Comercial v2 / Fase 2 — club suspendido comercialmente. Mensaje
+    // distinto para OWNER (contexto comercial) y ADMIN (sin mención de
+    // pago) — ver shared/commercial/access.ts.
+    if (errorCode === COMMERCIAL_ACCESS_DENIED_CODE) {
+      return { error: getCommercialBlockedMessage(role) };
+    }
+    return { error };
+  }
 
   revalidatePath(`/${clubSlug}/admin/tournaments`);
   return { success: true, tournament: tournament ?? undefined };

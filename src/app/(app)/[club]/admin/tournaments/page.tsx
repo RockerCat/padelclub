@@ -37,11 +37,22 @@ export default async function TournamentsPage({ params }: TournamentsPageProps) 
 
   // Single query for the whole list — club_id filtered explicitly (never
   // relying on RLS alone, RLS remains defense-in-depth).
-  const [{ data: tournaments }, { data: confirmedEntries }, { data: sportCategories }] = await Promise.all([
-    supabase.from("tournaments").select("*").eq("club_id", club.id),
-    supabase.from("tournament_entries").select("tournament_id").eq("club_id", club.id).eq("status", "confirmed"),
-    supabase.from("sport_categories").select("code, sort_order, created_at").order("sort_order", { ascending: true }),
-  ]);
+  // get_club_commercial_access added in 20261115000006, not yet in
+  // generated types until `npm run types:generate` runs against a DB with
+  // this migration applied.
+  const [{ data: tournaments }, { data: confirmedEntries }, { data: sportCategories }, { data: commercialRows }] =
+    await Promise.all([
+      supabase.from("tournaments").select("*").eq("club_id", club.id),
+      supabase.from("tournament_entries").select("tournament_id").eq("club_id", club.id).eq("status", "confirmed"),
+      supabase.from("sport_categories").select("code, sort_order, created_at").order("sort_order", { ascending: true }),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (supabase.rpc as any)("get_club_commercial_access", { p_club_id: club.id }),
+    ]);
+  // Comercial v2 / Fase 2 — solo controla si se muestra/deshabilita "Crear
+  // torneo"; la autoridad real es el check dentro de create_tournament.
+  // Por defecto true (nunca bloquea) si la RPC falla por cualquier razón —
+  // el backend sigue siendo quien decide de verdad.
+  const canCreateTournament = commercialRows?.[0]?.can_create_tournament ?? true;
 
   const tournamentList = [...(tournaments ?? [])].sort(compareTournaments);
 
@@ -61,6 +72,7 @@ export default async function TournamentsPage({ params }: TournamentsPageProps) 
         clubSlug={slug}
         clubId={club.id}
         role={access.role}
+        canCreateTournament={canCreateTournament}
       />
     </div>
   );

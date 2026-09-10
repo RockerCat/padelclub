@@ -22,6 +22,14 @@ export function tournamentErrorMessage(error: { code?: string; message?: string 
   if (error.code === "42501") return "No tienes permisos para realizar esta acción.";
   if (error.code === "P0002") return "El torneo no existe o ya no está disponible.";
   if (error.code === "P0005") return "Este club se encuentra archivado.";
+  // Comercial v2 / Fase 2 — club suspendido comercialmente. Fallback
+  // genérico (orientado a OWNER) para cualquier llamador que no
+  // distinga por rol; createTournament() abajo expone errorCode aparte
+  // para que el caller de WEB (el único que crea torneos hoy) muestre el
+  // mensaje correcto por rol (ver shared/commercial/access.ts).
+  if (error.code === "P0008") {
+    return "La suscripción del club no está activa. Para crear nuevos torneos, reactiva la suscripción.";
+  }
 
   if (error.code === "22023") {
     const msg = error.message ?? "";
@@ -173,11 +181,16 @@ export function isStructuralFieldsLocked(status: string): boolean {
   return status === "registration_open" || status === "registration_closed";
 }
 
+// errorCode is additive: "P0008" (Comercial v2 / Fase 2) when the RPC
+// rejected for commercial suspension — lets a caller that knows the
+// viewer's role (WEB's admin/tournaments/actions.ts, the only creator
+// today) override `error` with the correct per-role copy instead of the
+// role-agnostic fallback tournamentErrorMessage already returns.
 export async function createTournament(
   supabase: SupabaseClient<Database>,
   clubId: string,
   f: CreateTournamentFields
-): Promise<{ tournament: Tournament | null; error: string | null }> {
+): Promise<{ tournament: Tournament | null; error: string | null; errorCode?: string }> {
   const validationError = validateCreateTournamentFields(f);
   if (validationError) return { tournament: null, error: validationError };
 
@@ -198,7 +211,7 @@ export async function createTournament(
     p_entry_fee_amount: f.entryFeeAmount,
   });
 
-  if (error) return { tournament: null, error: tournamentErrorMessage(error) };
+  if (error) return { tournament: null, error: tournamentErrorMessage(error), errorCode: error.code };
   return { tournament: (data?.[0] as Tournament | undefined) ?? null, error: null };
 }
 

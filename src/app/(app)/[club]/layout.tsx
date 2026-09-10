@@ -116,19 +116,34 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
   // Count total active memberships (for "Cambiar de club") and pending join
   // requests (for the Jugadores nav badge, OWNER/ADMIN only) side by side —
   // both are cheap head-count queries, no row data fetched.
-  const [{ count }, pendingJoinRequests, notificationCount, notificationItems, identity] = await Promise.all([
-    supabase
-      .from("club_members")
-      .select("id", { count: "exact", head: true })
-      .eq("profile_id", user.id)
-      .eq("is_active", true),
-    role === "PLAYER" ? Promise.resolve(0) : getPendingJoinRequestsCount(supabase, club.id),
-    getUnreadNotificationCount(supabase),
-    getRecentNotifications(supabase),
-    getSidebarIdentity(supabase, user.id, user.email ?? null),
-  ]);
+  const [{ count }, pendingJoinRequests, notificationCount, notificationItems, identity, commercialAccessResult] =
+    await Promise.all([
+      supabase
+        .from("club_members")
+        .select("id", { count: "exact", head: true })
+        .eq("profile_id", user.id)
+        .eq("is_active", true),
+      role === "PLAYER" ? Promise.resolve(0) : getPendingJoinRequestsCount(supabase, club.id),
+      getUnreadNotificationCount(supabase),
+      getRecentNotifications(supabase),
+      getSidebarIdentity(supabase, user.id, user.email ?? null),
+      // Comercial v2 / Fase 2 — solo OWNER ve el banner global de abajo;
+      // ADMIN/PLAYER nunca lo necesitan, así que ni se pide para ellos.
+      // get_club_commercial_access added in 20261115000006, not yet in
+      // generated types until `npm run types:generate` runs against a DB
+      // with that migration applied.
+      role === "OWNER"
+        ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase.rpc as any)("get_club_commercial_access", { p_club_id: club.id })
+        : Promise.resolve({ data: null }),
+    ]);
 
   const membershipCount = count ?? 1;
+  // Si la RPC todavía no existe (migración no aplicada) o falla por
+  // cualquier razón, esto queda null y el banner simplemente no se
+  // muestra — nunca rompe el shell del club por un fallo de lectura
+  // puramente informativa.
+  const commercialStatus: string | null = commercialAccessResult?.data?.[0]?.commercial_status ?? null;
 
   return (
     <ClubThemeProvider>
@@ -164,6 +179,29 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
             <div className="px-4 md:px-6 pt-4">
               <div className="rounded-xl border border-amber-400/20 bg-amber-400/5 px-4 py-3 text-sm text-amber-300">
                 Este club está archivado. Ya no acepta nuevas reservas, solicitudes de ingreso ni invitaciones. Toda la información histórica se conserva.
+              </div>
+            </div>
+          )}
+
+          {/* Comercial v2 / Fase 2 — banner global, OWNER-only, visible en
+              todo el shell del club (Dashboard, Reservaciones, Jugadores,
+              Ranking, Torneos, Club, etc. — cualquier página que renderice
+              dentro de este layout). Mismo criterio que el banner de club
+              archivado justo arriba: la autoridad real es el bloqueo
+              server-side (_require_commercial_access dentro de las RPCs de
+              creación); esto es únicamente visibilidad, nunca bloquea
+              navegación ni oculta contenido. Sin CTA de pago todavía —
+              Wompi no existe (Comercial v2 / Fase 3 lo agregará aquí mismo
+              cuando exista un destino real). ADMIN/PLAYER nunca lo ven —
+              conservan sus propios mensajes ya existentes al intentar una
+              acción bloqueada. */}
+          {role === "OWNER" && commercialStatus === "suspended" && (
+            <div className="px-4 md:px-6 pt-4">
+              <div className="rounded-xl border border-amber-400/20 bg-amber-400/5 px-4 py-3 text-sm text-amber-300">
+                <p className="font-medium text-amber-200">Tu suscripción no está activa</p>
+                <p className="mt-0.5">
+                  Algunas funciones están temporalmente limitadas. Reactiva tu suscripción para volver a crear reservas y torneos.
+                </p>
               </div>
             </div>
           )}

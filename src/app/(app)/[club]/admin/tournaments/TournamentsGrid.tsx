@@ -13,6 +13,7 @@ import {
   resolveDefaultTab,
 } from "../../../../../../shared/tournaments/tabs";
 import { effectivePlayerTournamentStatus } from "../../../../../../shared/tournaments/actions";
+import { getCommercialBlockedMessage } from "../../../../../../shared/commercial/access";
 import type { Tournament, SportCategory } from "@/types/database";
 
 interface TournamentsGridProps {
@@ -31,6 +32,12 @@ interface TournamentsGridProps {
   // tarjetas, navegación al detalle) depende del rol: es exactamente la
   // misma lógica para los tres.
   role: "OWNER" | "ADMIN" | "PLAYER";
+  // Comercial v2 / Fase 2 — entitlement (get_club_commercial_access).
+  // Opcional/default true para no romper ningún caller que todavía no lo
+  // pase; la autoridad real sigue siendo el check dentro de
+  // create_tournament, esto solo evita mostrar un CTA que el backend va a
+  // rechazar de todas formas.
+  canCreateTournament?: boolean;
 }
 
 export function TournamentsGrid({
@@ -40,9 +47,12 @@ export function TournamentsGrid({
   clubSlug,
   clubId,
   role,
+  canCreateTournament = true,
 }: TournamentsGridProps) {
   const router = useRouter();
   const canCreate = role !== "PLAYER";
+  const creationBlocked = canCreate && !canCreateTournament;
+  const commercialMessage = creationBlocked ? getCommercialBlockedMessage(role) : null;
   const tabOrder = role === "PLAYER" ? PLAYER_TAB_ORDER : ADMIN_TAB_ORDER;
   const [creating, setCreating] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>(() => resolveDefaultTab(tournaments, tabOrder));
@@ -77,13 +87,24 @@ export function TournamentsGrid({
           <button
             type="button"
             onClick={() => setCreating(true)}
-            className="inline-flex items-center gap-2 h-10 px-4 text-sm font-medium rounded-xl bg-brand-primary text-brand-bg hover:brightness-110 active:brightness-95 transition-all duration-200 shrink-0"
+            disabled={creationBlocked}
+            title={commercialMessage ?? undefined}
+            className="inline-flex items-center gap-2 h-10 px-4 text-sm font-medium rounded-xl bg-brand-primary text-brand-bg hover:brightness-110 active:brightness-95 transition-all duration-200 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:brightness-100"
           >
             <Plus className="w-4 h-4" />
             Crear torneo
           </button>
         )}
       </div>
+
+      {/* Comercial v2 / Fase 2 — visible siempre que la creación esté
+          bloqueada, no solo en el empty state, para que no dependa de
+          pasar el mouse sobre el botón deshabilitado (sin hover en mobile). */}
+      {commercialMessage && (
+        <p className="text-xs text-amber-300/90 bg-amber-400/5 border border-amber-400/20 rounded-xl px-3 py-2 mb-6">
+          {commercialMessage}
+        </p>
+      )}
 
       {tournaments.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -100,7 +121,9 @@ export function TournamentsGrid({
             <button
               type="button"
               onClick={() => setCreating(true)}
-              className="inline-flex items-center gap-2 h-10 px-4 text-sm font-medium rounded-xl bg-brand-primary text-brand-bg hover:brightness-110 active:brightness-95 transition-all duration-200"
+              disabled={creationBlocked}
+              title={commercialMessage ?? undefined}
+              className="inline-flex items-center gap-2 h-10 px-4 text-sm font-medium rounded-xl bg-brand-primary text-brand-bg hover:brightness-110 active:brightness-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:brightness-100"
             >
               <Plus className="w-4 h-4" />
               Crear torneo

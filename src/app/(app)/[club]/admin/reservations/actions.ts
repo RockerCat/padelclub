@@ -7,6 +7,10 @@ import { mapUpdateReservationError } from "@/lib/reservationErrors";
 import { resolveClubAccess } from "@/lib/clubAccess";
 import { getAvailableSlots as sharedGetAvailableSlots, type AvailableSlotsResult } from "../../../../../../shared/reservations/availability";
 import { syncReservationPlayers } from "../../../../../../shared/reservations/playerSync";
+import {
+  COMMERCIAL_ACCESS_DENIED_CODE,
+  getCommercialBlockedMessage,
+} from "../../../../../../shared/commercial/access";
 
 export type ReservationFormState = {
   error?: string;
@@ -21,10 +25,10 @@ async function requireAdminRole(clubId: string) {
 
   if (!access.authorized || !["OWNER", "ADMIN"].includes(access.role)) {
     console.error("[reservations] access denied — clubId:", clubId);
-    return { supabase: null, user: null, error: access.authorized ? "Sin permiso." : access.error };
+    return { supabase: null, user: null, role: null, error: access.authorized ? "Sin permiso." : access.error };
   }
 
-  return { supabase, user: access.user, error: null };
+  return { supabase, user: access.user, role: access.role, error: null };
 }
 
 // ─── Parse + validate ─────────────────────────────────────────────────────────
@@ -67,7 +71,7 @@ export async function createReservation(
   _prevState: ReservationFormState,
   formData: FormData
 ): Promise<ReservationFormState> {
-  const { supabase, error: authError } = await requireAdminRole(clubId);
+  const { supabase, role, error: authError } = await requireAdminRole(clubId);
   if (authError || !supabase) return { error: authError! };
 
   const { courtId, date, startTime, durationMinutes, type, title, notes, playerIds, isOpen } =
@@ -94,6 +98,12 @@ export async function createReservation(
 
   if (error) {
     console.error("[createReservation] create_reservation_admin failed:", { clubId, supabaseError: error });
+    // Comercial v2 / Fase 2 — club suspendido comercialmente. Mensaje
+    // distinto para OWNER (contexto comercial) y ADMIN (sin mención de
+    // pago) — ver shared/commercial/access.ts.
+    if (error.code === COMMERCIAL_ACCESS_DENIED_CODE) {
+      return { error: getCommercialBlockedMessage(role) };
+    }
     return { error: mapUpdateReservationError(error) };
   }
 
