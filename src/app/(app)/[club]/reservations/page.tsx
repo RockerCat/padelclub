@@ -197,6 +197,18 @@ export default async function PlayerReservationsPage({
   // internamente, pero es idempotente y barata, nunca duplica nada.
   await supabase.rpc("expire_pending_reservations", { p_club_id: club.id });
 
+  // Comercial v2 / Fase 4 — gate proactivo de "nueva reserva" para PLAYER,
+  // mismo patrón que admin/tournaments/page.tsx: solo controla si el
+  // calendario abre el formulario o el modal de bloqueo; la autoridad real
+  // sigue siendo _require_commercial_access dentro de create_reservation_player,
+  // sin cambios. Por defecto true (nunca bloquea) si la RPC falla.
+  // get_club_commercial_access added in 20261115000006, not yet in
+  // generated types until `npm run types:generate` runs against a DB with
+  // this migration applied.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: commercialRows } = await (supabase.rpc as any)("get_club_commercial_access", { p_club_id: club.id });
+  const canCreateBooking = commercialRows?.[0]?.can_create_booking ?? true;
+
   // ─── Fetch data in parallel ───────────────────────────────────────────────────
   // Privacy-safe: no player names, titles, notes in any of these queries.
   // Blocking query includes CONFIRMED + PENDING so occupied slots are hidden
@@ -374,6 +386,7 @@ export default async function PlayerReservationsPage({
           prefill={prefill}
           focusReservation={focusReservation}
           archived={!!club.archived_at}
+          canCreateBooking={canCreateBooking}
           editingReservation={editingReservation}
         />
       )}

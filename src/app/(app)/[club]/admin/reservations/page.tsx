@@ -12,6 +12,7 @@ import { getClubDurations } from "@/lib/durations";
 import { computeAvailability } from "@/lib/courtDayAvailability";
 import type { RawReservation } from "@/lib/courtDayAvailability";
 import type { DayRangeBlock, DayRangeDay } from "@/components/courts/DayRangeNav";
+import { getCommercialBlockedMessage } from "../../../../../../shared/commercial/access";
 
 interface AdminReservationsPageProps {
   params: Promise<{ club: string }>;
@@ -102,6 +103,22 @@ export default async function AdminReservationsPage({
   // disponibilidad), para que ni el listado de solicitudes ni el calendario
   // sigan mostrando algo que nunca fue aprobado ni rechazado a tiempo.
   await supabase.rpc("expire_pending_reservations", { p_club_id: club.id });
+
+  // Comercial v2 / Fase 4 — gate proactivo de "Nueva reserva", mismo patrón
+  // ya usado por admin/tournaments/page.tsx: solo controla si el botón/click
+  // de creación queda habilitado; la autoridad real sigue siendo
+  // _require_commercial_access dentro de create_reservation_admin, sin
+  // cambios. Por defecto true (nunca bloquea) si la RPC falla — el backend
+  // sigue siendo quien decide de verdad. El mensaje reutiliza
+  // getCommercialBlockedMessage (mismo texto ya usado reactivamente en
+  // actions.ts) — nunca un copy nuevo para OWNER/ADMIN.
+  // get_club_commercial_access added in 20261115000006, not yet in
+  // generated types until `npm run types:generate` runs against a DB with
+  // this migration applied.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: commercialRows } = await (supabase.rpc as any)("get_club_commercial_access", { p_club_id: club.id });
+  const canCreateBooking = commercialRows?.[0]?.can_create_booking ?? true;
+  const commercialBlockedMessage = canCreateBooking ? null : getCommercialBlockedMessage(access.role);
 
   // ─── Fetch courts + reservations in parallel ─────────────────────────────────
   type RawRow = {
@@ -432,6 +449,7 @@ export default async function AdminReservationsPage({
           successMessage,
           closedDays,
           archived: !!club.archived_at,
+          commercialBlockedMessage,
         }}
         availabilityProps={{
           weekDays: agendaWeekDays,
@@ -453,6 +471,7 @@ export default async function AdminReservationsPage({
           minDuration,
           rejectedReservations,
           archived: !!club.archived_at,
+          commercialBlockedMessage,
         }}
       />
     </div>

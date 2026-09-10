@@ -47,6 +47,11 @@ interface AdminAvailabilityViewProps {
   minDuration: number;
   rejectedReservations: RejectedReservation[];
   archived?: boolean; // clubs.archived_at IS NOT NULL — real protection is server-side (create_reservation_admin), this only hides the affordance
+  // Comercial v2 / Fase 4 — non-null cuando get_club_commercial_access
+  // devolvió can_create_booking=false (club suspended). Mismo tratamiento
+  // que `archived`: solo oculta la afordancia de crear, la autoridad real
+  // sigue siendo _require_commercial_access dentro de create_reservation_admin.
+  commercialBlockedMessage?: string | null;
 }
 
 // Hover tooltip only lists this many names before falling back to "+N
@@ -154,6 +159,7 @@ export function AdminAvailabilityView({
   minDuration,
   rejectedReservations,
   archived,
+  commercialBlockedMessage,
 }: AdminAvailabilityViewProps) {
   const router = useRouter();
   const [selectedDate, setSelectedDate] = useState(
@@ -209,7 +215,7 @@ export function AdminAvailabilityView({
   }
 
   function handleSelectAvailable(courtId: string, startTime: string) {
-    if (archived) return; // server (create_reservation_admin) is the real guard — this only stops the affordance
+    if (archived || commercialBlockedMessage) return; // server (create_reservation_admin / _require_commercial_access) is the real guard — this only stops the affordance
     setPanelState({ mode: "create", initialDate: selectedDate, initialCourtId: courtId, initialStartTime: startTime });
   }
 

@@ -155,6 +155,12 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
     trialEndsAt: commercialAccessRow?.trial_ends_at ?? null,
     currentPeriodEnd: commercialAccessRow?.current_period_end ?? null,
   });
+  // Fase 4 — commercialGraceDeadline se muestra abajo con
+  // timeZone: "America/Bogota" explícito: este layout es un Server
+  // Component, así que sin esa opción toLocaleDateString usaría la zona del
+  // proceso servidor (UTC en Vercel), no la de Bogotá, y podía mostrar un
+  // día distinto cerca de la medianoche (mismo patrón que
+  // RecentActivitySection.tsx/SportEvolutionSection.tsx).
 
   // Pill de suscripción (sidebar) — solo para el OWNER real, nunca para
   // SUPERADMIN con acceso elevado (a diferencia de los banners arriba, que
@@ -232,7 +238,7 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
                   <p className="font-medium text-amber-200">Tu período gratuito terminó</p>
                   <p className="mt-0.5">
                     Puedes seguir usando todas las funciones hasta el{" "}
-                    {commercialGraceDeadline?.toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" })}.
+                    {commercialGraceDeadline?.toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric", timeZone: "America/Bogota" })}.
                     Realiza el pago para mantener activo tu club.
                   </p>
                 </div>
@@ -253,7 +259,7 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
                   <p className="font-medium text-amber-200">Tienes un pago pendiente</p>
                   <p className="mt-0.5">
                     Todavía tienes acceso completo hasta el{" "}
-                    {commercialGraceDeadline?.toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" })}
+                    {commercialGraceDeadline?.toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric", timeZone: "America/Bogota" })}
                     . Realiza el pago para evitar que tu club se suspenda.
                   </p>
                 </div>

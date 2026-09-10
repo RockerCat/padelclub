@@ -13,8 +13,11 @@
 // lógica pura de TypeScript, y por eso se cubre aquí, es la selección de
 // copy por rol cuando el backend rechaza — shared/commercial/access.ts.
 
+import { readFileSync } from "fs";
+import { join } from "path";
 import {
   COMMERCIAL_ACCESS_DENIED_CODE,
+  PLAYER_COMMERCIAL_BLOCKED_TITLE,
   PLAYER_COMMERCIAL_BLOCKED_MESSAGE,
   OWNER_COMMERCIAL_BLOCKED_MESSAGE,
   ADMIN_COMMERCIAL_BLOCKED_MESSAGE,
@@ -51,18 +54,108 @@ assertEqual(getCommercialBlockedMessage(null), PLAYER_COMMERCIAL_BLOCKED_MESSAGE
 assertEqual(getCommercialBlockedMessage(undefined), PLAYER_COMMERCIAL_BLOCKED_MESSAGE, "rol desconocido (undefined) cae al mensaje neutral");
 assertEqual(getCommercialBlockedMessage("SUPERADMIN"), PLAYER_COMMERCIAL_BLOCKED_MESSAGE, "rol no operativo cae al mensaje neutral");
 
-const forbiddenWordsForPlayerAndAdmin = ["pago", "deuda", "factura", "wompi", "vencid"];
+const forbiddenWordsForPlayerAndAdmin = ["pago", "deuda", "factura", "wompi", "vencid", "suscrip", "owner", "propietario"];
 for (const word of forbiddenWordsForPlayerAndAdmin) {
   assertEqual(
     PLAYER_COMMERCIAL_BLOCKED_MESSAGE.toLowerCase().includes(word),
     false,
     `mensaje PLAYER nunca menciona "${word}"`
   );
+}
+// ADMIN sí debe poder mencionar "propietario"/"owner" (se le pide contactarlo)
+// — solo se excluyen las palabras de pago/deuda de esa lista para ADMIN.
+for (const word of ["pago", "deuda", "factura", "wompi", "vencid"]) {
   assertEqual(
     ADMIN_COMMERCIAL_BLOCKED_MESSAGE.toLowerCase().includes(word),
     false,
     `mensaje ADMIN nunca menciona "${word}"`
   );
+}
+
+// ─── Fase 4 — Cierre UX: gate proactivo de Reservas ────────────────────────
+// La regla de negocio (can_create_booking) sigue siendo 100% SQL — esto solo
+// ancla, por texto fuente, que el frontend (a) usa el entitlement central
+// sin derivarlo de fechas/status, y (b) el modal PLAYER reutiliza el copy
+// pactado verbatim, nunca un duplicado hardcodeado que pueda divergir.
+
+assertEqual(PLAYER_COMMERCIAL_BLOCKED_TITLE, "Reservas temporalmente no disponibles", "título PLAYER pactado, exacto");
+assertEqual(
+  PLAYER_COMMERCIAL_BLOCKED_MESSAGE,
+  "En este momento el agendamiento de canchas no está disponible en este club. Para realizar una reserva, comunícate directamente con el club.",
+  "texto PLAYER pactado, exacto"
+);
+
+{
+  const playerCalendarPath = join(
+    __dirname,
+    "..",
+    "src",
+    "app",
+    "(app)",
+    "[club]",
+    "reservations",
+    "PlayerAvailabilityCalendar.tsx"
+  );
+  const playerCalendarText = readFileSync(playerCalendarPath, "utf8");
+
+  assertEqual(
+    playerCalendarText.includes("PLAYER_COMMERCIAL_BLOCKED_TITLE") && playerCalendarText.includes("PLAYER_COMMERCIAL_BLOCKED_MESSAGE"),
+    true,
+    "PlayerAvailabilityCalendar reutiliza las constantes compartidas (nunca un copy duplicado)"
+  );
+  assertEqual(
+    playerCalendarText.includes("{PLAYER_COMMERCIAL_BLOCKED_TITLE}") && playerCalendarText.includes("{PLAYER_COMMERCIAL_BLOCKED_MESSAGE}"),
+    true,
+    "el modal renderiza esas constantes como expresión JSX, no como texto hardcodeado"
+  );
+  assertEqual(/>\s*Entendido\s*</.test(playerCalendarText), true, "el botón del modal dice exactamente 'Entendido'");
+  assertEqual(
+    playerCalendarText.includes("!editingReservation && !canCreateBooking"),
+    true,
+    "el gate proactivo nunca aplica a reprogramar una reserva ya existente (solo a crear una nueva)"
+  );
+}
+
+{
+  const playerPagePath = join(__dirname, "..", "src", "app", "(app)", "[club]", "reservations", "page.tsx");
+  const adminPagePath = join(__dirname, "..", "src", "app", "(app)", "[club]", "admin", "reservations", "page.tsx");
+  for (const [label, path] of [
+    ["reservations/page.tsx (PLAYER)", playerPagePath],
+    ["admin/reservations/page.tsx (OWNER/ADMIN)", adminPagePath],
+  ] as const) {
+    const text = readFileSync(path, "utf8");
+    assertEqual(
+      text.includes('"get_club_commercial_access"') && text.includes("can_create_booking"),
+      true,
+      `${label} obtiene can_create_booking de get_club_commercial_access (nunca derivado de fechas/status)`
+    );
+  }
+}
+
+{
+  const weekCalendarPath = join(__dirname, "..", "src", "app", "(app)", "[club]", "admin", "reservations", "WeekCalendar.tsx");
+  const adminAvailabilityPath = join(
+    __dirname,
+    "..",
+    "src",
+    "app",
+    "(app)",
+    "[club]",
+    "admin",
+    "reservations",
+    "AdminAvailabilityView.tsx"
+  );
+  for (const [label, path] of [
+    ["WeekCalendar.tsx", weekCalendarPath],
+    ["AdminAvailabilityView.tsx", adminAvailabilityPath],
+  ] as const) {
+    const text = readFileSync(path, "utf8");
+    assertEqual(
+      text.includes("archived || commercialBlockedMessage"),
+      true,
+      `${label} bloquea la creación proactivamente junto con 'archived' (mismo patrón ya existente)`
+    );
+  }
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

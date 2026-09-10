@@ -22,6 +22,10 @@ import {
   useDismissedReservationIds,
   usePlayerReservationsRealtime,
 } from "@/components/reservations/PlayerActivity";
+import {
+  PLAYER_COMMERCIAL_BLOCKED_TITLE,
+  PLAYER_COMMERCIAL_BLOCKED_MESSAGE,
+} from "../../../../../shared/commercial/access";
 
 // Shared by the price summary in the request modal and the frozen price
 // shown on already-created requests — one formatting rule, not two.
@@ -91,6 +95,15 @@ interface PlayerAvailabilityCalendarProps {
   // clubs.archived_at IS NOT NULL — real protection is server-side
   // (create_reservation_player), this only hides the affordance.
   archived?: boolean;
+  // Comercial v2 / Fase 4 — get_club_commercial_access(club_id).can_create_booking,
+  // ya resuelto server-side (page.tsx) desde el entitlement central; nunca
+  // derivado acá de fechas/status. false solo cuando el club está
+  // 'suspended' — real protection sigue siendo _require_commercial_access
+  // dentro de create_reservation_player, esto solo evita abrir el
+  // formulario y muestra el modal de bloqueo en su lugar. Nunca aplica a
+  // editar una reserva ya existente (updateMyReservation no pasa por este
+  // guard). Default true (nunca bloquea) si no se pasa.
+  canCreateBooking?: boolean;
   // Non-null only when "Editar reserva" was clicked (PlayerActivity.tsx)
   // AND page.tsx re-validated the reservation still qualifies (creator,
   // pending/confirmed, 2+ hours out) — switches the next slot click into
@@ -502,6 +515,41 @@ function RequestModal({
   );
 }
 
+// Comercial v2 / Fase 4 — gate proactivo de "nueva reserva" para PLAYER en
+// un club suspendido. Reutiliza PLAYER_COMMERCIAL_BLOCKED_TITLE/MESSAGE
+// (shared/commercial/access.ts) verbatim — nunca un copy nuevo/duplicado,
+// nunca menciona pago/deuda/vencimiento/suscripción/OWNER (ver ese archivo
+// para el porqué). Mismo shell visual que RequestModal (fixed inset-0 +
+// backdrop + bg-brand-surface), pero de solo-lectura: un único botón
+// "Entendido" que cierra, sin formulario ni acción alguna.
+function CommercialBlockedModal({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-[500] flex items-end md:items-center justify-center">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full md:w-[420px] bg-brand-surface border border-white/10 rounded-t-2xl md:rounded-2xl p-5 flex flex-col gap-4">
+        <h2 className="text-base font-bold text-white">{PLAYER_COMMERCIAL_BLOCKED_TITLE}</h2>
+        <p className="text-sm text-brand-muted leading-relaxed">{PLAYER_COMMERCIAL_BLOCKED_MESSAGE}</p>
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full py-3 rounded-xl font-semibold text-sm transition-opacity"
+          style={{ backgroundColor: "var(--club-primary, #00ffff)", color: "#001A24" }}
+        >
+          Entendido
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 // AvailabilityLegend and CourtAvailabilityCard now live in
 // @/components/courts/CourtAvailabilityTimeline, shared with the admin
@@ -585,12 +633,14 @@ export function PlayerAvailabilityCalendar({
   prefill,
   focusReservation,
   archived,
+  canCreateBooking = true,
   editingReservation,
 }: PlayerAvailabilityCalendarProps) {
   const router = useRouter();
   const [selectedDate, setSelectedDate] = useState(defaultSelectedDate);
   const [selectedDuration, setSelectedDuration] = useState(prefill?.duration ?? allowedDurations[0] ?? 60);
   const [modalSlot, setModalSlot] = useState<ModalSlot | null>(null);
+  const [showCommercialBlocked, setShowCommercialBlocked] = useState(false);
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
   const durations = durationOptions(allowedDurations);
 
@@ -912,6 +962,15 @@ export function PlayerAvailabilityCalendar({
                       groupByDayPart
                       onSelectSlot={(startTime) => {
                         if (archived) return; // server (create_reservation_player/update_reservation) is the real guard — this only stops the affordance
+                        // Comercial v2 / Fase 4 — solo bloquea CREAR una
+                        // reserva nueva, nunca reprogramar una ya existente
+                        // (editingReservation): update_reservation no pasa
+                        // por _require_commercial_access, así que este gate
+                        // tampoco debe aplicarle.
+                        if (!editingReservation && !canCreateBooking) {
+                          setShowCommercialBlocked(true);
+                          return;
+                        }
                         setModalSlot({ courtId: court.id, courtName: court.name, date: selectedDate, startTime, duration: selectedDuration });
                       }}
                       onSelectOccupied={(startTime) => {
@@ -975,6 +1034,8 @@ export function PlayerAvailabilityCalendar({
           onSuccess={handleSuccess}
         />
       )}
+
+      {showCommercialBlocked && <CommercialBlockedModal onClose={() => setShowCommercialBlocked(false)} />}
     </div>
   );
 }

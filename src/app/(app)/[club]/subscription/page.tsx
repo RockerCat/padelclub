@@ -11,9 +11,15 @@ interface SubscriptionPageProps {
   params: Promise<{ club: string }>;
 }
 
+// Fase 4 — timeZone explícito: esta página es un Server Component (corre
+// en el runtime del servidor, no en el navegador del OWNER) y toda fecha
+// acá es comercial (trial/período/gracia) — sin timeZone, toLocaleDateString
+// usa la zona del proceso servidor (UTC en Vercel), no la de Bogotá, y
+// podía mostrar un día distinto cerca de la medianoche (mismo patrón ya
+// usado en RecentActivitySection.tsx/SportEvolutionSection.tsx).
 function formatDate(iso: string | null) {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" });
+  return new Date(iso).toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric", timeZone: "America/Bogota" });
 }
 
 function formatMoney(amount: number | null, currency: string | null) {

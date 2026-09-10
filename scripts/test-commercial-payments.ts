@@ -192,6 +192,126 @@ assertEqual(
   "cancelled → unrecognized (sin decisión de producto, nunca banner)"
 );
 
+// ─── Fase 4 — condiciones de frontera exactas (off-by-one, < vs <=) ────────
+// deriveCommercialPhase usa `now <= trialEndsAt` (nunca `<`) — en el
+// instante EXACTO de trial_ends_at, el trial real todavía cuenta como
+// vigente, nunca como gracia. Determinista: `now` es un parámetro explícito
+// acá, así que esto se prueba sin ninguna condición de carrera (a
+// diferencia de la RPC SQL real, que sí depende del wall-clock del server —
+// ver la verificación en vivo de esta misma fase, reportada aparte).
+const TRIAL_ENDS_EXACT = "2026-09-10T12:00:00.000Z";
+assertEqual(
+  deriveCommercialPhase({ status: "trialing", trialEndsAt: TRIAL_ENDS_EXACT, currentPeriodEnd: null, now: new Date(TRIAL_ENDS_EXACT) })
+    .phase,
+  "trial",
+  "now === trial_ends_at exacto → todavía trial, no trial_grace (now <= trialEndsAt)"
+);
+assertEqual(
+  deriveCommercialPhase({
+    status: "trialing",
+    trialEndsAt: TRIAL_ENDS_EXACT,
+    currentPeriodEnd: null,
+    now: new Date(new Date(TRIAL_ENDS_EXACT).getTime() + 1),
+  }).phase,
+  "trial_grace",
+  "now === trial_ends_at + 1ms → ya trial_grace"
+);
+
+// La RPC SQL (run_commercial_lifecycle_transitions) transiciona
+// trialing→suspended con `trial_ends_at + interval '14 days' < now()` — el
+// deadline de gracia calculado por deriveCommercialPhase debe ser
+// EXACTAMENTE ese mismo instante, para que "trial_grace" (frontend) y "aún
+// no suspendido" (backend) dejen de ser ciertos en el mismo momento, nunca
+// uno antes que el otro.
+{
+  // trialEndsAt en el pasado respecto a `now` (a diferencia de
+  // TRIAL_ENDS_EXACT arriba, que es igual a `now` y por eso da fase
+  // "trial", sin graceDeadline) — acá sí cae en la rama trial_grace.
+  const trialEndsPast = "2026-09-05T12:00:00.000Z";
+  assertEqual(
+    deriveCommercialPhase({ status: "trialing", trialEndsAt: trialEndsPast, currentPeriodEnd: null, now: NOW }).graceDeadline?.toISOString(),
+    new Date(new Date(trialEndsPast).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+    "graceDeadline coincide exactamente con el umbral que usa la RPC (trial_ends_at + 14 días)"
+  );
+}
+
+// ─── Fase 4 — la RPC de cron usa `<` estricto, nunca `<=` (auditoría de texto) ──
+// No hay Postgres real en este entorno (ver CLAUDE.md/convención de este
+// repo) — esto ancla el operador exacto de cada transición leyendo el texto
+// real de la migración aplicada, para que un cambio futuro de `<` a `<=`
+// (que correría la ventana de gracia un instante) rompa este test en vez de
+// pasar desapercibido. La verificación funcional real (¿transiciona cuando
+// debe?) se hizo en vivo contra la RPC real en un club de QA — ver el
+// reporte de Fase 4.
+{
+  const migrationPath = join(__dirname, "..", "supabase", "migrations", "20261115000007_commercial_payments.sql");
+  const migrationText = readFileSync(migrationPath, "utf8");
+  assertEqual(
+    migrationText.includes("WHERE cs.status = 'active' AND cs.current_period_end < now();"),
+    true,
+    "active→past_due usa current_period_end < now() estricto"
+  );
+  assertEqual(
+    migrationText.includes("AND cs.trial_ends_at + interval '14 days' < now();"),
+    true,
+    "trialing(gracia)→suspended usa trial_ends_at + 14 días < now() estricto"
+  );
+  assertEqual(
+    migrationText.includes("AND cs.current_period_end + interval '30 days' < now();"),
+    true,
+    "past_due→suspended usa current_period_end + 30 días < now() estricto"
+  );
+}
+
+// ─── Fase 4 — entitlement real (SQL, ancla de texto) ───────────────────────
+// El booleano real de acceso (v_allowed) vive solo en SQL — no hay (ni debe
+// haber, para no duplicar la regla) un espejo en TypeScript. Se ancla por
+// texto contra la migración aplicada: cualquier status "IS DISTINCT FROM
+// 'suspended'" permite (legacy sin fila, trialing, trialing en gracia,
+// active, past_due, e incluso 'cancelled' aunque ningún camino lo produzca
+// hoy — ver el comentario de cabecera de 20261115000006) — solo 'suspended'
+// bloquea. Confirma también que las tres únicas funciones que pueden crear
+// una reserva o un torneo (ver CLAUDE.md → Commercial Subscription
+// Principles) llaman a este guard.
+{
+  const entitlementPath = join(__dirname, "..", "supabase", "migrations", "20261115000006_commercial_entitlement.sql");
+  const entitlementText = readFileSync(entitlementPath, "utf8");
+  const paymentsMigrationText = readFileSync(
+    join(__dirname, "..", "supabase", "migrations", "20261115000007_commercial_payments.sql"),
+    "utf8"
+  );
+
+  assertEqual(
+    entitlementText.includes("IF v_status = 'suspended' THEN\n    RAISE EXCEPTION 'commercial_access_denied' USING ERRCODE = 'P0008';"),
+    true,
+    "_require_commercial_access bloquea únicamente cuando status = 'suspended'"
+  );
+  assertEqual(
+    entitlementText.includes("IF NOT FOUND THEN\n    RETURN;\n  END IF;") &&
+      entitlementText.indexOf("IF NOT FOUND THEN\n    RETURN;\n  END IF;") < entitlementText.indexOf("v_status = 'suspended'"),
+    true,
+    "club legacy sin fila (NOT FOUND) permite ANTES de siquiera evaluar suspended — legacy allow real"
+  );
+  // get_club_commercial_access vigente es la de 00007 (misma regla,
+  // extendida solo con current_period_end en el RETURNS TABLE — ver su
+  // propio comentario de cabecera "byte-idéntica a Fase 2").
+  assertEqual(
+    paymentsMigrationText.includes("v_allowed := (v_status IS DISTINCT FROM 'suspended');"),
+    true,
+    "get_club_commercial_access (vigente, 00007) usa la misma regla IS DISTINCT FROM 'suspended'"
+  );
+  for (const fn of ["create_reservation_player", "create_reservation_admin", "create_tournament"]) {
+    const fnStart = entitlementText.indexOf(`FUNCTION public.${fn}(`);
+    const nextFnStart = entitlementText.indexOf("CREATE OR REPLACE FUNCTION", fnStart + 1);
+    const fnBody = entitlementText.slice(fnStart, nextFnStart === -1 ? undefined : nextFnStart);
+    assertEqual(
+      fnStart > -1 && fnBody.includes("_require_club_not_archived") && fnBody.includes("_require_commercial_access"),
+      true,
+      `${fn} llama _require_commercial_access (después de _require_club_not_archived)`
+    );
+  }
+}
+
 // ─── Regla de inicio de período pagado (Ninja #1) ──────────────────────────
 // IMPORTANTE: esto es un ESPEJO en TypeScript de la regla que en realidad
 // vive y se aplica en SQL (process_wompi_transaction_event,
