@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isPlatformAdmin } from "@/lib/platformAdmin";
 import { Badge } from "@/components/ui";
 import { getClubEntryPath } from "@/lib/utils/navigation";
-import { LogOut, Plus, CheckCircle2, ShieldCheck, ChevronDown } from "lucide-react";
+import { LogOut, Plus, ShieldCheck } from "lucide-react";
 import { ExploreSection } from "./ExploreSection";
 import type { DirectoryClub, MemberInfo } from "./ExploreSection";
 import { NotificationBell } from "@/components/layout/NotificationBell";
@@ -39,20 +39,12 @@ function getInitials(name: string) {
   return name.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
 }
 
-export default async function ClubsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ welcome?: string }>;
-}) {
-  const { welcome } = await searchParams;
-  const showWelcome = welcome === "1";
-
+export default async function ClubsPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   let memberships: MembershipRow[] = [];
   let lastClubId: string | null = null;
-  let accountType: string | null = null;
   let platformAdmin = false;
   let notificationCount = 0;
   let notificationItems: Awaited<ReturnType<typeof getRecentNotifications>> = [];
@@ -77,7 +69,6 @@ export default async function ClubsPage({
     memberships = (membershipsResult.data ?? []) as unknown as MembershipRow[];
     const myProfileRow = profileResult.data?.[0] ?? null;
     lastClubId = myProfileRow?.last_club_id ?? null;
-    accountType = myProfileRow?.account_type ?? null;
     platformAdmin = isAdmin;
     notificationCount = unreadCount;
     notificationItems = recentNotifications;
@@ -85,11 +76,6 @@ export default async function ClubsPage({
 
   const hasClubs = memberships.length > 0;
   const isOwner  = memberships.some((m) => m.role === "OWNER");
-  // welcome=1 renders the OWNER "crea tu primer club" onboarding — never
-  // shown to an account already known to be PLAYER (account_type is the
-  // authoritative, server-side signal; a client-supplied ?welcome=1 alone
-  // is never trusted for this), even if it's manually typed into the URL.
-  const isWelcomeMode = showWelcome && !!user && !hasClubs && accountType !== "PLAYER";
   // A logged-in account with zero active club memberships is, by
   // construction, never OWNER or ADMIN here (both roles always imply an
   // active club_members row) — it's either an established PLAYER with no
@@ -99,18 +85,15 @@ export default async function ClubsPage({
   // explicitly rather than left to fall through unnoticed.
   const isPlayerEmptyState = !!user && !hasClubs && !platformAdmin;
 
-  // Skip directory fetch when in welcome mode — not needed
   const [directoryClubs, pendingRequestClubIds] = await Promise.all([
-    isWelcomeMode
-      ? Promise.resolve([] as DirectoryClub[])
-      : supabase
-          .from("clubs")
-          .select("id, name, slug, visibility, description, logo_url, whatsapp, city, state, latitude, longitude")
-          .eq("is_active", true)
-          .is("archived_at", null)
-          .order("name", { ascending: true })
-          .then(({ data }) => (data ?? []) as unknown as DirectoryClub[]),
-    isWelcomeMode || !user
+    supabase
+      .from("clubs")
+      .select("id, name, slug, visibility, description, logo_url, whatsapp, city, state, latitude, longitude")
+      .eq("is_active", true)
+      .is("archived_at", null)
+      .order("name", { ascending: true })
+      .then(({ data }) => (data ?? []) as unknown as DirectoryClub[]),
+    !user
       ? Promise.resolve([] as string[])
       : supabase
           .from("club_join_requests")
@@ -179,47 +162,16 @@ export default async function ClubsPage({
                 Iniciar sesión
               </Link>
               <RegisterMenu
-                align="right"
+                playerOnly
                 triggerClassName="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-brand-primary text-brand-bg hover:bg-brand-primary/90 transition-colors"
-                triggerContent={
-                  <>
-                    Registrarme
-                    <ChevronDown className="w-3.5 h-3.5" />
-                  </>
-                }
+                triggerContent="Registrarme"
               />
             </div>
           )}
         </div>
       </div>
 
-      {/* ── Welcome mode: single-focus onboarding ───────────────────────────── */}
-      {isWelcomeMode ? (
-        <div className="max-w-sm mx-auto px-4 py-20 flex flex-col items-center text-center gap-8">
-          <div className="w-16 h-16 rounded-2xl bg-green-500/10 border border-green-500/20 flex items-center justify-center">
-            <CheckCircle2 className="w-8 h-8 text-green-400" />
-          </div>
-
-          <div>
-            <h1 className="text-2xl font-bold text-white mb-2">¡Cuenta creada!</h1>
-            <p className="text-sm text-brand-muted leading-relaxed">
-              Ahora crea tu primer club para comenzar a operar.
-            </p>
-          </div>
-
-          <Link
-            href="/clubs/create"
-            className="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl bg-brand-primary text-brand-bg text-sm font-semibold hover:bg-brand-primary/90 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Crear mi club
-          </Link>
-        </div>
-
-      ) : (
-
-        /* ── Normal mode ────────────────────────────────────────────────────── */
-        <div className="py-8 md:py-12">
+      <div className="py-8 md:py-12">
 
             {/* ── Mis clubes (authenticated, with active memberships) ─────── */}
             {user && hasClubs && (
@@ -351,8 +303,7 @@ export default async function ClubsPage({
               />
             </div>
 
-        </div>
-      )}
+      </div>
 
     </div>
   );

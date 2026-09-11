@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, forwardRef } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { Search, Lock, ChevronDown, ChevronRight } from "lucide-react";
+import { Search, Lock, ChevronRight } from "lucide-react";
 import { getClubEntryPath } from "@/lib/utils/navigation";
 import { CLUB_PRIMARY_COLOR } from "@/lib/constants/clubTheme";
 import { clubRoleLabel } from "@/lib/roleLabels";
@@ -565,14 +565,9 @@ export function ExploreSection({ clubs, memberMap, pendingRequestClubIds, isAuth
               Iniciar sesión
             </Link>
             <RegisterMenu
-              align="right"
+              playerOnly
               triggerClassName="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold bg-brand-primary text-brand-bg hover:bg-brand-primary/90 transition-colors"
-              triggerContent={
-                <>
-                  Registrarme
-                  <ChevronDown className="w-3.5 h-3.5" />
-                </>
-              }
+              triggerContent="Registrarme"
             />
           </div>
         </div>

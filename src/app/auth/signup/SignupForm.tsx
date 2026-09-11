@@ -21,7 +21,7 @@ export type InviteBranding = {
 interface SignupFormProps {
   inviteToken?: string;
   branding?: InviteBranding | null;
-  /** e.g. "/alex-club-padel?intent=join-club" — where to land after signup/confirmation, instead of the generic "Crear mi club" welcome screen. Ignored (and the generic flow used) if not a safe in-app path. */
+  /** e.g. "/alex-club-padel?intent=join-club" — where to land after signup/confirmation, instead of the generic `/clubs` directory. Ignored (and the generic flow used) if not a safe in-app path. */
   next?: string;
 }
 
@@ -140,10 +140,12 @@ export function SignupForm({ inviteToken, branding, next: rawNext }: SignupFormP
       // Session present → email confirmation disabled, user is active immediately.
       // An invite always wins (its own dedicated destination, /invite/<token>
       // — never lost here just because email confirmation happens to be off),
-      // then next (e.g. returning to join a club), then the generic "Crear mi
-      // club" welcome screen only when neither applies.
+      // then next (e.g. returning to join a club), then the generic /clubs
+      // directory only when neither applies — never a self-service "crea tu
+      // club" welcome screen, which no longer exists (public self-registration
+      // is PLAYER-only; see CLAUDE.md → Funnel Comercial Principles).
       if (data.session) {
-        router.push(inviteToken ? `/invite/${inviteToken}` : next ?? "/clubs?welcome=1");
+        router.push(inviteToken ? `/invite/${inviteToken}` : next ?? "/clubs");
         return;
       }
 
@@ -195,7 +197,7 @@ export function SignupForm({ inviteToken, branding, next: rawNext }: SignupFormP
                 <p className="text-sm text-brand-muted">
                   Te enviamos un enlace de confirmación a{" "}
                   <span className="text-white font-medium">{email}</span>.
-                  {" "}Después de confirmar podrás iniciar sesión y crear o unirte a clubes.
+                  {" "}Después de confirmar podrás iniciar sesión y unirte a clubes.
                 </p>
               )}
             </div>

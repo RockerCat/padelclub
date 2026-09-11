@@ -9,38 +9,46 @@ import { cn } from "@/lib/utils/cn";
 // Single "Registrarme" CTA, used everywhere the landing/marketing chrome
 // used to link straight to "Crear mi club" (Navbar, Hero, Audience's
 // closing CTA) — never three separate copies of this same session check.
-// Opens a small menu with exactly two options, each reusing an existing,
-// unmodified flow:
+//
+// Public self-registration as club owner is no longer part of the
+// commercial model (see CLAUDE.md → Funnel Comercial Principles — owners
+// now go exclusively through /demo → lead → Entrega de Club →
+// claim_club()). Every real caller in the app today passes `playerOnly`
+// (see below) — the two-option dropdown described next (with its
+// "Propietario de club" branch) is kept working and untouched for now
+// since removing it outright wasn't requested, but as of this change it
+// has no live, real caller anywhere in the codebase.
+//
+// The dropdown, when rendered, offers exactly two options, each reusing an
+// existing, unmodified flow:
 //
 // - "Como jugador" → the generic signup form, with an explicit
-//   `next=/clubs` so it lands straight on the club explorer — never
-//   SignupForm's own "/clubs?welcome=1" default, which is styled as the
-//   OWNER "crea tu primer club" onboarding and must never be shown to a
-//   PLAYER-intent signup (see CLAUDE.md → Role Philosophy: the account has
-//   no type yet at this point, but the entry point already knows the
-//   intent is PLAYER).
+//   `next=/clubs` so it lands straight on the club explorer.
 // - "Propietario de club" → the exact same signup form, but with
 //   `next=/clubs/create` — SignupForm/`/auth/callback` already support an
-//   explicit `next` to skip the generic welcome screen (see SignupForm's
-//   own docstring: "where to land after signup/confirmation, instead of
-//   the generic welcome screen"); this only supplies that existing,
-//   already-safe (getSafeInternalPath allows any in-app path) parameter,
-//   it does not add a new mechanism.
+//   explicit `next` to skip the generic `/clubs` landing; this only
+//   supplies that existing, already-safe (getSafeInternalPath allows any
+//   in-app path) parameter, it does not add a new mechanism.
 //
 // When a session already exists (mirrors the exact check the old Navbar
 // CTA used to run itself), both options skip signup entirely and go
 // straight to the real destination (/clubs, /clubs/create) — same logic,
 // now centralized here instead of duplicated per caller.
+//
+// `playerOnly` renders a single direct link to the exact same PLAYER
+// destination (`playerHref`) the dropdown's "Como jugador" option already
+// resolves to — no dropdown, no owner option, no new route.
 interface RegisterMenuProps {
   triggerContent: React.ReactNode;
   triggerClassName: string;
   align?: "left" | "right";
+  playerOnly?: boolean;
 }
 
 const SIGNUP_PLAYER_HREF = `/auth/signup?next=${encodeURIComponent("/clubs")}`;
 const SIGNUP_OWNER_HREF = `/auth/signup?next=${encodeURIComponent("/clubs/create")}`;
 
-export function RegisterMenu({ triggerContent, triggerClassName, align = "left" }: RegisterMenuProps) {
+export function RegisterMenu({ triggerContent, triggerClassName, align = "left", playerOnly = false }: RegisterMenuProps) {
   const [open, setOpen] = useState(false);
   const [playerHref, setPlayerHref] = useState(SIGNUP_PLAYER_HREF);
   const [ownerHref, setOwnerHref] = useState(SIGNUP_OWNER_HREF);
@@ -57,7 +65,7 @@ export function RegisterMenu({ triggerContent, triggerClassName, align = "left" 
   }, []);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || playerOnly) return;
     function handleClickOutside(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
@@ -70,7 +78,15 @@ export function RegisterMenu({ triggerContent, triggerClassName, align = "left" 
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [open]);
+  }, [open, playerOnly]);
+
+  if (playerOnly) {
+    return (
+      <Link href={playerHref} className={triggerClassName}>
+        {triggerContent}
+      </Link>
+    );
+  }
 
   return (
     <div ref={ref} className="relative inline-block">

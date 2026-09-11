@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { LayoutDashboard, ClipboardList, Search, Check, ChevronDown } from "lucide-react";
-import { RegisterMenu } from "./RegisterMenu";
+import { LayoutDashboard, ClipboardList, Search, Check } from "lucide-react";
 import { MARKETING_WA_URL as WA_URL } from "@/lib/constants/marketingWhatsapp";
 
 const profiles = [
@@ -142,19 +141,17 @@ export default function Audience() {
             </h3>
             <p className="mx-auto mb-10 max-w-xl text-lg leading-relaxed text-brand-muted">
               MiPadelClub reúne administración, competencia y comunidad en una sola plataforma — para que tu club
-              opere mejor y tus jugadores quieran volver cada semana.
+              opere mejor y tus jugadores quieran volver cada semana. Conoce Mi Pádel Club en una demo y descubre
+              cómo podemos ayudarte a gestionar tu club: cuando tu club esté listo y lo actives, tendrás 30 días
+              para probarlo sin costo.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3 mb-5">
-              <RegisterMenu
-                align="left"
-                triggerClassName="inline-flex items-center gap-2 rounded-xl bg-brand-primary px-7 py-3.5 text-base font-semibold text-brand-bg shadow-lg shadow-brand-primary/20 transition-colors hover:bg-brand-primary/90"
-                triggerContent={
-                  <>
-                    Registrarme
-                    <ChevronDown className="h-4 w-4" />
-                  </>
-                }
-              />
+              <Link
+                href="/demo"
+                className="inline-flex items-center gap-2 rounded-xl bg-brand-primary px-7 py-3.5 text-base font-semibold text-brand-bg shadow-lg shadow-brand-primary/20 transition-colors hover:bg-brand-primary/90"
+              >
+                Solicitar una demo
+              </Link>
               <Link
                 href="/clubs"
                 className="inline-flex items-center rounded-xl border border-white/20 px-7 py-3.5 text-base font-semibold text-white transition-colors hover:bg-white/5"

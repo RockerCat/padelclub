@@ -204,9 +204,11 @@ export default function Hero() {
             {/* Primary CTA — sales-assisted onboarding: a demo request, never
                 a self-service form, is the commercial entry point for club
                 owners. Plain Link so /demo is directly shareable from
-                Instagram/Facebook/WhatsApp/email/campaigns. Self-service
-                (RegisterMenu → /auth/signup, /clubs/create) still exists and
-                still works — it's simply no longer the Hero's primary CTA. */}
+                Instagram/Facebook/WhatsApp/email/campaigns. Public
+                self-registration is PLAYER-only now (see CLAUDE.md → Funnel
+                Comercial Principles) — every RegisterMenu call site across
+                the app uses its playerOnly variant, so this Hero never even
+                needed to render RegisterMenu itself. */}
             <div className="mt-10 flex flex-col sm:flex-row sm:items-center gap-4 max-w-[460px]">
               <Link
                 href="/demo"
