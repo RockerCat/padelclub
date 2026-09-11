@@ -26,6 +26,12 @@ type MembershipRow = {
     name: string;
     slug: string;
     logo_url: string | null;
+    // Estado operativo de plataforma (SUPERADMIN "Desactivar club") — un
+    // concepto completamente separado del estado comercial (nunca
+    // club_subscriptions/entitlement). "Mis clubes" sigue mostrando estos
+    // clubes a propósito (pantalla informativa), solo cambia su
+    // presentación — ver el render de la tarjeta más abajo.
+    is_active: boolean;
   };
 };
 
@@ -55,7 +61,7 @@ export default async function ClubsPage({
     const [membershipsResult, profileResult, isAdmin, unreadCount, recentNotifications] = await Promise.all([
       supabase
         .from("club_members")
-        .select("role, clubs!inner(id, name, slug, logo_url)")
+        .select("role, clubs!inner(id, name, slug, logo_url, is_active)")
         .eq("profile_id", user.id)
         .eq("is_active", true)
         .order("joined_at", { ascending: true }),
@@ -227,14 +233,14 @@ export default async function ClubsPage({
                         const entryPath = getClubEntryPath(club.slug, role);
                         const initials  = getInitials(club.name);
                         const isLast    = club.id === lastClubId;
+                        // Estado operativo de plataforma (clubs.is_active) —
+                        // nunca comercial. Solo cambia presentación: la
+                        // tarjeta sigue visible, pero deja de invitar a
+                        // entrar (ver el branching Link/div más abajo).
+                        const isDeactivated = !club.is_active;
 
-                        return (
-                          <Link
-                            key={club.id}
-                            href={entryPath}
-                            style={{ "--card-primary": CLUB_PRIMARY_COLOR } as React.CSSProperties}
-                            className="flex items-center gap-4 px-5 py-4 rounded-2xl bg-brand-surface border border-white/10 hover:border-[var(--card-primary)] hover:bg-[color-mix(in_srgb,var(--card-primary)_6%,transparent)] transition-colors group"
-                          >
+                        const cardBody = (
+                          <>
                             <div
                               className="w-11 h-11 rounded-xl flex items-center justify-center text-sm font-bold shrink-0 overflow-hidden"
                               style={{ backgroundColor: `${CLUB_PRIMARY_COLOR}22`, color: CLUB_PRIMARY_COLOR }}
@@ -254,19 +260,61 @@ export default async function ClubsPage({
                                   </span>
                                 )}
                               </div>
-                              <div className="mt-0.5">
+                              <div className="mt-0.5 flex items-center gap-1.5 flex-wrap">
                                 <Badge
                                   variant={role === "OWNER" ? "primary" : role === "ADMIN" ? "secondary" : "outline"}
                                   size="sm"
                                 >
                                   {ROLE_LABELS[role] ?? role}
                                 </Badge>
+                                {isDeactivated && (
+                                  <Badge variant="default" size="sm">
+                                    Desactivado
+                                  </Badge>
+                                )}
                               </div>
                             </div>
 
-                            <span className="text-xs font-semibold shrink-0 group-hover:underline" style={{ color: CLUB_PRIMARY_COLOR }}>
-                              Entrar →
-                            </span>
+                            {isDeactivated ? (
+                              <span className="text-xs font-medium text-brand-muted shrink-0">
+                                Desactivado
+                              </span>
+                            ) : (
+                              <span className="text-xs font-semibold shrink-0 group-hover:underline" style={{ color: CLUB_PRIMARY_COLOR }}>
+                                Entrar →
+                              </span>
+                            )}
+                          </>
+                        );
+
+                        // Un club desactivado por plataforma se mantiene
+                        // visible (esta sección es informativa por diseño)
+                        // pero deja de ser un destino navegable: nunca un
+                        // <Link>, ligeramente atenuado (opacity), sin hover
+                        // de "entrar". El estado depende únicamente de
+                        // clubs.is_active — nunca de suscripción/entitlement
+                        // comercial (un club activo con suscripción
+                        // suspended sigue siendo esta misma tarjeta normal).
+                        if (isDeactivated) {
+                          return (
+                            <div
+                              key={club.id}
+                              aria-disabled="true"
+                              className="flex items-center gap-4 px-5 py-4 rounded-2xl bg-brand-surface border border-white/10 opacity-60 cursor-default"
+                            >
+                              {cardBody}
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <Link
+                            key={club.id}
+                            href={entryPath}
+                            style={{ "--card-primary": CLUB_PRIMARY_COLOR } as React.CSSProperties}
+                            className="flex items-center gap-4 px-5 py-4 rounded-2xl bg-brand-surface border border-white/10 hover:border-[var(--card-primary)] hover:bg-[color-mix(in_srgb,var(--card-primary)_6%,transparent)] transition-colors group"
+                          >
+                            {cardBody}
                           </Link>
                         );
                       })}

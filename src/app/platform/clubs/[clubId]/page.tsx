@@ -19,6 +19,7 @@ import { ClubClaimSection, type ClubClaimStatus } from "./ClubClaimSection";
 import { DeactivateClubButton } from "./DeactivateClubButton";
 import { ReactivateClubButton } from "./ReactivateClubButton";
 import { ChangeSlugButton } from "./ChangeSlugButton";
+import { getPlatformCommercialBadge } from "../../../../../shared/commercial/platformBadge";
 
 interface PageProps {
   params: Promise<{ clubId: string }>;
@@ -45,19 +46,6 @@ function formatMoney(amount: number | null, currency: string | null) {
   }).format(amount);
 }
 
-// club_subscriptions.status — desde Comercial v2 / Fase 3, trialing/
-// active/past_due/suspended son todos alcanzables en producción (vía
-// claim_club(), pagos reales y run_commercial_lifecycle_transitions);
-// 'cancelled' sigue sin ningún camino de código que lo produzca (ver
-// CLAUDE.md → Commercial Subscription Principles).
-const COMMERCIAL_STATUS: Record<string, { label: string; variant: "warning" | "success" | "danger" | "default" }> = {
-  trialing: { label: "En prueba", variant: "warning" },
-  active: { label: "Activa", variant: "success" },
-  past_due: { label: "Pago vencido", variant: "warning" },
-  suspended: { label: "Suspendida", variant: "danger" },
-  cancelled: { label: "Cancelada", variant: "default" },
-};
-
 const LAST_PAYMENT_STATUS_LABEL: Record<string, string> = {
   approved: "Aprobado",
   pending: "Pendiente",
@@ -83,6 +71,51 @@ type CommercialStatus = {
   promo_enabled: boolean | null;
   promo_monthly_price: number | null;
   currency: string | null;
+};
+
+// Comercial v2 / Fase 6 — get_platform_subscription_periods /
+// get_platform_subscription_payments (20261115000009). Solo lectura, nunca
+// exponen raw_response/payload ni permiten editar nada.
+type SubscriptionPeriodRow = {
+  id: string;
+  period_start: string;
+  period_end: string;
+  base_price: number;
+  discount_amount: number;
+  final_price: number;
+  currency: string;
+  status: string;
+  created_at: string;
+};
+
+type SubscriptionPaymentRow = {
+  id: string;
+  amount: number;
+  currency: string;
+  status: string;
+  provider: string;
+  payment_method: string | null;
+  provider_reference: string;
+  provider_transaction_id: string | null;
+  paid_at: string | null;
+  failed_at: string | null;
+  created_at: string;
+};
+
+const PERIOD_STATUS_LABEL: Record<string, { label: string; variant: "warning" | "success" | "danger" | "default" }> = {
+  trial: { label: "Trial", variant: "default" },
+  pending: { label: "Pendiente", variant: "warning" },
+  paid: { label: "Pagado", variant: "success" },
+  failed: { label: "Fallido", variant: "danger" },
+  expired: { label: "Vencido", variant: "default" },
+};
+
+const PAYMENT_STATUS_BADGE: Record<string, { label: string; variant: "warning" | "success" | "danger" | "default" }> = {
+  pending: { label: "Pendiente", variant: "warning" },
+  approved: { label: "Aprobado", variant: "success" },
+  declined: { label: "Rechazado", variant: "danger" },
+  voided: { label: "Anulado", variant: "default" },
+  error: { label: "Error", variant: "danger" },
 };
 
 function StatBox({
@@ -153,6 +186,21 @@ export default async function PlatformClubDetailPage({ params }: PageProps) {
     p_club_id: clubId,
   });
   const commercial: CommercialStatus | null = commercialRows?.[0] ?? null;
+
+  // get_platform_subscription_periods/get_platform_subscription_payments
+  // added in 20261115000009, not yet in generated types until
+  // types:generate runs against a DB with this migration applied.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: periodRows } = await (supabase.rpc as any)("get_platform_subscription_periods", {
+    p_club_id: clubId,
+  });
+  const periods: SubscriptionPeriodRow[] = periodRows ?? [];
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: paymentRows } = await (supabase.rpc as any)("get_platform_subscription_payments", {
+    p_club_id: clubId,
+  });
+  const payments: SubscriptionPaymentRow[] = paymentRows ?? [];
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 md:py-12">
@@ -227,9 +275,18 @@ export default async function PlatformClubDetailPage({ params }: PageProps) {
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
                 <div>
                   <p className="text-xs text-brand-muted uppercase tracking-wider mb-1">Estado</p>
-                  <Badge variant={COMMERCIAL_STATUS[commercial.status ?? ""]?.variant ?? "default"} size="sm">
-                    {COMMERCIAL_STATUS[commercial.status ?? ""]?.label ?? commercial.status}
-                  </Badge>
+                  {(() => {
+                    const badge = getPlatformCommercialBadge({
+                      status: commercial.status,
+                      trialEndsAt: commercial.trial_ends_at,
+                      currentPeriodEnd: commercial.current_period_end,
+                    });
+                    return (
+                      <Badge variant={badge.variant} size="sm">
+                        {badge.label}
+                      </Badge>
+                    );
+                  })()}
                 </div>
                 <div>
                   <p className="text-xs text-brand-muted uppercase tracking-wider mb-1">Trial</p>
@@ -290,6 +347,101 @@ export default async function PlatformClubDetailPage({ params }: PageProps) {
               </div>
             )}
           </div>
+
+          {/* ── Períodos (Comercial v2 / Fase 6) — historial de
+              subscription_periods, más reciente primero. Solo lectura;
+              cada fila conserva su propio snapshot de precio, nunca se
+              recalcula si commercial_settings cambia después. ─────────── */}
+          {periods.length > 0 && (
+            <div className="bg-brand-surface border border-white/10 rounded-2xl p-6 mb-6">
+              <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-3">
+                Períodos
+              </h2>
+              <div className="overflow-x-auto -mx-2">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-brand-muted uppercase tracking-wider">
+                      <th className="px-2 py-2 font-medium">Período</th>
+                      <th className="px-2 py-2 font-medium">Estado</th>
+                      <th className="px-2 py-2 font-medium text-right">Base</th>
+                      <th className="px-2 py-2 font-medium text-right">Descuento</th>
+                      <th className="px-2 py-2 font-medium text-right">Final</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {periods.map((period) => (
+                      <tr key={period.id} className="border-t border-white/5">
+                        <td className="px-2 py-2 text-white whitespace-nowrap">
+                          {formatDate(period.period_start)} → {formatDate(period.period_end)}
+                        </td>
+                        <td className="px-2 py-2">
+                          <Badge variant={PERIOD_STATUS_LABEL[period.status]?.variant ?? "default"} size="sm">
+                            {PERIOD_STATUS_LABEL[period.status]?.label ?? period.status}
+                          </Badge>
+                        </td>
+                        <td className="px-2 py-2 text-right text-brand-muted whitespace-nowrap">
+                          {formatMoney(period.base_price, period.currency)}
+                        </td>
+                        <td className="px-2 py-2 text-right text-brand-muted whitespace-nowrap">
+                          {formatMoney(period.discount_amount, period.currency)}
+                        </td>
+                        <td className="px-2 py-2 text-right text-white whitespace-nowrap">
+                          {formatMoney(period.final_price, period.currency)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ── Pagos (Comercial v2 / Fase 6) — historial de payments, más
+              reciente primero. Nunca muestra raw_response ni permite
+              aprobar/editar/anular un pago desde acá. ─────────────────── */}
+          {payments.length > 0 && (
+            <div className="bg-brand-surface border border-white/10 rounded-2xl p-6 mb-6">
+              <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-3">
+                Pagos
+              </h2>
+              <div className="overflow-x-auto -mx-2">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-brand-muted uppercase tracking-wider">
+                      <th className="px-2 py-2 font-medium">Fecha</th>
+                      <th className="px-2 py-2 font-medium">Estado</th>
+                      <th className="px-2 py-2 font-medium text-right">Monto</th>
+                      <th className="px-2 py-2 font-medium">Método</th>
+                      <th className="px-2 py-2 font-medium">Referencia</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payments.map((payment) => (
+                      <tr key={payment.id} className="border-t border-white/5">
+                        <td className="px-2 py-2 text-white whitespace-nowrap">
+                          {formatDate(payment.paid_at ?? payment.failed_at ?? payment.created_at)}
+                        </td>
+                        <td className="px-2 py-2">
+                          <Badge variant={PAYMENT_STATUS_BADGE[payment.status]?.variant ?? "default"} size="sm">
+                            {PAYMENT_STATUS_BADGE[payment.status]?.label ?? payment.status}
+                          </Badge>
+                        </td>
+                        <td className="px-2 py-2 text-right text-white whitespace-nowrap">
+                          {formatMoney(payment.amount, payment.currency)}
+                        </td>
+                        <td className="px-2 py-2 text-brand-muted whitespace-nowrap">
+                          {payment.payment_method ?? "—"}
+                        </td>
+                        <td className="px-2 py-2 text-brand-muted whitespace-nowrap font-mono text-xs">
+                          {payment.provider_reference}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* ── Estadísticas ─────────────────────────────────────────── */}
           <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-3">

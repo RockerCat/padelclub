@@ -17,7 +17,7 @@ export function getClubEntryPath(slug: string, role: string): string {
   return `/${slug}/dashboard`;
 }
 
-type MembershipRow = { role: string; clubs: { id: string; slug: string; archived_at: string | null } };
+type MembershipRow = { role: string; clubs: { id: string; slug: string; archived_at: string | null; is_active: boolean } };
 
 /**
  * Single source of truth for "which club (if any) should this authenticated
@@ -38,7 +38,20 @@ type MembershipRow = { role: string; clubs: { id: string; slug: string; archived
  *
  * A membership at an archived club is dropped before any of the above
  * counting/matching happens — an archived club is never auto-entered, even
- * if it's the user's only membership or their last_club_id.
+ * if it's the user's only membership or their last_club_id. Same treatment
+ * for a club the platform has operationally deactivated (clubs.is_active =
+ * false, set only by a SUPERADMIN via platform_deactivate_club — a
+ * completely separate lifecycle control from archived_at, see CLAUDE.md →
+ * Club Archival Principles): it is dropped from this eligible set too, so
+ * a multi-club OWNER/ADMIN/PLAYER can never get auto-redirected (via
+ * last_club_id or as a lone remaining membership) into the bare
+ * ClubDeactivatedScreen when they have another operationally active club.
+ * When EVERY membership is dropped this way (all archived and/or
+ * deactivated), this still falls through to "/clubs" exactly like the
+ * zero-membership case — a real, hard-won fix: a prior version only
+ * filtered archived_at, so a stale last_club_id pointing at a
+ * platform-deactivated club could trap a multi-club user there instead of
+ * ever reaching their other active clubs.
  *
  * Read-only: never writes last_club_id itself (that stays exactly as-is,
  * via UpdateLastClub on club layout mount) and never "fixes" a stale value.
@@ -49,12 +62,14 @@ export async function resolveClubEntryPath(
 ): Promise<string> {
   const { data: memberships } = await supabase
     .from("club_members")
-    .select("role, clubs!inner(id, slug, archived_at)")
+    .select("role, clubs!inner(id, slug, archived_at, is_active)")
     .eq("profile_id", userId)
     .eq("is_active", true)
     .order("joined_at", { ascending: true });
 
-  const rows = ((memberships ?? []) as unknown as MembershipRow[]).filter((m) => !m.clubs.archived_at);
+  const rows = ((memberships ?? []) as unknown as MembershipRow[]).filter(
+    (m) => !m.clubs.archived_at && m.clubs.is_active
+  );
 
   if (rows.length === 0) {
     return "/clubs";
@@ -138,17 +153,17 @@ export interface NavActiveMembership {
 
 type ActiveMembershipRow = {
   role: string;
-  clubs: NavActiveMembership["club"] & { archived_at: string | null };
+  clubs: NavActiveMembership["club"] & { archived_at: string | null; is_active: boolean };
 };
 
 /**
  * Same membership-selection rule as resolveClubEntryPath (active,
- * non-archived memberships; profiles.last_club_id wins when there are 2+)
- * but returns the club's own branding fields for rendering navigation
- * chrome, never a redirect path, and is never used to filter any data
- * query. Built for the global /profile route, which has no club in its
- * own URL — this lets it still show its owner's normal club-scoped
- * sidebar (AppNav) for visual/navigation context only.
+ * non-archived, operationally-active memberships; profiles.last_club_id
+ * wins when there are 2+) but returns the club's own branding fields for
+ * rendering navigation chrome, never a redirect path, and is never used to
+ * filter any data query. Built for the global /profile route, which has no
+ * club in its own URL — this lets it still show its owner's normal
+ * club-scoped sidebar (AppNav) for visual/navigation context only.
  *
  * One deliberate divergence from resolveClubEntryPath: when there are 2+
  * memberships and last_club_id doesn't match any of them, that function
@@ -157,7 +172,12 @@ type ActiveMembershipRow = {
  * membership (same joined_at ascending order already used above) instead
  * of returning nothing — still a real club the user genuinely belongs to,
  * never an invented one. Returns null only when the user has zero active,
- * non-archived memberships anywhere.
+ * non-archived, operationally-active memberships anywhere (a platform-
+ * deactivated club — clubs.is_active = false, see resolveClubEntryPath's
+ * comment above — is dropped here exactly like an archived one; the caller
+ * already degrades gracefully to a club-less top bar for this same null
+ * case, so this never traps anyone, it just stops pointing sidebar
+ * branding at a club the user can't actually operate in right now).
  *
  * Read-only: never writes last_club_id (same as resolveClubEntryPath).
  */
@@ -167,12 +187,14 @@ export async function resolveActiveMembership(
 ): Promise<NavActiveMembership | null> {
   const { data: memberships } = await supabase
     .from("club_members")
-    .select("role, clubs!inner(id, name, slug, logo_url, primary_color, secondary_color, archived_at)")
+    .select("role, clubs!inner(id, name, slug, logo_url, primary_color, secondary_color, archived_at, is_active)")
     .eq("profile_id", userId)
     .eq("is_active", true)
     .order("joined_at", { ascending: true });
 
-  const rows = ((memberships ?? []) as unknown as ActiveMembershipRow[]).filter((m) => !m.clubs.archived_at);
+  const rows = ((memberships ?? []) as unknown as ActiveMembershipRow[]).filter(
+    (m) => !m.clubs.archived_at && m.clubs.is_active
+  );
 
   if (rows.length === 0) {
     return null;

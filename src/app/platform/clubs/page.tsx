@@ -8,7 +8,12 @@ export default async function PlatformClubsPage() {
   const supabase = await createClient();
 
   const { data, error } = await supabase.rpc("get_platform_clubs_overview");
-  const clubs: PlatformClubRow[] = data ?? [];
+  // get_platform_clubs_overview fue extendida en 20261115000009 con
+  // columnas comerciales (commercial_status/trial_ends_at/
+  // current_period_end); los tipos generados no las reflejan hasta correr
+  // types:generate, bloqueado hoy (ver CLAUDE.md → Types Generation). Cast
+  // angosto y documentado sobre el mismo dato real que la RPC ya devuelve.
+  const clubs = (data ?? []) as unknown as PlatformClubRow[];
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 md:py-12">

@@ -32,18 +32,18 @@ interface NavItem {
   soon?: boolean;
 }
 
-// Dashboard/Clubes/Prospectos/Usuarios are functional today. Estadísticas/
-// Suscripciones/Configuración are placeholders reserving their spot in the
+// Dashboard/Clubes/Prospectos/Usuarios/Suscripciones/Configuración are
+// functional. Estadísticas stays a placeholder reserving its spot in the
 // nav for a later story — kept disabled rather than omitted, same pattern
-// AppNav already uses for not-yet-built items.
+// AppNav already uses for not-yet-built items (Comercial v2 / Fase 6).
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/platform", icon: LayoutDashboard },
   { label: "Clubes", href: "/platform/clubs", icon: Building2 },
   { label: "Prospectos", href: "/platform/leads", icon: Handshake },
   { label: "Usuarios", href: "/platform/users", icon: Users },
+  { label: "Suscripciones", href: "/platform/subscriptions", icon: CreditCard },
+  { label: "Configuración", href: "/platform/settings", icon: Settings },
   { label: "Estadísticas", icon: BarChart3, disabled: true, soon: true },
-  { label: "Suscripciones", icon: CreditCard, disabled: true, soon: true },
-  { label: "Configuración", icon: Settings, disabled: true, soon: true },
 ];
 
 function PlatformHeader() {

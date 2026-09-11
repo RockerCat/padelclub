@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Search, Building2 } from "lucide-react";
 import { Badge } from "@/components/ui";
+import { getPlatformCommercialBadge } from "../../../../shared/commercial/platformBadge";
 
 export type PlatformClubRow = {
   id: string;
@@ -18,6 +19,12 @@ export type PlatformClubRow = {
   owner_email: string | null;
   player_count: number;
   court_count: number;
+  // Comercial v2 / Fase 6 — get_platform_clubs_overview (20261115000009).
+  // Estado operativo (is_active arriba) y estado comercial son conceptos
+  // separados a propósito — nunca se fusionan en una sola columna/badge.
+  commercial_status: string | null;
+  trial_ends_at: string | null;
+  current_period_end: string | null;
 };
 
 function formatDate(iso: string) {
@@ -77,6 +84,7 @@ export function PlatformClubsTable({ clubs }: { clubs: PlatformClubRow[] }) {
                 <th className="px-4 py-3 font-medium">Club</th>
                 <th className="px-4 py-3 font-medium">Visibilidad</th>
                 <th className="px-4 py-3 font-medium">Estado</th>
+                <th className="px-4 py-3 font-medium">Suscripción</th>
                 <th className="px-4 py-3 font-medium">Creado</th>
                 <th className="px-4 py-3 font-medium">Owner</th>
                 <th className="px-4 py-3 font-medium text-right">Jugadores</th>
@@ -127,6 +135,20 @@ export function PlatformClubsTable({ clubs }: { clubs: PlatformClubRow[] }) {
                     <Badge variant={club.is_active ? "success" : "danger"} size="sm">
                       {club.is_active ? "Activo" : "Inactivo"}
                     </Badge>
+                  </td>
+                  <td className="px-4 py-3">
+                    {(() => {
+                      const badge = getPlatformCommercialBadge({
+                        status: club.commercial_status,
+                        trialEndsAt: club.trial_ends_at,
+                        currentPeriodEnd: club.current_period_end,
+                      });
+                      return (
+                        <Badge variant={badge.variant} size="sm">
+                          {badge.label}
+                        </Badge>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3 text-brand-muted whitespace-nowrap">
                     {formatDate(club.created_at)}
