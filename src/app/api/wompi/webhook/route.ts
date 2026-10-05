@@ -1,12 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getWompiConfig } from "@/lib/wompi/config";
 import { verifyWompiTransaction } from "@/lib/wompi/verifyTransaction";
+import { forwardWompiEventToSolarDesk } from "@/lib/wompi/forwardToSolarDesk";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   buildEventChecksum,
   checksumsMatch,
   compareVerifiedWompiTransaction,
   getIncompleteWompiTransactionFields,
+  isSolarDeskWompiReference,
   isSupportedWompiEvent,
   isSupportedWompiStatus,
   matchesExpectedWompiEnvironment,
@@ -59,6 +61,21 @@ import {
 // encontrado en la auditoría de esta fase). Verificar también PENDING
 // cierra esto en el mismo punto que ya cierra los estados finales, sin
 // tocar SQL ni introducir un segundo mecanismo.
+//
+// Wompi comercio compartido con SolarDesk — este es el ÚNICO endpoint de
+// eventos Wompi para ambas aplicaciones (confirmado por soporte de Wompi:
+// un mismo comercio/llaves/events-secret puede usarse desde más de una
+// app, pero solo existe una URL de eventos por ambiente). Justo después de
+// validar el checksum (paso 7 — la única autenticación real de este
+// reenvío, ver forwardToSolarDesk.ts), si `transaction.reference` es
+// inequívocamente de SolarDesk (isSolarDeskWompiReference — su propio
+// prefijo real, `solardesk-pro-`, nunca supuesto) el evento se reenvía
+// intacto a su webhook y esta función termina ahí — sin tocar payments,
+// sin invocar process_wompi_transaction_event, sin lógica comercial de
+// SolarDesk acá. Todo lo demás (una `PADEL-...` nueva, una `sub_...`
+// histórica de antes de este cambio, o cualquier reference genuinamente
+// desconocida) sigue exactamente el mismo camino que ya existía — que ya
+// maneja una reference desconocida de forma segura, sin efecto alguno.
 export async function POST(req: NextRequest) {
   // 1. Configuración de Wompi disponible.
   const wompiConfig = getWompiConfig();
@@ -138,6 +155,18 @@ export async function POST(req: NextRequest) {
   if (!checksumsMatch(computedChecksum, receivedChecksum)) {
     console.error("[wompi webhook] checksum inválido — evento rechazado sin procesar");
     return NextResponse.json({ error: "invalid_checksum" }, { status: 401 });
+  }
+
+  // 7.5. Wompi comercio compartido con SolarDesk — clasificación por
+  // reference, recién ahora que el checksum ya está validado (ver la nota
+  // de cabecera de este archivo). Nunca antes del checksum: reenviar sin
+  // haber confirmado que el evento realmente vino de Wompi habilitaría a
+  // cualquiera a usar este endpoint público para generar tráfico hacia el
+  // webhook de SolarDesk.
+  const referenceForRouting = transaction.reference as string | undefined;
+  if (isSolarDeskWompiReference(referenceForRouting)) {
+    const forwarded = await forwardWompiEventToSolarDesk(payload);
+    return NextResponse.json(forwarded.body, { status: forwarded.httpStatus });
   }
 
   // 8. Campos mínimos de transaction, ya con la firma validada.

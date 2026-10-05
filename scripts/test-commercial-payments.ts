@@ -20,6 +20,7 @@ import {
   amountInCents,
   isSupportedWompiEvent,
   isSupportedWompiStatus,
+  isSolarDeskWompiReference,
   matchesExpectedWompiEnvironment,
   resolveOrderedPropertyValues,
   getIncompleteWompiTransactionFields,
@@ -31,6 +32,7 @@ import {
 import { deriveCommercialPhase, getTrialDaysRemaining, getCommercialPillContent } from "../shared/commercial/lifecycle";
 import { verifyWompiTransaction } from "../src/lib/wompi/verifyTransaction";
 import type { WompiConfig } from "../src/lib/wompi/config";
+import { forwardWompiEventToSolarDesk } from "../src/lib/wompi/forwardToSolarDesk";
 
 let passed = 0;
 let failed = 0;
@@ -1062,8 +1064,91 @@ async function runWompiApiFailureTests() {
   global.fetch = originalFetch;
 }
 
+// ─── Wompi comercio compartido con SolarDesk ────────────────────────────────
+async function runSolarDeskRoutingTests() {
+  // Clasificación por reference — match positivo explícito sobre el
+  // prefijo REAL de SolarDesk (verificado contra su código, ver
+  // isSolarDeskWompiReference en shared/commercial/wompi.ts), nunca "todo
+  // lo que no sea PADEL es de SolarDesk".
+  assertEqual(
+    isSolarDeskWompiReference("solardesk-pro-3f9a2b1c-0000-0000-0000-000000000000"),
+    true,
+    "SolarDesk routing — reference solardesk-pro-... se reconoce como de SolarDesk"
+  );
+  assertEqual(
+    isSolarDeskWompiReference("PADEL-abc123"),
+    false,
+    "SolarDesk routing — reference PADEL-... (nueva) nunca se clasifica como SolarDesk"
+  );
+  assertEqual(
+    isSolarDeskWompiReference("sub_abc123"),
+    false,
+    "SolarDesk routing — reference sub_... histórica (formato anterior de Mi Pádel Club) nunca se clasifica como SolarDesk"
+  );
+  assertEqual(
+    isSolarDeskWompiReference("cualquier-otra-cosa"),
+    false,
+    "SolarDesk routing — reference genuinamente desconocida nunca se clasifica como SolarDesk"
+  );
+  assertEqual(
+    isSolarDeskWompiReference(undefined),
+    false,
+    "SolarDesk routing — reference undefined nunca se clasifica como SolarDesk"
+  );
+
+  // forwardWompiEventToSolarDesk — sin la variable de entorno configurada,
+  // nunca falla silenciosamente ni finge éxito: 502 retryable.
+  const originalUrl = process.env.SOLARDESK_WOMPI_WEBHOOK_URL;
+  delete process.env.SOLARDESK_WOMPI_WEBHOOK_URL;
+  let forwarded = await forwardWompiEventToSolarDesk({ event: "transaction.updated" });
+  assertEqual(
+    forwarded,
+    { httpStatus: 502, body: { error: "solardesk_forward_not_configured" } },
+    "SolarDesk routing — sin SOLARDESK_WOMPI_WEBHOOK_URL configurada → 502 retryable, nunca éxito fingido"
+  );
+
+  process.env.SOLARDESK_WOMPI_WEBHOOK_URL = "https://solardesk.example/api/webhooks/wompi";
+
+  // El body/estado que SolarDesk responda se relaya verbatim — Wompi debe
+  // ver exactamente lo que el destino real decidió.
+  mockFetchOnce(async () => new Response(JSON.stringify({ received: true }), { status: 200 }));
+  forwarded = await forwardWompiEventToSolarDesk({ event: "transaction.updated" });
+  assertEqual(
+    forwarded,
+    { httpStatus: 200, body: { received: true } },
+    "SolarDesk routing — respuesta 200 de SolarDesk se relaya verbatim"
+  );
+
+  mockFetchOnce(async () => new Response(JSON.stringify({ error: "invalid_signature" }), { status: 401 }));
+  forwarded = await forwardWompiEventToSolarDesk({ event: "transaction.updated" });
+  assertEqual(
+    forwarded,
+    { httpStatus: 401, body: { error: "invalid_signature" } },
+    "SolarDesk routing — respuesta 401 de SolarDesk (su propia validación) se relaya verbatim, nunca oculta como 200"
+  );
+
+  // Destino temporalmente fallido (timeout/red) — nunca fail-open, 502
+  // retryable para que Wompi reintente más tarde.
+  mockFetchOnce(async () => {
+    const err = new Error("aborted");
+    err.name = "AbortError";
+    throw err;
+  });
+  forwarded = await forwardWompiEventToSolarDesk({ event: "transaction.updated" });
+  assertEqual(
+    forwarded,
+    { httpStatus: 502, body: { error: "solardesk_forward_unavailable" } },
+    "SolarDesk routing — timeout/red hacia SolarDesk → 502 retryable, nunca fail-open"
+  );
+
+  global.fetch = originalFetch;
+  if (originalUrl === undefined) delete process.env.SOLARDESK_WOMPI_WEBHOOK_URL;
+  else process.env.SOLARDESK_WOMPI_WEBHOOK_URL = originalUrl;
+}
+
 async function main() {
   await runWompiApiFailureTests();
+  await runSolarDeskRoutingTests();
 
   // Caso 14 — evento final duplicado: idempotencia sin cambios (ver
   // payment_events_dedup_idx, no tocado por la migración 00008 nueva).
@@ -1101,6 +1186,25 @@ async function main() {
       ),
       true,
       "Caso 15 — índice único parcial de provider_transaction_id existe con la forma exacta esperada"
+    );
+  }
+
+  // Caso 16 — Wompi comercio compartido con SolarDesk: create_pending_payment
+  // debe generar la reference nueva con el prefijo PADEL-, nunca el formato
+  // sub_ anterior (que las referencias históricas conservan intacto, sin
+  // ninguna migración retroactiva sobre filas ya existentes).
+  {
+    const prefixMigrationPath = join(__dirname, "..", "supabase", "migrations", "20261115000010_wompi_shared_merchant_padel_prefix.sql");
+    const prefixMigrationText = readFileSync(prefixMigrationPath, "utf8");
+    assertEqual(
+      prefixMigrationText.includes("v_reference := 'PADEL-' || replace(gen_random_uuid()::text, '-', '');"),
+      true,
+      "Caso 16 — create_pending_payment genera la reference nueva con el prefijo PADEL-"
+    );
+    assertEqual(
+      prefixMigrationText.includes("v_reference := 'sub_'"),
+      false,
+      "Caso 16 — el formato de reference anterior (sub_) ya no se genera para pagos nuevos"
     );
   }
 

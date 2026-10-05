@@ -166,6 +166,33 @@ export function isSupportedWompiStatus(rawStatus: string | undefined | null): bo
   return (WOMPI_SUPPORTED_STATUSES as readonly string[]).includes(rawStatus.toUpperCase());
 }
 
+// ─── Wompi comercio compartido con SolarDesk ────────────────────────────────
+// Wompi confirmó por soporte que un mismo comercio/llaves/events-secret
+// puede ser usado por más de una aplicación, siempre que cada transacción
+// sea identificable de forma inequívoca vía `reference`. Mi Pádel Club
+// prefija toda reference nueva como `PADEL-<uuid>` (ver
+// create_pending_payment, migración 20261115000010) — nunca se toca una
+// reference histórica sin ese prefijo (`sub_...`, de antes de este
+// cambio), que sigue resolviendo con normalidad porque la búsqueda en
+// process_wompi_transaction_event es por igualdad exacta, no por prefijo.
+//
+// SolarDesk (otra aplicación de Alex, mismo comercio) prefija TODA su
+// reference como `solardesk-pro-<uuid>` desde su primer commit —
+// verificado contra su código real, nunca supuesto — así que este es un
+// match POSITIVO explícito sobre un prefijo que siempre ha existido, no
+// una regla "todo lo que no sea PADEL es de SolarDesk". Cualquier
+// reference que no matchee este prefijo (una `PADEL-...` nueva, una
+// `sub_...` histórica, o cualquier reference genuinamente desconocida)
+// sigue el camino normal de esta app — que ya no produce ningún efecto de
+// negocio para una reference que no reconoce (ver 'unknown_reference' en
+// process_wompi_transaction_event), así que no hace falta una segunda
+// rama de "rechazo" acá.
+export const SOLARDESK_WOMPI_REFERENCE_PREFIX = "solardesk-";
+
+export function isSolarDeskWompiReference(reference: string | undefined | null): boolean {
+  return typeof reference === "string" && reference.startsWith(SOLARDESK_WOMPI_REFERENCE_PREFIX);
+}
+
 // Resuelve un path tipo "transaction.id" contra `data` (la raíz que Wompi
 // documenta para signature.properties) — nunca contra un array fijo.
 export function resolveWompiPath(obj: Record<string, unknown> | undefined, path: string): unknown {
