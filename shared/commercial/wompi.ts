@@ -187,7 +187,7 @@ export function isSupportedWompiStatus(rawStatus: string | undefined | null): bo
 // negocio para una reference que no reconoce (ver 'unknown_reference' en
 // process_wompi_transaction_event), así que no hace falta una segunda
 // rama de "rechazo" acá.
-export const SOLARDESK_WOMPI_REFERENCE_PREFIX = "solardesk-";
+export const SOLARDESK_WOMPI_REFERENCE_PREFIX = "solardesk-pro-";
 
 export function isSolarDeskWompiReference(reference: string | undefined | null): boolean {
   return typeof reference === "string" && reference.startsWith(SOLARDESK_WOMPI_REFERENCE_PREFIX);

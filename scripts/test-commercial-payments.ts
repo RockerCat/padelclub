@@ -1086,6 +1086,11 @@ async function runSolarDeskRoutingTests() {
     "SolarDesk routing — reference sub_... histórica (formato anterior de Mi Pádel Club) nunca se clasifica como SolarDesk"
   );
   assertEqual(
+    isSolarDeskWompiReference("solardesk-otra-cosa"),
+    false,
+    "SolarDesk routing — reference solardesk-... SIN el prefijo real solardesk-pro- nunca se clasifica como SolarDesk"
+  );
+  assertEqual(
     isSolarDeskWompiReference("cualquier-otra-cosa"),
     false,
     "SolarDesk routing — reference genuinamente desconocida nunca se clasifica como SolarDesk"
