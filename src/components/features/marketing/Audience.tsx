@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { LayoutDashboard, ClipboardList, Search, Check } from "lucide-react";
 import { MARKETING_WA_URL as WA_URL } from "@/lib/constants/marketingWhatsapp";
+import { formatTrialLength, type PublicCommercialOffer } from "@/lib/commercialOffer";
 
 const profiles = [
   {
@@ -99,7 +100,8 @@ function ProfileCard({
   );
 }
 
-export default function Audience() {
+export default function Audience({ offer }: { offer: PublicCommercialOffer | null }) {
+  const trial = offer ? formatTrialLength(offer) : null;
   return (
     <section className="border-t border-white/5 bg-brand-bg py-24 lg:py-32">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -141,16 +143,16 @@ export default function Audience() {
             </h3>
             <p className="mx-auto mb-10 max-w-xl text-lg leading-relaxed text-brand-muted">
               MiPadelClub reúne administración, competencia y comunidad en una sola plataforma — para que tu club
-              opere mejor y tus jugadores quieran volver cada semana. Conoce Mi Pádel Club en una demo y descubre
-              cómo podemos ayudarte a gestionar tu club: cuando tu club esté listo y lo actives, tendrás 30 días
-              para probarlo sin costo.
+              opere mejor y tus jugadores quieran volver cada semana. Agenda una demo y te ayudamos a configurar
+              tu club: cuando lo actives,{" "}
+              {trial ? `tendrás ${trial} para usarlo gratis` : "empieza tu prueba gratuita"}, sin tarjeta de crédito.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3 mb-5">
               <Link
                 href="/demo"
                 className="inline-flex items-center gap-2 rounded-xl bg-brand-primary px-7 py-3.5 text-base font-semibold text-brand-bg shadow-lg shadow-brand-primary/20 transition-colors hover:bg-brand-primary/90"
               >
-                Solicitar una demo
+                {trial ? `Agenda tu demo y obtén ${trial} gratis` : "Agenda tu demo"}
               </Link>
               <Link
                 href="/clubs"

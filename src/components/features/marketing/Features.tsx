@@ -1,3 +1,4 @@
+import Image from "next/image";
 import {
   Calendar,
   BarChart2,
@@ -101,58 +102,22 @@ function CalendarMockup() {
 
 // ─── Mockup: Rankings ─────────────────────────────────────────────────────────
 
+
 function RankingMockup() {
-  const players = [
-    { pos: 1, name: "Alejandro M.", pts: 850, delta: "+12", trend: "up" },
-    { pos: 2, name: "Carlos R.", pts: 720, delta: "+5", trend: "up" },
-    { pos: 3, name: "Miguel P.", pts: 680, delta: "–", trend: "same" },
-    { pos: 4, name: "Roberto S.", pts: 640, delta: "+8", trend: "up" },
-    { pos: 5, name: "Daniel L.", pts: 590, delta: "-3", trend: "down" },
-  ];
-
   return (
-    <div className="rounded-2xl border border-white/10 bg-brand-surface p-5 shadow-2xl shadow-black/50 select-none">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <p className="text-[10px] font-medium uppercase tracking-widest text-brand-muted">Ranking</p>
-          <p className="text-sm font-bold text-white">Categoría 1a</p>
-        </div>
-        <div className="rounded-lg bg-brand-primary/15 px-2.5 py-1">
-          <span className="text-xs font-semibold text-brand-primary">Ciclo vigente</span>
-        </div>
-      </div>
-
-      <div className="space-y-1.5">
-        {players.map((p) => (
-          <div
-            key={p.pos}
-            className={[
-              "flex items-center gap-3 rounded-lg px-3 py-2",
-              p.pos === 1 ? "bg-brand-primary/10" : "bg-white/3",
-            ].join(" ")}
-          >
-            <span className={`w-4 shrink-0 text-center text-xs font-bold ${p.pos === 1 ? "text-brand-primary" : "text-brand-muted"}`}>
-              {p.pos}
-            </span>
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-secondary/20">
-              <span className="text-[10px] font-bold text-brand-secondary">{p.name[0]}</span>
-            </div>
-            <span className="min-w-0 flex-1 truncate text-xs font-medium text-white">{p.name}</span>
-            <span className={`shrink-0 text-[10px] font-medium ${p.trend === "up" ? "text-brand-primary" : p.trend === "down" ? "text-red-400" : "text-brand-muted"}`}>
-              {p.delta}
-            </span>
-            <span className="w-9 shrink-0 text-right text-xs font-bold text-white">{p.pts}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-3 flex items-center justify-between border-t border-white/8 pt-3">
-        <span className="text-[10px] text-brand-muted">42 jugadores en esta categoría</span>
-        <span className="text-[10px] font-medium text-brand-secondary">Se actualiza al registrar resultados</span>
-      </div>
+    <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-brand-surface shadow-2xl shadow-black/50">
+      <Image
+        src="/img/landing/ranking-real.png"
+        alt="Ranking real de MiPadelClub con podio de jugadores, clasificación por categoría y puntos"
+        width={1435}
+        height={875}
+        sizes="(min-width: 1024px) 600px, 100vw"
+        className="block h-auto w-full"
+      />
     </div>
   );
 }
+
 
 // ─── Mockup: Torneos ──────────────────────────────────────────────────────────
 // Refleja el modelo real vigente del módulo (inscripciones por dupla +
@@ -160,115 +125,40 @@ function RankingMockup() {
 // eliminatorio por partidos/rondas que el producto tuvo en su momento y
 // que ya no existe (ver CLAUDE.md → Tournament Module Principles).
 
-function ClassificationRow({ pos, pair, pts, highlight }: { pos: number; pair: string; pts: number; highlight?: boolean }) {
-  return (
-    <div className={`flex items-center gap-3 rounded-lg px-3 py-2 ${highlight ? "bg-brand-primary/10" : "bg-white/3"}`}>
-      <span className={`w-4 shrink-0 text-center text-xs font-bold ${highlight ? "text-brand-primary" : "text-brand-muted"}`}>
-        {pos}
-      </span>
-      <span className="min-w-0 flex-1 truncate text-xs font-medium text-white">{pair}</span>
-      <span className="shrink-0 text-xs font-bold text-white">{pts} <span className="font-normal text-brand-muted">pts</span></span>
-    </div>
-  );
-}
-
 function TournamentMockup() {
   return (
-    <div className="rounded-2xl border border-white/10 bg-brand-surface p-5 shadow-2xl shadow-black/50 select-none">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <p className="text-[10px] font-medium uppercase tracking-widest text-brand-muted">Torneos</p>
-          <p className="text-sm font-bold text-white">Torneo Primavera 2026</p>
-        </div>
-        <div className="inline-flex items-center gap-1.5 rounded-full bg-brand-primary/15 px-2.5 py-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-brand-primary" />
-          <span className="text-xs font-medium text-brand-primary">Inscripciones abiertas</span>
-        </div>
-      </div>
-
-      {/* Clasificación por puntos — empate real en el 1er lugar, honesto */}
-      <div className="space-y-1.5">
-        <ClassificationRow pos={1} pair="Alejandro M. / Carlos R." pts={24} highlight />
-        <ClassificationRow pos={1} pair="Miguel P. / Roberto S." pts={24} highlight />
-        <ClassificationRow pos={3} pair="Daniel L. / Fernando G." pts={18} />
-        <ClassificationRow pos={4} pair="Pablo V. / Javier M." pts={12} />
-      </div>
-
-      <div className="mt-4 flex gap-4 border-t border-white/8 pt-3">
-        <div>
-          <p className="text-[10px] text-brand-muted">Duplas confirmadas</p>
-          <p className="text-sm font-bold text-white">14/16</p>
-        </div>
-        <div>
-          <p className="text-[10px] text-brand-muted">Categoría</p>
-          <p className="text-sm font-bold text-white">4a</p>
-        </div>
-        <div>
-          <p className="text-[10px] text-brand-muted">Estado</p>
-          <p className="text-sm font-bold text-brand-primary">Abierto</p>
-        </div>
-      </div>
+    <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-brand-surface shadow-2xl shadow-black/50">
+      <Image
+        src="/img/landing/torneos-showcase.png"
+        alt="MiPadelClub: gestión de torneos desde el panel del propietario y resultados desde la aplicación móvil del jugador"
+        width={1648}
+        height={928}
+        sizes="(min-width: 1024px) 600px, 100vw"
+        className="block h-auto w-full"
+      />
     </div>
   );
 }
+
 
 // ─── Mockup: Jugadores ────────────────────────────────────────────────────────
 
+
 function PlayersMockup() {
-  const players = [
-    { name: "Alejandro M.", rank: 1, cat: "1a", pts: 850 },
-    { name: "Carlos R.", rank: 2, cat: "1a", pts: 720 },
-    { name: "Miguel P.", rank: 3, cat: "2a", pts: 680 },
-    { name: "Roberto S.", rank: 4, cat: "2a", pts: 640 },
-  ];
-  const initials = ["A", "C", "M", "R", "D"];
-
   return (
-    <div className="rounded-2xl border border-white/10 bg-brand-surface p-5 shadow-2xl shadow-black/50 select-none">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <p className="text-[10px] font-medium uppercase tracking-widest text-brand-muted">Jugadores</p>
-          <p className="text-sm font-bold text-white">Comunidad del Club</p>
-        </div>
-        <div className="rounded-lg bg-brand-secondary/15 px-2.5 py-1">
-          <span className="text-xs font-semibold text-brand-secondary">186 activos</span>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        {players.map((p) => (
-          <div key={p.rank} className="flex items-center gap-3 rounded-xl bg-white/3 p-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-gradient-to-br from-brand-secondary/30 to-brand-primary/20">
-              <span className="text-sm font-bold text-white">{p.name[0]}</span>
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-white">{p.name}</p>
-              <p className="text-[10px] text-brand-muted">#{p.rank} · Cat. {p.cat}</p>
-            </div>
-            <div className="shrink-0 text-right">
-              <p className="text-xs font-bold text-white">{p.pts}</p>
-              <p className="text-[10px] text-brand-muted">puntos</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-3 flex items-center justify-between border-t border-white/8 pt-3">
-        <span className="text-[10px] text-brand-muted">+14 nuevos este mes</span>
-        <div className="flex -space-x-1.5">
-          {initials.map((ch, i) => (
-            <div key={i} className="flex h-5 w-5 items-center justify-center rounded-full border border-brand-surface bg-brand-secondary/30">
-              <span className="text-[7px] font-bold text-brand-secondary">{ch}</span>
-            </div>
-          ))}
-          <div className="flex h-5 w-5 items-center justify-center rounded-full border border-brand-surface bg-white/10">
-            <span className="text-[7px] text-brand-muted">+</span>
-          </div>
-        </div>
-      </div>
+    <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-brand-surface shadow-2xl shadow-black/50">
+      <Image
+        src="/img/landing/owner-jugadores.png"
+        alt="Gestión real de jugadores en MiPadelClub, con perfiles e información de los miembros del club"
+        width={1435}
+        height={875}
+        sizes="(min-width: 1024px) 600px, 100vw"
+        className="block h-auto w-full"
+      />
     </div>
   );
 }
+
 
 // ─── Feature data ─────────────────────────────────────────────────────────────
 
@@ -313,7 +203,7 @@ const featureDefs: FeatureDef[] = [
       "Rankings automáticos",
       "Estadísticas de jugadores",
       "Clasificaciones por categorías",
-      "Historial de resultados",
+      "Historial de puntos por jugador",
     ],
     Mockup: RankingMockup,
     flip: true,
@@ -407,42 +297,6 @@ const playerGridItems: GridTileDef[] = [
 
 // ─── Diferenciador: perfil deportivo personal ─────────────────────────────────
 
-function PlayerProfileMockup() {
-  return (
-    <div className="mx-auto max-w-sm select-none rounded-2xl border border-white/10 bg-brand-bg/90 p-5 shadow-2xl shadow-black/50 backdrop-blur-sm">
-      <div className="mb-4 flex items-center gap-3">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/10 bg-gradient-to-br from-brand-secondary/30 to-brand-primary/20">
-          <span className="text-base font-bold text-white">A</span>
-        </div>
-        <div className="min-w-0">
-          <p className="truncate text-sm font-bold text-white">Alejandro M.</p>
-          <p className="text-xs text-brand-muted">Categoría 1a · #2 del ranking</p>
-        </div>
-      </div>
-
-      <div className="mb-4 grid grid-cols-3 gap-2">
-        <div className="rounded-lg bg-white/5 px-2 py-2.5 text-center">
-          <p className="text-lg font-bold leading-none text-brand-primary">720</p>
-          <p className="mt-1 text-[10px] text-brand-muted">puntos</p>
-        </div>
-        <div className="rounded-lg bg-white/5 px-2 py-2.5 text-center">
-          <p className="text-lg font-bold leading-none text-white">5</p>
-          <p className="mt-1 text-[10px] text-brand-muted">torneos</p>
-        </div>
-        <div className="rounded-lg bg-white/5 px-2 py-2.5 text-center">
-          <p className="text-lg font-bold leading-none text-white">2</p>
-          <p className="mt-1 text-[10px] text-brand-muted">podios</p>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-1.5 rounded-lg bg-brand-primary/10 px-3 py-2">
-        <TrendingUp className="h-3.5 w-3.5 shrink-0 text-brand-primary" />
-        <span className="text-xs font-medium text-brand-primary">Subió 3 posiciones este mes</span>
-      </div>
-    </div>
-  );
-}
-
 const profileHighlights = [
   "Categoría",
   "Puntos",
@@ -487,10 +341,19 @@ function PlayerProfileHighlight() {
             ))}
           </ul>
         </div>
-
-        <div>
-          <PlayerProfileMockup />
+        <div className="flex items-center justify-center">
+          <div className="w-full max-w-[290px] overflow-hidden rounded-[2rem] border border-white/15 bg-brand-surface shadow-2xl shadow-black/50">
+            <Image
+              src="/img/landing/player-evolucion.png"
+              alt="Evolución deportiva del jugador en MiPadelClub, con puntos, ranking y gráfica de progreso"
+              width={495}
+              height={875}
+              sizes="(min-width: 1024px) 290px, 70vw"
+              className="block h-auto w-full"
+            />
+          </div>
         </div>
+
       </div>
     </div>
   );

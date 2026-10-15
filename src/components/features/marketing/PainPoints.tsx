@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { Smartphone, FileSpreadsheet, GitFork, Layers, Calendar, BarChart2, Trophy, Users } from "lucide-react";
 
 const problems = [
@@ -86,6 +87,18 @@ export default function PainPoints() {
           {problems.map((p) => (
             <ProblemCard key={p.title} {...p} />
           ))}
+        </div>
+
+        {/* ── Reservas: vistas Agenda, Semana y móvil ── */}
+        <div className="mb-16">
+          <Image
+            src="/img/landing/reservas-showcase.png"
+            alt="MiPadelClub: gestión de reservas en vistas Agenda y Semana, junto a la disponibilidad móvil para jugadores"
+            width={1648}
+            height={927}
+            sizes="(min-width: 1280px) 1152px, 100vw"
+            className="h-auto w-full rounded-2xl"
+          />
         </div>
 
         {/* ── Transition block ── */}
