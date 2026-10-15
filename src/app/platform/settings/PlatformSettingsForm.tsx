@@ -10,6 +10,9 @@ export type PlatformCommercialSettings = {
   promo_enabled: boolean;
   promo_monthly_price: number | null;
   trial_days: number;
+  // Meses calendario (America/Bogota); cuando está definido manda sobre
+  // trial_days. null = trial en días. Ver 20261115000011.
+  trial_months: number | null;
   currency: string;
   updated_at: string;
   updated_by_name: string | null;
@@ -33,6 +36,9 @@ export function PlatformSettingsForm({ initialSettings }: { initialSettings: Pla
     initialSettings.promo_monthly_price != null ? String(initialSettings.promo_monthly_price) : ""
   );
   const [trialDays, setTrialDays] = useState(String(initialSettings.trial_days));
+  const [trialMonths, setTrialMonths] = useState(
+    initialSettings.trial_months != null ? String(initialSettings.trial_months) : ""
+  );
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -43,6 +49,7 @@ export function PlatformSettingsForm({ initialSettings }: { initialSettings: Pla
     const parsedBase = Number(baseMonthlyPrice);
     const parsedTrial = Number(trialDays);
     const parsedPromo = promoMonthlyPrice.trim() === "" ? null : Number(promoMonthlyPrice);
+    const parsedMonths = trialMonths.trim() === "" ? null : Number(trialMonths);
 
     if (baseMonthlyPrice.trim() === "" || Number.isNaN(parsedBase) || parsedBase < 0) {
       setError("El precio base debe ser un número mayor o igual a 0.");
@@ -50,6 +57,10 @@ export function PlatformSettingsForm({ initialSettings }: { initialSettings: Pla
     }
     if (trialDays.trim() === "" || Number.isNaN(parsedTrial) || !Number.isInteger(parsedTrial) || parsedTrial <= 0) {
       setError("Los días de trial deben ser un entero mayor a 0.");
+      return;
+    }
+    if (parsedMonths !== null && (!Number.isInteger(parsedMonths) || parsedMonths < 1 || parsedMonths > 24)) {
+      setError("Los meses de trial deben ser un entero entre 1 y 24, o quedar vacíos para usar días.");
       return;
     }
     if (parsedPromo !== null && (Number.isNaN(parsedPromo) || parsedPromo < 0)) {
@@ -67,6 +78,7 @@ export function PlatformSettingsForm({ initialSettings }: { initialSettings: Pla
         promoEnabled,
         promoMonthlyPrice: parsedPromo,
         trialDays: parsedTrial,
+        trialMonths: parsedMonths,
       });
 
       if (result.error) {
@@ -80,6 +92,7 @@ export function PlatformSettingsForm({ initialSettings }: { initialSettings: Pla
         promo_enabled: promoEnabled,
         promo_monthly_price: parsedPromo,
         trial_days: parsedTrial,
+        trial_months: parsedMonths,
         updated_at: new Date().toISOString(),
       });
       setToast("Configuración guardada.");
@@ -103,12 +116,23 @@ export function PlatformSettingsForm({ initialSettings }: { initialSettings: Pla
             onChange={(e) => setBaseMonthlyPrice(e.target.value)}
           />
           <Input
+            label="Meses de trial"
+            type="number"
+            min={1}
+            max={24}
+            step={1}
+            value={trialMonths}
+            onChange={(e) => setTrialMonths(e.target.value)}
+            hint="Meses calendario desde la activación (claim). Vacío = usar días."
+          />
+          <Input
             label="Días de trial"
             type="number"
             min={1}
             step={1}
             value={trialDays}
             onChange={(e) => setTrialDays(e.target.value)}
+            hint={trialMonths.trim() !== "" ? "Ignorado mientras haya meses de trial." : undefined}
           />
         </div>
 

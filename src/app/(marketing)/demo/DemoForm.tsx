@@ -30,8 +30,9 @@ export function DemoForm() {
         </div>
         <h2 className="text-xl font-bold text-white mb-2">¡Gracias!</h2>
         <p className="text-sm text-brand-muted leading-relaxed">
-          Recibimos tu solicitud para conocer Mi Pádel Club. Nos pondremos en
-          contacto contigo por WhatsApp para coordinar la demo.
+          Recibimos tu solicitud. Te escribiremos por WhatsApp al número que nos
+          dejaste para coordinar la demo. No necesitas hacer nada más por ahora:
+          tu prueba gratuita empieza cuando activemos tu club, no hoy.
         </p>
       </div>
     );
