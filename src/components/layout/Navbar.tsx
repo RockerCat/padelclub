@@ -4,17 +4,19 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Menu, X } from "lucide-react";
-import { RegisterMenu } from "@/components/features/marketing/RegisterMenu";
 import { NotificationBell } from "./NotificationBell";
 import { createClient } from "@/lib/supabase/client";
 import type { NotificationRow } from "@/lib/notifications";
 import { BrandLogo } from "./BrandLogo";
 
+// Anclas con "/" delante para que funcionen también desde /demo, /privacy,
+// etc. (el Navbar se comparte en todo el grupo (marketing)).
 const navLinks = [
-  { label: "Características", href: "#features" },
-  { label: "Cómo funciona", href: "#como-funciona" },
+  { label: "Características", href: "/#features" },
+  { label: "Cómo funciona", href: "/#como-funciona" },
+  { label: "Precios", href: "/#precios" },
   { label: "Explorar clubes", href: "/clubs" },
-  { label: "Contacto", href: "#contacto" },
+  { label: "Contacto", href: "/#contacto" },
 ];
 
 // Computed server-side by (marketing)/layout.tsx (same identity/entry-path/
@@ -55,7 +57,7 @@ export default function Navbar({ authState = null }: NavbarProps) {
 
           <BrandLogo size="lg" priority />
 
-          <nav className="hidden md:flex items-center gap-8">
+          <nav className="hidden lg:flex items-center gap-8">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
@@ -67,7 +69,7 @@ export default function Navbar({ authState = null }: NavbarProps) {
             ))}
           </nav>
 
-          <div className="hidden md:flex items-center gap-3">
+          <div className="hidden lg:flex items-center gap-3">
             {authState ? (
               <>
                 <Link
@@ -96,17 +98,19 @@ export default function Navbar({ authState = null }: NavbarProps) {
                 >
                   Iniciar sesión
                 </Link>
-                <RegisterMenu
-                  playerOnly
-                  triggerClassName="inline-flex items-center gap-1.5 rounded-lg bg-brand-primary px-4 py-2 text-sm font-semibold text-brand-bg hover:bg-brand-primary/90 transition-colors"
-                  triggerContent="Registrarme"
-                />
+                <Link
+                  href="/demo"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-brand-primary px-4 py-2 text-sm font-semibold text-brand-bg hover:bg-brand-primary/90 transition-colors"
+                  onClick={() => setMobileOpen(false)}
+                >
+                  Empezar con mi club
+                </Link>
               </>
             )}
           </div>
 
           <button
-            className="md:hidden text-white p-1"
+            className="lg:hidden text-white p-1"
             onClick={() => setMobileOpen(!mobileOpen)}
             aria-label="Menú"
           >
@@ -116,7 +120,7 @@ export default function Navbar({ authState = null }: NavbarProps) {
       </div>
 
       {mobileOpen && (
-        <div className="md:hidden border-t border-white/10 bg-brand-surface">
+        <div className="lg:hidden border-t border-white/10 bg-brand-surface">
           <div className="px-4 py-5 flex flex-col gap-4">
             {navLinks.map((link) => (
               <Link
@@ -163,11 +167,13 @@ export default function Navbar({ authState = null }: NavbarProps) {
                 >
                   Iniciar sesión
                 </Link>
-                <RegisterMenu
-                  playerOnly
-                  triggerClassName="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand-primary px-4 py-2.5 text-sm font-semibold text-brand-bg hover:bg-brand-primary/90 transition-colors"
-                  triggerContent="Registrarme"
-                />
+                <Link
+                  href="/demo"
+                  className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand-primary px-4 py-2.5 text-sm font-semibold text-brand-bg hover:bg-brand-primary/90 transition-colors"
+                  onClick={() => setMobileOpen(false)}
+                >
+                  Empezar con mi club
+                </Link>
               </>
             )}
           </div>
