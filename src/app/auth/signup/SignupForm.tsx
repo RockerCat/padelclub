@@ -247,14 +247,24 @@ export function SignupForm({ inviteToken, branding, next: rawNext }: SignupFormP
   return (
     <Card variant="elevated">
       <CardHeader>
-        <h1 className="text-xl font-bold text-white">Crear cuenta</h1>
+        {/* Sin invitación, el registro público es SOLO de jugadores (ver
+            CLAUDE.md → Funnel Comercial Principles). Con invitación (ADMIN
+            o jugador) se conserva el copy del rol invitado. */}
+        <h1 className="text-xl font-bold text-white">
+          {inviteToken ? "Crear cuenta" : "Crear cuenta de jugador"}
+        </h1>
         {branding ? (
           <p className="text-sm text-brand-muted mt-1">
             Crea tu cuenta para unirte como{" "}
             <span className="text-white font-medium">{branding.roleLabel}</span>.
           </p>
+        ) : inviteToken ? (
+          <p className="text-sm text-brand-muted mt-1">
+            Recibirás un correo para confirmar tu cuenta.
+          </p>
         ) : (
           <p className="text-sm text-brand-muted mt-1">
+            Reserva canchas, sigue tu ranking y participa en los torneos de tu club.
             Recibirás un correo para confirmar tu cuenta.
           </p>
         )}
@@ -315,7 +325,16 @@ export function SignupForm({ inviteToken, branding, next: rawNext }: SignupFormP
           </Button>
         </form>
 
-        <p className="text-center text-sm text-brand-muted mt-6">
+        {!inviteToken && (
+          <p className="text-center text-sm text-brand-muted mt-6">
+            ¿Tienes un club de pádel?{" "}
+            <Link href="/demo" className="text-brand-primary hover:underline font-medium">
+              Agenda una demo
+            </Link>
+          </p>
+        )}
+
+        <p className="text-center text-sm text-brand-muted mt-3">
           ¿Ya tienes cuenta?{" "}
           <Link
             href={loginHref}

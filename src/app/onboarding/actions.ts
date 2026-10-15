@@ -113,6 +113,12 @@ export async function createClub(
           fieldErrors: { slug: "Este identificador ya está en uso. Elige otro." },
         };
       }
+      if (rpcError.code === "42501") {
+        return {
+          error:
+            "Solo un propietario con un club activo puede crear clubes adicionales. Para incorporar un club nuevo, agenda una demo en mipadel.club/demo.",
+        };
+      }
       return {
         error: `[${rpcError.code}] ${rpcError.message}`,
       };

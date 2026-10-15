@@ -14,6 +14,16 @@ export default async function CreateClubPage() {
 
   if (!user) redirect("/auth/login?next=/clubs/create");
 
+  // Solo un OWNER existente puede crear un club adicional. Los clubes nuevos
+  // se incorporan por /demo → Entrega de Club → claim_club(); una cuenta sin
+  // tipo, PLAYER, ADMIN o SUPERADMIN nunca llega a este formulario. La
+  // autoridad real es create_club_with_owner (20261115000011), que rechaza
+  // lo mismo en base de datos — esto solo evita mostrar un formulario que
+  // fallaría.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- get_my_profile added in 20261114000002, not yet in generated types until `npm run types:generate` runs against a DB with this migration applied.
+  const { data: myProfile } = await (supabase.rpc as any)("get_my_profile");
+  if (myProfile?.[0]?.account_type !== "OWNER") redirect("/clubs");
+
   return (
     <div className="min-h-screen bg-brand-bg flex flex-col items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">

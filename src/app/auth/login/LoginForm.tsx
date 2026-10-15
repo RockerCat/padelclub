@@ -134,8 +134,7 @@ export function LoginForm() {
           <div className="text-center text-sm text-brand-muted mt-6">
             <span>¿No tienes cuenta? </span>
             <RegisterMenu
-              playerOnly
-              triggerContent="Registrarme"
+              triggerContent="Registrarme como jugador"
               triggerClassName="text-brand-primary hover:underline font-medium"
             />
           </div>

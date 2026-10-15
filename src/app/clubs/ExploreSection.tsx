@@ -565,9 +565,8 @@ export function ExploreSection({ clubs, memberMap, pendingRequestClubIds, isAuth
               Iniciar sesión
             </Link>
             <RegisterMenu
-              playerOnly
               triggerClassName="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold bg-brand-primary text-brand-bg hover:bg-brand-primary/90 transition-colors"
-              triggerContent="Registrarme"
+              triggerContent="Registrarme como jugador"
             />
           </div>
         </div>

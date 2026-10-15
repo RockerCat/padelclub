@@ -162,9 +162,8 @@ export default async function ClubsPage() {
                 Iniciar sesión
               </Link>
               <RegisterMenu
-                playerOnly
                 triggerClassName="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-brand-primary text-brand-bg hover:bg-brand-primary/90 transition-colors"
-                triggerContent="Registrarme"
+                triggerContent="Registrarme como jugador"
               />
             </div>
           )}

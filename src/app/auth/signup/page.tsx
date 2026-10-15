@@ -101,7 +101,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
         ) : (
           <div className="text-center mb-8">
             <BrandLogo size="md" className="justify-center" />
-            <p className="text-brand-muted text-sm mt-2">Crea tu cuenta</p>
+            <p className="text-brand-muted text-sm mt-2">Registro de jugadores</p>
           </div>
         )}
 
