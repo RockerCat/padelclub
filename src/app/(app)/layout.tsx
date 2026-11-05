@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { loginPathForCurrentRequest } from "@/lib/utils/loginRedirect";
 
 export default async function AppLayout({
   children,
@@ -12,7 +13,7 @@ export default async function AppLayout({
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/auth/login");
+    redirect(await loginPathForCurrentRequest());
   }
 
   return <>{children}</>;

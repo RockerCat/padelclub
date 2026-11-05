@@ -12,6 +12,7 @@ import { BrandLogo } from "./BrandLogo";
 // Anclas con "/" delante para que funcionen también desde /demo, /privacy,
 // etc. (el Navbar se comparte en todo el grupo (marketing)).
 const navLinks = [
+  { label: "Encuentra partido", href: "/partidos" },
   { label: "Características", href: "/#features" },
   { label: "Cómo funciona", href: "/#como-funciona" },
   { label: "Precios", href: "/#precios" },

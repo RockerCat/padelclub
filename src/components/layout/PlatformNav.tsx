@@ -17,6 +17,7 @@ import {
   ArrowLeftRight,
   LogOut,
   ShieldCheck,
+  MapPin,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils/cn";
@@ -40,6 +41,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/platform", icon: LayoutDashboard },
   { label: "Clubes", href: "/platform/clubs", icon: Building2 },
   { label: "Prospectos", href: "/platform/leads", icon: Handshake },
+  { label: "Directorio", href: "/platform/venues", icon: MapPin },
   { label: "Usuarios", href: "/platform/users", icon: Users },
   { label: "Suscripciones", href: "/platform/subscriptions", icon: CreditCard },
   { label: "Configuración", href: "/platform/settings", icon: Settings },

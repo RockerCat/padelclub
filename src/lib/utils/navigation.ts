@@ -27,6 +27,8 @@ type MembershipRow = { role: string; clubs: { id: string; slug: string; archived
  * ?next= are decided by the caller before reaching this — this function is
  * only the club-membership part of that decision.
  *
+ * - PLAYER (or a fresh untyped account), any number of clubs → "/mi-padel",
+ *   the global player home. Everything below applies to OWNER/ADMIN only.
  * - 0 active memberships (after dropping archived clubs — see below) →
  *   "/clubs" (today's discover/create experience, unchanged).
  * - Exactly 1 active membership → straight into it via getClubEntryPath.
@@ -67,9 +69,26 @@ export async function resolveClubEntryPath(
     .eq("is_active", true)
     .order("joined_at", { ascending: true });
 
-  const rows = ((memberships ?? []) as unknown as MembershipRow[]).filter(
-    (m) => !m.clubs.archived_at && m.clubs.is_active
-  );
+  const allRows = (memberships ?? []) as unknown as MembershipRow[];
+  const rows = allRows.filter((m) => !m.clubs.archived_at && m.clubs.is_active);
+
+  // "Mi Pádel" (CLAUDE.md → Player Home Principles): toda cuenta que actúa
+  // como jugador — PLAYER o recién creada sin account_type — entra a su
+  // espacio global, tenga cero, uno o varios clubes. OWNER/ADMIN conservan
+  // exactamente la resolución de siempre (abajo). account_type es global y
+  // la base garantiza que coincide con cada rol de club_members, así que
+  // una membresía OWNER/ADMIN identifica la cuenta sin leer el perfil; solo
+  // sin ninguna se consulta account_type (un OWNER/ADMIN cuyas membresías
+  // se desactivaron sigue yendo a "/clubs", como antes). SUPERADMIN lo
+  // decide cada caller antes de llegar aquí.
+  if (!allRows.some((m) => m.role === "OWNER" || m.role === "ADMIN")) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- misma lectura self-only que más abajo
+    const { data: profileRows } = await (supabase.rpc as any)("get_my_profile");
+    const accountType: string | null = profileRows?.[0]?.account_type ?? null;
+    if (accountType !== "OWNER" && accountType !== "ADMIN") {
+      return "/mi-padel";
+    }
+  }
 
   if (rows.length === 0) {
     return "/clubs";

@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { loginPathForCurrentRequest } from "@/lib/utils/loginRedirect";
 import { deriveCommercialPhase, getCommercialPillContent } from "../../../../shared/commercial/lifecycle";
 import { AppNav } from "@/components/layout/AppNav";
 import { ClubThemeProvider } from "@/components/layout/ClubThemeProvider";
@@ -31,7 +32,7 @@ export default async function ClubLayout({ children, params }: ClubLayoutProps) 
   console.log("[user]", user?.id);
 
   if (!user) {
-    redirect("/auth/login");
+    redirect(await loginPathForCurrentRequest());
   }
 
   console.log("[club lookup]", slug);

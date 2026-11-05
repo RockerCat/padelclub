@@ -11,6 +11,8 @@ import {
   LogOut,
   Lock,
   ArrowLeftRight,
+  ArrowLeft,
+  Home,
   PlusCircle,
   Building2,
   ChevronDown,
@@ -467,6 +469,18 @@ function NavContent({
 }: NavContentProps) {
   return (
     <nav className="flex flex-col h-full">
+      {/* Regreso evidente al espacio global del jugador ("Mi Pádel") —
+          solo PLAYER; OWNER/ADMIN no tienen experiencia global. */}
+      {role === "PLAYER" && (
+        <Link
+          href="/mi-padel"
+          onClick={onLinkClick}
+          className="flex items-center gap-2 px-4 py-2.5 border-b border-white/10 text-xs font-semibold text-brand-muted hover:text-white hover:bg-white/5 transition-colors"
+        >
+          <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
+          Mi Pádel
+        </Link>
+      )}
       <div className="relative">
         <ClubHeader club={club} role={role} roleLabel={roleLabel} />
         <div className="absolute top-3 right-3">
@@ -566,6 +580,23 @@ function NavContent({
           <User className="w-4 h-4 shrink-0" />
           <span>Mi Perfil</span>
         </Link>
+        {/* Espacio global del jugador ("Mi Pádel": partidos, clubes,
+            actividad combinada); solo PLAYER, nunca OWNER/ADMIN. */}
+        {role === "PLAYER" && (
+          <Link
+            href="/mi-padel"
+            onClick={onLinkClick}
+            className={cn(
+              "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors",
+              pathname === "/mi-padel"
+                ? "text-white bg-brand-primary/5"
+                : "text-brand-muted hover:text-white hover:bg-brand-primary/5"
+            )}
+          >
+            <Home className="w-4 h-4 shrink-0" />
+            <span>Mi Pádel</span>
+          </Link>
+        )}
         {/* OWNER/ADMIN: sin cambios — sigue oculto con una sola membresía. */}
         {membershipCount >= 2 &&
           (role === "OWNER" ? (
@@ -836,6 +867,13 @@ export function AppNav({
               style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))" }}
             >
               <div className="flex items-center gap-2.5 min-w-0 mr-2">
+                <Link
+                  href="/mi-padel"
+                  aria-label="Volver a Mi Pádel"
+                  className="-ml-1 p-1.5 rounded-lg text-brand-muted hover:text-white hover:bg-white/5 shrink-0"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </Link>
                 <div
                   className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden ring-1 ring-white/10"
                   style={
@@ -907,6 +945,24 @@ export function AppNav({
                       <User className="w-4 h-4 shrink-0" />
                       <span>Mi Perfil</span>
                     </Link>
+                    {/* Espacio global del jugador ("Mi Pádel": partidos, clubes,
+                        actividad combinada); solo PLAYER, nunca OWNER/ADMIN. */}
+                    {role === "PLAYER" && (
+                      <Link
+                        href="/mi-padel"
+                        role="menuitem"
+                        onClick={() => setUserMenuOpen(false)}
+                        className={cn(
+                          "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors",
+                          pathname === "/mi-padel"
+                            ? "text-white bg-brand-primary/5"
+                            : "text-brand-muted hover:text-white hover:bg-brand-primary/5"
+                        )}
+                      >
+                        <Home className="w-4 h-4 shrink-0" />
+                        <span>Mi Pádel</span>
+                      </Link>
+                    )}
                     {/* Siempre visible para PLAYER (nunca condicionado a
                         membershipCount, a diferencia de OWNER/ADMIN) y
                         siempre hacia /clubs — nunca "Salir del club", que

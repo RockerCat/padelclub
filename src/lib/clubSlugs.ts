@@ -26,4 +26,8 @@ export const RESERVED_SLUGS = new Set([
   "api",
   "notifications",
   "claim-club",
+  // "Encuentra tu partido" ((player)/partidos).
+  "partidos",
+  // "Mi Pádel" — dashboard global del jugador ((player)/mi-padel).
+  "mi-padel",
 ]);

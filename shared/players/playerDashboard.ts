@@ -302,7 +302,9 @@ export async function getPlayerClubReservationActivity(
   return Array.from(byId.values());
 }
 
-function isReservationFinished(r: ClubReservationRecord, now: Date): boolean {
+// Exportada para Mi Pádel (shared/players/playerHome.ts), que agrupa las
+// mismas horas por mes — nunca una segunda regla de "reserva terminada".
+export function isReservationFinished(r: ClubReservationRecord, now: Date): boolean {
   const end = new Date(`${r.date}T${r.start_time.slice(0, 5)}:00`);
   end.setMinutes(end.getMinutes() + r.duration_minutes);
   return end.getTime() <= now.getTime();

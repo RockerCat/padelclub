@@ -140,12 +140,12 @@ export function SignupForm({ inviteToken, branding, next: rawNext }: SignupFormP
       // Session present → email confirmation disabled, user is active immediately.
       // An invite always wins (its own dedicated destination, /invite/<token>
       // — never lost here just because email confirmation happens to be off),
-      // then next (e.g. returning to join a club), then the generic /clubs
-      // directory only when neither applies — never a self-service "crea tu
+      // then next (e.g. returning to join a club or an open match), then the
+      // player's global home (/mi-padel) only when neither applies — never a self-service "crea tu
       // club" welcome screen, which no longer exists (public self-registration
       // is PLAYER-only; see CLAUDE.md → Funnel Comercial Principles).
       if (data.session) {
-        router.push(inviteToken ? `/invite/${inviteToken}` : next ?? "/clubs");
+        router.push(inviteToken ? `/invite/${inviteToken}` : next ?? "/mi-padel");
         return;
       }
 

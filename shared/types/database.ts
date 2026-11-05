@@ -777,6 +777,78 @@ export type Database = {
           },
         ]
       }
+      club_subscriptions: {
+        Row: {
+          auto_renew: boolean
+          cancelled_at: string | null
+          club_id: string
+          created_at: string
+          current_period_end: string
+          current_period_start: string
+          id: string
+          last_payment_at: string | null
+          last_payment_status: string | null
+          next_billing_at: string | null
+          payer_profile_id: string
+          status: string
+          suspended_at: string | null
+          trial_ends_at: string | null
+          trial_started_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          auto_renew?: boolean
+          cancelled_at?: string | null
+          club_id: string
+          created_at?: string
+          current_period_end: string
+          current_period_start: string
+          id?: string
+          last_payment_at?: string | null
+          last_payment_status?: string | null
+          next_billing_at?: string | null
+          payer_profile_id: string
+          status?: string
+          suspended_at?: string | null
+          trial_ends_at?: string | null
+          trial_started_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          auto_renew?: boolean
+          cancelled_at?: string | null
+          club_id?: string
+          created_at?: string
+          current_period_end?: string
+          current_period_start?: string
+          id?: string
+          last_payment_at?: string | null
+          last_payment_status?: string | null
+          next_billing_at?: string | null
+          payer_profile_id?: string
+          status?: string
+          suspended_at?: string | null
+          trial_ends_at?: string | null
+          trial_started_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "club_subscriptions_club_id_fkey"
+            columns: ["club_id"]
+            isOneToOne: true
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "club_subscriptions_payer_profile_id_fkey"
+            columns: ["payer_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clubs: {
         Row: {
           address: string | null
@@ -898,6 +970,118 @@ export type Database = {
           {
             foreignKeyName: "clubs_reactivated_by_fkey"
             columns: ["reactivated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      commercial_leads: {
+        Row: {
+          city: string
+          club_name: string
+          contact_name: string
+          converted_at: string | null
+          converted_club_id: string | null
+          created_at: string
+          demo_at: string | null
+          id: string
+          lost_reason: string | null
+          notes: string | null
+          number_of_courts: number | null
+          privacy_consent_at: string
+          source: string
+          status: string
+          updated_at: string
+          whatsapp: string
+        }
+        Insert: {
+          city: string
+          club_name: string
+          contact_name: string
+          converted_at?: string | null
+          converted_club_id?: string | null
+          created_at?: string
+          demo_at?: string | null
+          id?: string
+          lost_reason?: string | null
+          notes?: string | null
+          number_of_courts?: number | null
+          privacy_consent_at: string
+          source?: string
+          status?: string
+          updated_at?: string
+          whatsapp: string
+        }
+        Update: {
+          city?: string
+          club_name?: string
+          contact_name?: string
+          converted_at?: string | null
+          converted_club_id?: string | null
+          created_at?: string
+          demo_at?: string | null
+          id?: string
+          lost_reason?: string | null
+          notes?: string | null
+          number_of_courts?: number | null
+          privacy_consent_at?: string
+          source?: string
+          status?: string
+          updated_at?: string
+          whatsapp?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commercial_leads_converted_club_id_fkey"
+            columns: ["converted_club_id"]
+            isOneToOne: false
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      commercial_settings: {
+        Row: {
+          base_monthly_price: number
+          created_at: string
+          currency: string
+          id: string
+          promo_enabled: boolean
+          promo_monthly_price: number | null
+          trial_days: number
+          trial_months: number | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          base_monthly_price: number
+          created_at?: string
+          currency: string
+          id?: string
+          promo_enabled?: boolean
+          promo_monthly_price?: number | null
+          trial_days: number
+          trial_months?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          base_monthly_price?: number
+          created_at?: string
+          currency?: string
+          id?: string
+          promo_enabled?: boolean
+          promo_monthly_price?: number | null
+          trial_days?: number
+          trial_months?: number | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commercial_settings_updated_by_fkey"
+            columns: ["updated_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1061,6 +1245,383 @@ export type Database = {
             columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      open_match_participants: {
+        Row: {
+          confirmed_schedule_version: number
+          id: string
+          is_active: boolean
+          joined_at: string
+          left_at: string | null
+          match_id: string
+          profile_id: string
+        }
+        Insert: {
+          confirmed_schedule_version: number
+          id?: string
+          is_active?: boolean
+          joined_at?: string
+          left_at?: string | null
+          match_id: string
+          profile_id: string
+        }
+        Update: {
+          confirmed_schedule_version?: number
+          id?: string
+          is_active?: boolean
+          joined_at?: string
+          left_at?: string | null
+          match_id?: string
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "open_match_participants_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "open_matches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "open_match_participants_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      open_matches: {
+        Row: {
+          cancelled_at: string | null
+          city: string
+          city_key: string
+          comment: string | null
+          court_booked_at: string | null
+          court_status: string
+          created_at: string
+          guest_count: number
+          id: string
+          level: string
+          match_date: string
+          max_players: number
+          organizer_id: string
+          schedule_changed_at: string | null
+          schedule_version: number
+          start_time: string
+          status: string
+          updated_at: string
+          venue_id: string | null
+          venue_name: string | null
+        }
+        Insert: {
+          cancelled_at?: string | null
+          city: string
+          city_key: string
+          comment?: string | null
+          court_booked_at?: string | null
+          court_status?: string
+          created_at?: string
+          guest_count?: number
+          id?: string
+          level: string
+          match_date: string
+          max_players?: number
+          organizer_id: string
+          schedule_changed_at?: string | null
+          schedule_version?: number
+          start_time: string
+          status?: string
+          updated_at?: string
+          venue_id?: string | null
+          venue_name?: string | null
+        }
+        Update: {
+          cancelled_at?: string | null
+          city?: string
+          city_key?: string
+          comment?: string | null
+          court_booked_at?: string | null
+          court_status?: string
+          created_at?: string
+          guest_count?: number
+          id?: string
+          level?: string
+          match_date?: string
+          max_players?: number
+          organizer_id?: string
+          schedule_changed_at?: string | null
+          schedule_version?: number
+          start_time?: string
+          status?: string
+          updated_at?: string
+          venue_id?: string | null
+          venue_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "open_matches_organizer_id_fkey"
+            columns: ["organizer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "open_matches_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "padel_venues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      padel_venues: {
+        Row: {
+          address: string | null
+          club_id: string | null
+          created_at: string
+          created_by: string | null
+          department: string
+          department_key: string
+          id: string
+          internal_notes: string | null
+          latitude: number | null
+          longitude: number | null
+          maps_url: string | null
+          municipality: string
+          municipality_key: string
+          name: string
+          name_key: string
+          phone: string | null
+          published_at: string | null
+          source_label: string | null
+          source_url: string | null
+          status: string
+          updated_at: string
+          updated_by: string | null
+          verified_at: string | null
+          whatsapp: string | null
+        }
+        Insert: {
+          address?: string | null
+          club_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          department: string
+          department_key: string
+          id?: string
+          internal_notes?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          maps_url?: string | null
+          municipality: string
+          municipality_key: string
+          name: string
+          name_key: string
+          phone?: string | null
+          published_at?: string | null
+          source_label?: string | null
+          source_url?: string | null
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+          verified_at?: string | null
+          whatsapp?: string | null
+        }
+        Update: {
+          address?: string | null
+          club_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          department?: string
+          department_key?: string
+          id?: string
+          internal_notes?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          maps_url?: string | null
+          municipality?: string
+          municipality_key?: string
+          name?: string
+          name_key?: string
+          phone?: string | null
+          published_at?: string | null
+          source_label?: string | null
+          source_url?: string | null
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+          verified_at?: string | null
+          whatsapp?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "padel_venues_club_id_fkey"
+            columns: ["club_id"]
+            isOneToOne: true
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "padel_venues_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "padel_venues_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_events: {
+        Row: {
+          checksum: string | null
+          created_at: string
+          event_type: string
+          id: string
+          payload: Json
+          payment_id: string | null
+          processed_at: string | null
+          processing_error: string | null
+          provider: string
+          provider_transaction_id: string | null
+          status: string | null
+        }
+        Insert: {
+          checksum?: string | null
+          created_at?: string
+          event_type: string
+          id?: string
+          payload: Json
+          payment_id?: string | null
+          processed_at?: string | null
+          processing_error?: string | null
+          provider?: string
+          provider_transaction_id?: string | null
+          status?: string | null
+        }
+        Update: {
+          checksum?: string | null
+          created_at?: string
+          event_type?: string
+          id?: string
+          payload?: Json
+          payment_id?: string | null
+          processed_at?: string | null
+          processing_error?: string | null
+          provider?: string
+          provider_transaction_id?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_events_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payments: {
+        Row: {
+          amount: number
+          base_price: number
+          club_id: string
+          created_at: string
+          currency: string
+          discount_amount: number
+          failed_at: string | null
+          id: string
+          initiated_by: string
+          paid_at: string | null
+          payment_method: string | null
+          provider: string
+          provider_reference: string
+          provider_transaction_id: string | null
+          raw_response: Json | null
+          status: string
+          subscription_id: string
+          subscription_period_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          base_price: number
+          club_id: string
+          created_at?: string
+          currency: string
+          discount_amount?: number
+          failed_at?: string | null
+          id?: string
+          initiated_by: string
+          paid_at?: string | null
+          payment_method?: string | null
+          provider?: string
+          provider_reference: string
+          provider_transaction_id?: string | null
+          raw_response?: Json | null
+          status?: string
+          subscription_id: string
+          subscription_period_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          base_price?: number
+          club_id?: string
+          created_at?: string
+          currency?: string
+          discount_amount?: number
+          failed_at?: string | null
+          id?: string
+          initiated_by?: string
+          paid_at?: string | null
+          payment_method?: string | null
+          provider?: string
+          provider_reference?: string
+          provider_transaction_id?: string | null
+          raw_response?: Json | null
+          status?: string
+          subscription_id?: string
+          subscription_period_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_club_id_fkey"
+            columns: ["club_id"]
+            isOneToOne: false
+            referencedRelation: "clubs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_initiated_by_fkey"
+            columns: ["initiated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "club_subscriptions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_subscription_period_id_fkey"
+            columns: ["subscription_period_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_periods"
             referencedColumns: ["id"]
           },
         ]
@@ -1465,6 +2026,56 @@ export type Database = {
           sort_order?: number
         }
         Relationships: []
+      }
+      subscription_periods: {
+        Row: {
+          base_price: number
+          created_at: string
+          currency: string
+          discount_amount: number
+          final_price: number
+          id: string
+          period_end: string
+          period_start: string
+          status: string
+          subscription_id: string
+          updated_at: string
+        }
+        Insert: {
+          base_price: number
+          created_at?: string
+          currency: string
+          discount_amount?: number
+          final_price: number
+          id?: string
+          period_end: string
+          period_start: string
+          status: string
+          subscription_id: string
+          updated_at?: string
+        }
+        Update: {
+          base_price?: number
+          created_at?: string
+          currency?: string
+          discount_amount?: number
+          final_price?: number
+          id?: string
+          period_end?: string
+          period_start?: string
+          status?: string
+          subscription_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_periods_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "club_subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tournament_entries: {
         Row: {
@@ -1876,6 +2487,98 @@ export type Database = {
         }
         Returns: undefined
       }
+      _open_match_check_venue: {
+        Args: { p_city_key: string; p_current_id: string; p_venue_id: string }
+        Returns: string
+      }
+      _open_match_city_key: { Args: { p_city: string }; Returns: string }
+      _open_match_display_name: {
+        Args: { p_full_name: string }
+        Returns: string
+      }
+      _open_match_lock: {
+        Args: { p_match_id: string }
+        Returns: {
+          cancelled_at: string | null
+          city: string
+          city_key: string
+          comment: string | null
+          court_booked_at: string | null
+          court_status: string
+          created_at: string
+          guest_count: number
+          id: string
+          level: string
+          match_date: string
+          max_players: number
+          organizer_id: string
+          schedule_changed_at: string | null
+          schedule_version: number
+          start_time: string
+          status: string
+          updated_at: string
+          venue_id: string | null
+          venue_name: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "open_matches"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      _open_match_place_changed: {
+        Args: {
+          p_new_name: string
+          p_new_venue_id: string
+          p_old_name: string
+          p_old_venue_id: string
+        }
+        Returns: boolean
+      }
+      _open_match_require_player: { Args: never; Returns: string }
+      _open_match_starts_at: {
+        Args: { p_date: string; p_time: string }
+        Returns: string
+      }
+      _open_match_taken: {
+        Args: { p_guest_count: number; p_match_id: string }
+        Returns: number
+      }
+      _open_match_to_json: {
+        Args: {
+          p_include_participants: boolean
+          p_match: Database["public"]["Tables"]["open_matches"]["Row"]
+          p_viewer: string
+        }
+        Returns: Json
+      }
+      _open_match_today_bogota: { Args: never; Returns: string }
+      _open_match_validate: {
+        Args: {
+          p_city: string
+          p_comment: string
+          p_level: string
+          p_match_date: string
+          p_start_time: string
+          p_venue_name: string
+        }
+        Returns: string
+      }
+      _padel_venue_admin_json: {
+        Args: { p_venue: Database["public"]["Tables"]["padel_venues"]["Row"] }
+        Returns: Json
+      }
+      _padel_venue_clean: { Args: { p_value: string }; Returns: string }
+      _padel_venue_maps_url_ok: { Args: { p_url: string }; Returns: boolean }
+      _padel_venue_name_key: { Args: { p_value: string }; Returns: string }
+      _padel_venue_phone: { Args: { p_value: string }; Returns: string }
+      _padel_venue_public_club: { Args: { p_club_id: string }; Returns: Json }
+      _padel_venue_public_json: {
+        Args: { p_venue: Database["public"]["Tables"]["padel_venues"]["Row"] }
+        Returns: Json
+      }
+      _padel_venue_require_platform_admin: { Args: never; Returns: string }
       _reject_pending_reservation_join_requests: {
         Args: {
           p_actor_id: string
@@ -1886,6 +2589,10 @@ export type Database = {
       }
       _require_club_admin: { Args: { p_club_id: string }; Returns: undefined }
       _require_club_not_archived: {
+        Args: { p_club_id: string }
+        Returns: undefined
+      }
+      _require_commercial_access: {
         Args: { p_club_id: string }
         Returns: undefined
       }
@@ -2015,6 +2722,7 @@ export type Database = {
           visibility: string
         }[]
       }
+      cancel_open_match: { Args: { p_match_id: string }; Returns: Json }
       cancel_reservation: {
         Args: { p_reservation_id: string }
         Returns: undefined
@@ -2110,6 +2818,14 @@ export type Database = {
         }[]
       }
       club_role: { Args: { p_club_id: string }; Returns: string }
+      compute_trial_ends_at: {
+        Args: {
+          p_started_at: string
+          p_trial_days: number
+          p_trial_months: number
+        }
+        Returns: string
+      }
       configure_club_default_player_category: {
         Args: { p_category: string; p_club_id: string }
         Returns: {
@@ -2117,6 +2833,10 @@ export type Database = {
           cycle_id: string
           provisioned_count: number
         }[]
+      }
+      confirm_open_match_attendance: {
+        Args: { p_match_id: string }
+        Returns: Json
       }
       confirm_tournament_entry: {
         Args: { p_tournament_entry_id: string }
@@ -2170,7 +2890,42 @@ export type Database = {
           slug: string
         }[]
       }
+      create_commercial_lead: {
+        Args: {
+          p_city: string
+          p_club_name: string
+          p_contact_name: string
+          p_honeypot?: string
+          p_number_of_courts?: number
+          p_privacy_consent?: boolean
+          p_whatsapp: string
+        }
+        Returns: boolean
+      }
       create_join_request: { Args: { p_club_id: string }; Returns: undefined }
+      create_open_match: {
+        Args: {
+          p_city: string
+          p_comment?: string
+          p_court_booked?: boolean
+          p_level: string
+          p_match_date: string
+          p_players_already?: number
+          p_start_time: string
+          p_venue_id?: string
+          p_venue_name?: string
+        }
+        Returns: string
+      }
+      create_pending_payment: {
+        Args: { p_club_id: string }
+        Returns: {
+          amount: number
+          currency: string
+          payment_id: string
+          provider_reference: string
+        }[]
+      }
       create_reservation_admin: {
         Args: {
           p_club_id: string
@@ -2197,59 +2952,107 @@ export type Database = {
         }
         Returns: string
       }
-      create_tournament: {
-        Args: {
-          p_category: string
-          p_club_id: string
-          p_cover_image_url?: string
-          p_description?: string
-          p_entry_fee_amount?: number
-          p_estimated_duration_minutes?: number
-          p_max_pairs: number
-          p_name: string
-          p_prize_description?: string
-          p_registration_closes_at?: string
-          p_registration_opens_at?: string
-          p_secondary_category?: string
-          p_starts_at?: string
-          p_visibility?: string
-        }
-        Returns: {
-          archived_at: string
-          archived_by: string
-          cancelled_at: string
-          cancelled_by: string
-          category: string
-          club_id: string
-          completed_at: string
-          completed_by: string
-          cover_image_url: string
-          created_at: string
-          created_by: string
-          description: string
-          entry_fee_amount: number
-          estimated_duration_minutes: number
-          id: string
-          max_pairs: number
-          name: string
-          prize_description: string
-          registration_closes_at: string
-          registration_opens_at: string
-          secondary_category: string
-          slug: string
-          started_at: string
-          started_by: string
-          starts_at: string
-          status: string
-          updated_at: string
-          visibility: string
-        }[]
-      }
+      create_tournament:
+        | {
+            Args: {
+              p_category: string
+              p_club_id: string
+              p_cover_image_url?: string
+              p_description?: string
+              p_estimated_duration_minutes?: number
+              p_max_pairs: number
+              p_name: string
+              p_prize_description?: string
+              p_registration_closes_at?: string
+              p_registration_opens_at?: string
+              p_secondary_category?: string
+              p_starts_at?: string
+              p_visibility?: string
+            }
+            Returns: {
+              archived_at: string
+              archived_by: string
+              cancelled_at: string
+              cancelled_by: string
+              category: string
+              club_id: string
+              completed_at: string
+              completed_by: string
+              cover_image_url: string
+              created_at: string
+              created_by: string
+              description: string
+              estimated_duration_minutes: number
+              id: string
+              max_pairs: number
+              name: string
+              prize_description: string
+              registration_closes_at: string
+              registration_opens_at: string
+              secondary_category: string
+              slug: string
+              started_at: string
+              started_by: string
+              starts_at: string
+              status: string
+              updated_at: string
+              visibility: string
+            }[]
+          }
+        | {
+            Args: {
+              p_category: string
+              p_club_id: string
+              p_cover_image_url?: string
+              p_description?: string
+              p_entry_fee_amount?: number
+              p_estimated_duration_minutes?: number
+              p_max_pairs: number
+              p_name: string
+              p_prize_description?: string
+              p_registration_closes_at?: string
+              p_registration_opens_at?: string
+              p_secondary_category?: string
+              p_starts_at?: string
+              p_visibility?: string
+            }
+            Returns: {
+              archived_at: string
+              archived_by: string
+              cancelled_at: string
+              cancelled_by: string
+              category: string
+              club_id: string
+              completed_at: string
+              completed_by: string
+              cover_image_url: string
+              created_at: string
+              created_by: string
+              description: string
+              entry_fee_amount: number
+              estimated_duration_minutes: number
+              id: string
+              max_pairs: number
+              name: string
+              prize_description: string
+              registration_closes_at: string
+              registration_opens_at: string
+              secondary_category: string
+              slug: string
+              started_at: string
+              started_by: string
+              starts_at: string
+              status: string
+              updated_at: string
+              visibility: string
+            }[]
+          }
       deactivate_player: {
         Args: { p_club_id: string; p_player_id: string }
         Returns: undefined
       }
       delete_court: { Args: { p_court_id: string }; Returns: undefined }
+      delete_own_account: { Args: never; Returns: undefined }
       effective_club_role: { Args: { p_club_id: string }; Returns: string }
       expire_pending_reservations: {
         Args: { p_club_id?: string }
@@ -2300,6 +3103,17 @@ export type Database = {
           status: string
         }[]
       }
+      get_club_commercial_access: {
+        Args: { p_club_id: string }
+        Returns: {
+          can_create_booking: boolean
+          can_create_tournament: boolean
+          commercial_status: string
+          current_period_end: string
+          has_subscription: boolean
+          trial_ends_at: string
+        }[]
+      }
       get_club_join_requests: {
         Args: { p_club_id: string }
         Returns: {
@@ -2312,6 +3126,10 @@ export type Database = {
         }[]
       }
       get_club_member_email: {
+        Args: { p_club_id: string; p_club_member_id: string }
+        Returns: string
+      }
+      get_club_member_phone: {
         Args: { p_club_id: string; p_club_member_id: string }
         Returns: string
       }
@@ -2329,11 +3147,90 @@ export type Database = {
         Returns: Json
       }
       get_invitation_preview: { Args: { p_token: string }; Returns: Json }
+      get_my_club_payments: {
+        Args: { p_club_id: string; p_limit?: number }
+        Returns: {
+          amount: number
+          created_at: string
+          currency: string
+          failed_at: string
+          id: string
+          paid_at: string
+          payment_method: string
+          status: string
+        }[]
+      }
       get_my_club_sport_profile: { Args: { p_club_id: string }; Returns: Json }
+      get_my_club_subscription: {
+        Args: { p_club_id: string }
+        Returns: {
+          auto_renew: boolean
+          base_monthly_price: number
+          currency: string
+          current_period_end: string
+          current_period_start: string
+          has_subscription: boolean
+          last_payment_at: string
+          last_payment_status: string
+          next_billing_at: string
+          promo_enabled: boolean
+          promo_monthly_price: number
+          status: string
+          suspended_at: string
+          trial_ends_at: string
+          trial_started_at: string
+        }[]
+      }
+      get_my_profile: {
+        Args: never
+        Returns: {
+          account_type: string
+          avatar_url: string
+          created_at: string
+          full_name: string
+          id: string
+          is_platform_admin: boolean
+          last_club_id: string
+          phone: string
+          updated_at: string
+        }[]
+      }
       get_my_profile_activity: { Args: never; Returns: Json }
+      get_open_match: { Args: { p_match_id: string }; Returns: Json }
       get_or_create_active_ranking_cycle: {
         Args: { p_category: string; p_club_id: string }
         Returns: string
+      }
+      get_payment_status: {
+        Args: { p_reference: string }
+        Returns: {
+          amount: number
+          club_slug: string
+          currency: string
+          status: string
+        }[]
+      }
+      get_platform_club_commercial_status: {
+        Args: { p_club_id: string }
+        Returns: {
+          base_monthly_price: number
+          currency: string
+          current_period_end: string
+          current_period_start: string
+          has_subscription: boolean
+          last_payment_at: string
+          last_payment_status: string
+          next_billing_at: string
+          payer_email: string
+          payer_name: string
+          payer_profile_id: string
+          promo_enabled: boolean
+          promo_monthly_price: number
+          status: string
+          trial_days_remaining: number
+          trial_ends_at: string
+          trial_started_at: string
+        }[]
       }
       get_platform_club_detail: {
         Args: { p_club_id: string }
@@ -2357,17 +3254,110 @@ export type Database = {
       get_platform_clubs_overview: {
         Args: never
         Returns: {
+          commercial_status: string
           court_count: number
           created_at: string
+          current_period_end: string
+          current_period_start: string
+          has_subscription: boolean
           id: string
           is_active: boolean
-          logo_url: string
+          last_payment_amount: number
+          last_payment_at: string
+          last_payment_currency: string
+          last_payment_status: string
           name: string
+          next_billing_at: string
           owner_email: string
           owner_name: string
+          payer_email: string
+          payer_name: string
           player_count: number
           slug: string
+          trial_ends_at: string
+          trial_started_at: string
           visibility: string
+        }[]
+      }
+      get_platform_commercial_settings: {
+        Args: never
+        Returns: {
+          base_monthly_price: number
+          currency: string
+          promo_enabled: boolean
+          promo_monthly_price: number
+          trial_days: number
+          trial_months: number
+          updated_at: string
+          updated_by_name: string
+        }[]
+      }
+      get_platform_lead_detail: {
+        Args: { p_lead_id: string }
+        Returns: {
+          city: string
+          club_name: string
+          contact_name: string
+          converted_at: string
+          converted_club_id: string
+          converted_club_name: string
+          converted_club_slug: string
+          created_at: string
+          demo_at: string
+          id: string
+          lost_reason: string
+          notes: string
+          number_of_courts: number
+          privacy_consent_at: string
+          source: string
+          status: string
+          updated_at: string
+          whatsapp: string
+        }[]
+      }
+      get_platform_leads_overview: {
+        Args: never
+        Returns: {
+          city: string
+          club_name: string
+          contact_name: string
+          converted_club_id: string
+          created_at: string
+          demo_at: string
+          id: string
+          number_of_courts: number
+          status: string
+          whatsapp: string
+        }[]
+      }
+      get_platform_subscription_payments: {
+        Args: { p_club_id: string }
+        Returns: {
+          amount: number
+          created_at: string
+          currency: string
+          failed_at: string
+          id: string
+          paid_at: string
+          payment_method: string
+          provider: string
+          provider_reference: string
+          provider_transaction_id: string
+          status: string
+        }[]
+      }
+      get_platform_subscription_periods: {
+        Args: { p_club_id: string }
+        Returns: {
+          base_price: number
+          created_at: string
+          currency: string
+          discount_amount: number
+          final_price: number
+          id: string
+          period_end: string
+          period_start: string
+          status: string
         }[]
       }
       get_platform_user_detail: {
@@ -2408,9 +3398,22 @@ export type Database = {
           slug: string
         }[]
       }
+      get_public_commercial_offer: {
+        Args: never
+        Returns: {
+          currency: string
+          monthly_price: number
+          trial_days: number
+          trial_months: number
+        }[]
+      }
       get_reservation_share_detail: {
         Args: { p_reservation_id: string }
         Returns: Json
+      }
+      initialize_club_trial: {
+        Args: { p_club_id: string; p_payer_profile_id: string }
+        Returns: undefined
       }
       is_club_member: { Args: { p_club_id: string }; Returns: boolean }
       is_current_user_tournament_entry_member: {
@@ -2421,8 +3424,31 @@ export type Database = {
         Args: { p_club_id: string }
         Returns: boolean
       }
+      join_open_match: { Args: { p_match_id: string }; Returns: Json }
       join_public_club: { Args: { p_club_id: string }; Returns: undefined }
       leave_club: { Args: { p_club_id: string }; Returns: undefined }
+      leave_open_match: { Args: { p_match_id: string }; Returns: Json }
+      list_my_open_matches: { Args: never; Returns: Json }
+      list_open_match_cities: { Args: never; Returns: Json }
+      list_open_matches: {
+        Args: {
+          p_city?: string
+          p_date?: string
+          p_level?: string
+          p_limit?: number
+          p_min_spots?: number
+        }
+        Returns: Json
+      }
+      list_padel_venues: {
+        Args: {
+          p_department?: string
+          p_limit?: number
+          p_municipality?: string
+          p_query?: string
+        }
+        Returns: Json
+      }
       notify_reservation_approved: {
         Args: { p_reservation_id: string }
         Returns: undefined
@@ -2484,6 +3510,27 @@ export type Database = {
           visibility: string
         }[]
       }
+      platform_convert_lead_to_pending_club: {
+        Args: {
+          p_lead_id: string
+          p_name: string
+          p_slug: string
+          p_visibility?: string
+        }
+        Returns: {
+          id: string
+          slug: string
+        }[]
+      }
+      platform_convert_padel_venue_to_pending_club: {
+        Args: {
+          p_name: string
+          p_slug: string
+          p_venue_id: string
+          p_visibility?: string
+        }
+        Returns: Json
+      }
       platform_create_pending_club: {
         Args: { p_name: string; p_slug: string; p_visibility?: string }
         Returns: {
@@ -2495,10 +3542,32 @@ export type Database = {
         Args: { p_club_id: string }
         Returns: undefined
       }
+      platform_delete_padel_venue_draft: {
+        Args: { p_venue_id: string }
+        Returns: boolean
+      }
+      platform_find_padel_venue_duplicates: {
+        Args: {
+          p_address?: string
+          p_department: string
+          p_exclude_id?: string
+          p_municipality: string
+          p_name: string
+          p_phone?: string
+          p_whatsapp?: string
+        }
+        Returns: Json
+      }
       platform_generate_club_claim_link: {
         Args: { p_club_id: string; p_token_hash: string }
         Returns: string
       }
+      platform_get_padel_venue: { Args: { p_venue_id: string }; Returns: Json }
+      platform_link_padel_venue_club: {
+        Args: { p_club_id: string; p_venue_id: string }
+        Returns: Json
+      }
+      platform_list_padel_venues: { Args: never; Returns: Json }
       platform_reactivate_club: {
         Args: { p_club_id: string }
         Returns: undefined
@@ -2507,12 +3576,48 @@ export type Database = {
         Args: { p_club_id: string }
         Returns: boolean
       }
+      platform_save_padel_venue: {
+        Args: {
+          p_address?: string
+          p_department: string
+          p_internal_notes?: string
+          p_latitude?: number
+          p_longitude?: number
+          p_maps_url?: string
+          p_municipality: string
+          p_name: string
+          p_phone?: string
+          p_source_label?: string
+          p_source_url?: string
+          p_venue_id: string
+          p_verified_at?: string
+          p_whatsapp?: string
+        }
+        Returns: Json
+      }
+      platform_set_padel_venue_status: {
+        Args: { p_status: string; p_venue_id: string }
+        Returns: Json
+      }
       platform_update_club_slug: {
         Args: { p_club_id: string; p_new_slug: string }
         Returns: {
           id: string
           slug: string
         }[]
+      }
+      process_wompi_transaction_event: {
+        Args: {
+          p_amount_in_cents: number
+          p_checksum?: string
+          p_currency: string
+          p_payment_method?: string
+          p_provider_transaction_id: string
+          p_raw_payload: Json
+          p_reference: string
+          p_status: string
+        }
+        Returns: undefined
       }
       provision_club_member_sport_state: {
         Args: { p_club_member_id: string }
@@ -2691,6 +3796,18 @@ export type Database = {
           visibility: string
         }[]
       }
+      run_commercial_lifecycle_transitions: {
+        Args: never
+        Returns: {
+          transitioned_active_to_past_due: number
+          transitioned_past_due_to_suspended: number
+          transitioned_trial_grace_to_suspended: number
+        }[]
+      }
+      set_open_match_guests: {
+        Args: { p_guest_count: number; p_match_id: string }
+        Returns: Json
+      }
       set_reservation_open_status: {
         Args: { p_is_open: boolean; p_reservation_id: string }
         Returns: undefined
@@ -2720,6 +3837,10 @@ export type Database = {
           withdrawn_at: string
           withdrawn_by: string
         }[]
+      }
+      shares_active_club_with: {
+        Args: { p_profile_id: string }
+        Returns: boolean
       }
       start_tournament: {
         Args: { p_tournament_id: string }
@@ -2755,6 +3876,44 @@ export type Database = {
         }[]
       }
       unaccent: { Args: { "": string }; Returns: string }
+      update_commercial_lead_notes: {
+        Args: { p_lead_id: string; p_notes: string }
+        Returns: undefined
+      }
+      update_commercial_lead_status: {
+        Args: {
+          p_demo_at?: string
+          p_lead_id: string
+          p_lost_reason?: string
+          p_status: string
+        }
+        Returns: undefined
+      }
+      update_open_match: {
+        Args: {
+          p_city: string
+          p_clear_venue?: boolean
+          p_comment?: string
+          p_court_booked?: boolean
+          p_level: string
+          p_match_date: string
+          p_match_id: string
+          p_start_time: string
+          p_venue_id?: string
+          p_venue_name?: string
+        }
+        Returns: Json
+      }
+      update_platform_commercial_settings: {
+        Args: {
+          p_base_monthly_price: number
+          p_promo_enabled: boolean
+          p_promo_monthly_price: number
+          p_trial_days: number
+          p_trial_months: number
+        }
+        Returns: undefined
+      }
       update_platform_user_name: {
         Args: { p_full_name: string; p_user_id: string }
         Returns: undefined
@@ -2917,12 +4076,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2946,11 +4105,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2971,11 +4130,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2996,11 +4155,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -3013,11 +4172,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

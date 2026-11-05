@@ -15,13 +15,14 @@ import { createClient } from "@/lib/supabase/client";
 // además rechaza en base de datos a cualquier cuenta que no sea ya OWNER
 // (20261115000011) — esto no es solo una ocultación visual.
 //
-// Con sesión activa el enlace va directo a /clubs en vez de al registro.
+// Con sesión activa el enlace va directo a /mi-padel (que redirige a
+// OWNER/ADMIN/SUPERADMIN a su destino propio) en vez de al registro.
 interface RegisterMenuProps {
   triggerContent: React.ReactNode;
   triggerClassName: string;
 }
 
-const SIGNUP_PLAYER_HREF = `/auth/signup?next=${encodeURIComponent("/clubs")}`;
+const SIGNUP_PLAYER_HREF = `/auth/signup?next=${encodeURIComponent("/mi-padel")}`;
 
 export function RegisterMenu({ triggerContent, triggerClassName }: RegisterMenuProps) {
   const [href, setHref] = useState(SIGNUP_PLAYER_HREF);
@@ -29,7 +30,7 @@ export function RegisterMenu({ triggerContent, triggerClassName }: RegisterMenuP
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) setHref("/clubs");
+      if (session) setHref("/mi-padel");
     });
   }, []);
 

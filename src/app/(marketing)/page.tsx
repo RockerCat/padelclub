@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Hero from "@/components/features/marketing/Hero";
 import PainPoints from "@/components/features/marketing/PainPoints";
+import FindMatch from "@/components/features/marketing/FindMatch";
 import Features from "@/components/features/marketing/Features";
 import ProductShowcase from "@/components/features/marketing/ProductShowcase";
 import LaunchOffer from "@/components/features/marketing/LaunchOffer";
@@ -31,6 +32,7 @@ export default async function MarketingPage() {
   return (
     <>
       <Hero offer={offer} />
+      <FindMatch />
       <PainPoints />
       <Features />
       <ProductShowcase />

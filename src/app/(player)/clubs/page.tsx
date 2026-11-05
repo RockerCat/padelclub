@@ -1,17 +1,12 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { isPlatformAdmin } from "@/lib/platformAdmin";
 import { Badge } from "@/components/ui";
 import { getClubEntryPath } from "@/lib/utils/navigation";
-import { LogOut, Plus, ShieldCheck } from "lucide-react";
-import { ExploreSection } from "./ExploreSection";
-import type { DirectoryClub, MemberInfo } from "./ExploreSection";
-import { NotificationBell } from "@/components/layout/NotificationBell";
-import { BrandLogo } from "@/components/layout/BrandLogo";
-import { RegisterMenu } from "@/components/features/marketing/RegisterMenu";
-import { getUnreadNotificationCount, getRecentNotifications } from "@/lib/notifications";
+import { Plus } from "lucide-react";
+import { ExploreSection } from "@/app/clubs/ExploreSection";
+import type { DirectoryClub, MemberInfo } from "@/app/clubs/ExploreSection";
 import { CLUB_PRIMARY_COLOR } from "@/lib/constants/clubTheme";
+import { listPadelVenues } from "@/lib/directory";
 
 const ROLE_LABELS: Record<string, string> = {
   OWNER: "Propietario",
@@ -45,12 +40,9 @@ export default async function ClubsPage() {
 
   let memberships: MembershipRow[] = [];
   let lastClubId: string | null = null;
-  let platformAdmin = false;
-  let notificationCount = 0;
-  let notificationItems: Awaited<ReturnType<typeof getRecentNotifications>> = [];
 
   if (user) {
-    const [membershipsResult, profileResult, isAdmin, unreadCount, recentNotifications] = await Promise.all([
+    const [membershipsResult, profileResult] = await Promise.all([
       supabase
         .from("club_members")
         .select("role, clubs!inner(id, name, slug, logo_url, is_active)")
@@ -62,30 +54,16 @@ export default async function ClubsPage() {
       // self-only by construction (derives id from auth.uid()).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- get_my_profile added in 20261114000002, not yet in generated types until `npm run types:generate` runs against a DB with this migration applied.
       (supabase.rpc as any)("get_my_profile"),
-      isPlatformAdmin(),
-      getUnreadNotificationCount(supabase),
-      getRecentNotifications(supabase),
     ]);
     memberships = (membershipsResult.data ?? []) as unknown as MembershipRow[];
     const myProfileRow = profileResult.data?.[0] ?? null;
     lastClubId = myProfileRow?.last_club_id ?? null;
-    platformAdmin = isAdmin;
-    notificationCount = unreadCount;
-    notificationItems = recentNotifications;
   }
 
   const hasClubs = memberships.length > 0;
   const isOwner  = memberships.some((m) => m.role === "OWNER");
-  // A logged-in account with zero active club memberships is, by
-  // construction, never OWNER or ADMIN here (both roles always imply an
-  // active club_members row) — it's either an established PLAYER with no
-  // current club, or a just-registered account with no account_type yet
-  // (see CLAUDE.md → Role Philosophy). platformAdmin (SUPERADMIN) is the
-  // one other account shape that can reach !hasClubs, so it's excluded
-  // explicitly rather than left to fall through unnoticed.
-  const isPlayerEmptyState = !!user && !hasClubs && !platformAdmin;
 
-  const [directoryClubs, pendingRequestClubIds] = await Promise.all([
+  const [directoryClubs, pendingRequestClubIds, venues] = await Promise.all([
     supabase
       .from("clubs")
       .select("id, name, slug, visibility, description, logo_url, whatsapp, city, state, latitude, longitude")
@@ -101,6 +79,9 @@ export default async function ClubsPage() {
           .eq("profile_id", user.id)
           .eq("status", "pending")
           .then(({ data }) => (data ?? []).map((row) => row.club_id as string)),
+    // Directorio de establecimientos (lectura pública, solo fichas
+    // publicadas). Opcional: un fallo nunca rompe el listado de clubes.
+    listPadelVenues(supabase).then((r) => r.data ?? []),
   ]);
 
   const sorted = [...memberships].sort((a, b) => {
@@ -117,60 +98,19 @@ export default async function ClubsPage() {
   return (
     <div className="min-h-screen bg-brand-bg">
 
-      {/* ── Top bar ─────────────────────────────────────────────────────────── */}
-      <div className="border-b border-white/10 bg-brand-bg/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
-          <BrandLogo size="sm" />
-
-          {user ? (
-            <div className="flex items-center gap-3 sm:gap-4 min-w-0 shrink-0">
-              <NotificationBell initialCount={notificationCount} initialItems={notificationItems} />
-              {platformAdmin && (
-                <Link
-                  href="/platform"
-                  className="inline-flex items-center gap-1.5 text-sm text-brand-muted hover:text-white transition-colors shrink-0"
-                >
-                  <ShieldCheck className="w-4 h-4 shrink-0" />
-                  <span className="hidden sm:inline">Platform Admin</span>
-                </Link>
-              )}
-              <form
-                action={async () => {
-                  "use server";
-                  const { createClient: createServerClient } = await import("@/lib/supabase/server");
-                  const sb = await createServerClient();
-                  await sb.auth.signOut();
-                  redirect("/");
-                }}
-                className="shrink-0"
-              >
-                <button
-                  type="submit"
-                  className="inline-flex items-center gap-2 text-sm text-brand-muted hover:text-white transition-colors whitespace-nowrap"
-                >
-                  <LogOut className="w-4 h-4 shrink-0" />
-                  Salir
-                </button>
-              </form>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <Link
-                href="/auth/login"
-                className="px-3 py-1.5 rounded-lg text-sm font-medium border border-white/15 text-white hover:border-white/30 hover:bg-white/5 transition-colors"
-              >
-                Iniciar sesión
-              </Link>
-              <RegisterMenu
-                triggerClassName="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-brand-primary text-brand-bg hover:bg-brand-primary/90 transition-colors"
-                triggerContent="Registrarme como jugador"
-              />
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="py-8 md:py-12">
+      {/* Sin barra superior propia: este índice vive en el grupo (player)
+          desde "Mi Pádel" — el jugador navega con el shell personal y
+          visitantes/OWNER/ADMIN con el Navbar público (ver
+          (player)/layout.tsx). */}
+      <div className="py-6 md:py-10">
+        <header className="max-w-3xl mx-auto px-4 mb-6">
+          <h1 className="text-2xl font-bold text-white">Clubes</h1>
+          <p className="mt-1 text-sm text-brand-muted">
+            {user && hasClubs
+              ? "Entra a tus clubes o descubre dónde jugar cerca de ti."
+              : "Descubre clubes y lugares donde jugar pádel."}
+          </p>
+        </header>
 
             {/* ── Mis clubes (authenticated, with active memberships) ─────── */}
             {user && hasClubs && (
@@ -285,19 +225,13 @@ export default async function ClubsPage() {
               </section>
             )}
 
-            {/* ── PLAYER sin membresías: encabezado simple, sin tarjeta ────── */}
-            {isPlayerEmptyState && (
-              <div className="max-w-3xl mx-auto px-4 mb-6">
-                <h1 className="text-lg font-semibold text-white">Bienvenido a MiPadel.club</h1>
-              </div>
-            )}
-
             {/* ── Explorar clubes ────────────────────────────────────────────── */}
             <div id="explorar" className="max-w-3xl lg:max-w-6xl mx-auto px-4">
               <ExploreSection
                 clubs={directoryClubs}
                 memberMap={memberMap}
                 pendingRequestClubIds={pendingRequestClubIds}
+                venues={venues}
                 isAuthenticated={!!user}
               />
             </div>

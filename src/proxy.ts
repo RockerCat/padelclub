@@ -4,7 +4,17 @@ import { createServerClient } from "@supabase/ssr";
 export async function proxy(request: NextRequest) {
   // Session refresh only — no DB queries, no club validation.
   // Club membership validation happens inside [club]/layout.tsx (Sprint 1).
-  let response = NextResponse.next({ request });
+  // x-pathname: la ruta solicitada (con query), para que un layout
+  // autenticado pueda redirigir a /auth/login?next=<esta ruta> y preservar
+  // el enlace profundo (ver src/lib/utils/loginRedirect.ts). Se reconstruye
+  // en cada setAll para que los headers reenviados lleven también las
+  // cookies refrescadas.
+  const withPathname = () => {
+    const headers = new Headers(request.headers);
+    headers.set("x-pathname", `${request.nextUrl.pathname}${request.nextUrl.search}`);
+    return headers;
+  };
+  let response = NextResponse.next({ request: { headers: withPathname() } });
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -18,7 +28,7 @@ export async function proxy(request: NextRequest) {
           cookiesToSet.forEach(({ name, value, options }) => {
             request.cookies.set({ name, value, ...options });
           });
-          response = NextResponse.next({ request });
+          response = NextResponse.next({ request: { headers: withPathname() } });
           cookiesToSet.forEach(({ name, value, options }) => {
             response.cookies.set(name, value, options);
           });

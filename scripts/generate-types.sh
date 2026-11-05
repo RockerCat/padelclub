@@ -22,8 +22,22 @@ set -euo pipefail
 # changes when the schema changes.
 
 PROJECT_ID="rfzyqmvqmqsjigcvxxnf"
+# Same pinned CLI version as the migration procedure (supabase/APPLY_MIGRATIONS.md).
+SUPABASE_CLI="supabase@2.121.0"
 
-npx supabase gen types typescript --project-id "$PROJECT_ID" > shared/types/database.ts
+# Generate into a temp file first: a failed run (no login, network error)
+# must never truncate the existing database.ts — `> database.ts` directly
+# would empty it before the command even fails.
+TMP_FILE="$(mktemp)"
+trap 'rm -f "$TMP_FILE"' EXIT
+npx --yes "$SUPABASE_CLI" gen types typescript --project-id "$PROJECT_ID" > "$TMP_FILE"
+if [ ! -s "$TMP_FILE" ]; then
+  echo "supabase gen types produced no output — shared/types/database.ts left untouched" >&2
+  exit 1
+fi
+chmod 644 "$TMP_FILE"
+mv "$TMP_FILE" shared/types/database.ts
+trap - EXIT
 
 cat >> shared/types/database.ts <<'EOF'
 

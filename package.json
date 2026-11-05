@@ -13,8 +13,13 @@
     "test:commercial-entitlement": "npx --yes tsx scripts/test-commercial-entitlement.ts",
     "test:commercial-payments": "npx --yes tsx scripts/test-commercial-payments.ts",
     "test:launch-offer": "npx --yes tsx scripts/test-launch-offer.ts",
+    "test:open-matches": "npx --yes tsx scripts/test-open-matches.ts",
+    "test:player-home": "npx --yes tsx scripts/test-player-home.ts",
+    "test:directory": "npx --yes tsx scripts/test-directory.ts",
     "backfill:local-phones": "npx --yes tsx scripts/backfillLocalPlayerPhones.ts",
-    "types:generate": "bash scripts/generate-types.sh"
+    "types:generate": "bash scripts/generate-types.sh",
+    "db:migrations:list": "npx --yes supabase@2.121.0 migration list --linked",
+    "db:push:dry-run": "npx --yes supabase@2.121.0 db push --linked --dry-run"
   },
   "dependencies": {
     "@lucide/lab": "^0.2.0",

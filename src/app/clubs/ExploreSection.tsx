@@ -9,6 +9,14 @@ import { CLUB_PRIMARY_COLOR } from "@/lib/constants/clubTheme";
 import { clubRoleLabel } from "@/lib/roleLabels";
 import { Badge, FilterDropdown } from "@/components/ui";
 import { RegisterMenu } from "@/components/features/marketing/RegisterMenu";
+import {
+  directoryCorrectionHref,
+  mergeDirectoryEntries,
+  placeKey,
+  type DirectoryListEntry,
+  type PadelVenue,
+} from "@/lib/directory";
+import { VenueDirectoryCard, VenueDirectoryRow } from "./VenueDirectoryItems";
 
 const ClubsMap = dynamic(() => import("./ClubsMap").then((m) => m.ClubsMap), {
   ssr: false,
@@ -55,12 +63,34 @@ const RELATION_OPTIONS: { value: RelationFilter; label: string }[] = [
   { value: "not_joined", label: "No inscrito" },
 ];
 
-const ALL_CITIES = "all";
+const ALL_PLACES = "all";
 
-// Collapses whitespace and casing so "Bogotá", " bogotá " and "Bogotá  "
-// count as the same option — the display label keeps the first-seen casing.
-function normalizeCityKey(city: string): string {
-  return city.trim().toLowerCase().replace(/\s+/g, " ");
+type DirectoryEntry = DirectoryListEntry<DirectoryClub>;
+
+// Opciones únicas por clave normalizada ("Boyacá" = "boyaca "); la
+// etiqueta conserva la primera grafía vista.
+function placeOptions(values: (string | null)[], allLabel: string) {
+  const labelByKey = new Map<string, string>();
+  for (const raw of values) {
+    const label = raw?.trim().replace(/\s+/g, " ");
+    if (!label) continue;
+    const key = placeKey(label);
+    if (!labelByKey.has(key)) labelByKey.set(key, label);
+  }
+  const entries = Array.from(labelByKey.entries()).sort((a, b) => a[1].localeCompare(b[1], "es"));
+  return [{ value: ALL_PLACES, label: allLabel }, ...entries.map(([value, label]) => ({ value, label }))];
+}
+
+function SaasMark() {
+  return (
+    <span
+      className="text-[10px] font-medium px-1.5 py-0.5 rounded-md border shrink-0"
+      style={{ color: CLUB_PRIMARY_COLOR, borderColor: `${CLUB_PRIMARY_COLOR}44` }}
+      title="Este club usa Mi Pádel Club"
+    >
+      Mi Pádel Club
+    </span>
+  );
 }
 
 // Checked only inside event handlers, never during render/initial state —
@@ -125,6 +155,7 @@ interface ClubDirectoryCardProps {
   club: DirectoryClub;
   relation: ClubRelation;
   isActive: boolean;
+  showSaasMark: boolean;
   onHover: (id: string | null) => void;
   onTap: (club: DirectoryClub) => void;
 }
@@ -132,7 +163,7 @@ interface ClubDirectoryCardProps {
 // Desktop-only compact card (unchanged). See ClubDirectoryRow below for the
 // mobile-only compact row that replaces it on small screens.
 const ClubDirectoryCard = forwardRef<HTMLDivElement, ClubDirectoryCardProps>(function ClubDirectoryCard(
-  { club, relation, isActive, onHover, onTap },
+  { club, relation, isActive, showSaasMark, onHover, onTap },
   ref
 ) {
   const initials = getInitials(club.name);
@@ -174,6 +205,7 @@ const ClubDirectoryCard = forwardRef<HTMLDivElement, ClubDirectoryCardProps>(fun
         <div className="flex-1 min-w-0 lg:flex-none lg:w-full">
           <div className="flex items-center gap-2 flex-wrap lg:flex-col lg:gap-1">
             <p className="text-sm font-semibold text-white lg:text-xs lg:w-full lg:truncate">{club.name}</p>
+            {showSaasMark && <SaasMark />}
             <RelationBadge relation={relation} />
           </div>
           {location && (
@@ -226,6 +258,7 @@ interface ClubDirectoryRowProps {
   club: DirectoryClub;
   relation: ClubRelation;
   isActive: boolean;
+  showSaasMark: boolean;
   onTap: (club: DirectoryClub) => void;
 }
 
@@ -233,7 +266,7 @@ interface ClubDirectoryRowProps {
 // wide CTA button — the whole row navigates, reusing the exact same href
 // each relation state already used on its (now-removed) button.
 const ClubDirectoryRow = forwardRef<HTMLAnchorElement | HTMLDivElement, ClubDirectoryRowProps>(
-  function ClubDirectoryRow({ club, relation, isActive, onTap }, ref) {
+  function ClubDirectoryRow({ club, relation, isActive, showSaasMark, onTap }, ref) {
     const initials = getInitials(club.name);
     const location = [club.city, club.state].filter(Boolean).join(", ");
 
@@ -259,6 +292,7 @@ const ClubDirectoryRow = forwardRef<HTMLAnchorElement | HTMLDivElement, ClubDire
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
             <p className="text-sm font-semibold text-white truncate">{club.name}</p>
+            {showSaasMark && <SaasMark />}
             <RelationBadge relation={relation} />
           </div>
           <div className="flex items-center gap-1 mt-0.5 text-[11px]">
@@ -308,14 +342,17 @@ const ClubDirectoryRow = forwardRef<HTMLAnchorElement | HTMLDivElement, ClubDire
 
 interface ExploreSectionProps {
   clubs: DirectoryClub[];
+  /** Fichas publicadas del directorio de establecimientos (list_padel_venues). */
+  venues?: PadelVenue[];
   memberMap: Record<string, MemberInfo>;
   pendingRequestClubIds: string[];
   isAuthenticated: boolean;
 }
 
-export function ExploreSection({ clubs, memberMap, pendingRequestClubIds, isAuthenticated }: ExploreSectionProps) {
+export function ExploreSection({ clubs, venues = [], memberMap, pendingRequestClubIds, isAuthenticated }: ExploreSectionProps) {
   const [query, setQuery] = useState("");
-  const [cityFilter, setCityFilter] = useState<string>(ALL_CITIES);
+  const [departmentFilter, setDepartmentFilter] = useState<string>(ALL_PLACES);
+  const [municipalityFilter, setMunicipalityFilter] = useState<string>(ALL_PLACES);
   const [visibilityFilter, setVisibilityFilter] = useState<VisibilityFilter>("all");
   const [relationFilter, setRelationFilter] = useState<RelationFilter>("all");
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -342,40 +379,50 @@ export function ExploreSection({ clubs, memberMap, pendingRequestClubIds, isAuth
     [memberMap, pendingSet]
   );
 
-  // Built from every registered club (never the currently-filtered subset),
-  // so picking a city never shrinks the dropdown itself.
-  const cityOptions = useMemo(() => {
-    const labelByKey = new Map<string, string>();
-    for (const c of clubs) {
-      const raw = c.city?.trim();
-      if (!raw) continue;
-      const key = normalizeCityKey(raw);
-      if (!labelByKey.has(key)) labelByKey.set(key, raw.replace(/\s+/g, " "));
-    }
-    const entries = Array.from(labelByKey.entries()).sort((a, b) => a[1].localeCompare(b[1], "es"));
-    return [{ value: ALL_CITIES, label: "Todas las ciudades" }, ...entries.map(([value, label]) => ({ value, label }))];
-  }, [clubs]);
+  const entries = useMemo(() => mergeDirectoryEntries(clubs, venues), [clubs, venues]);
+  const hasVenues = entries.some((e) => e.kind === "venue");
 
-  const q = query.trim().toLowerCase();
+  // Built from every entry (never the currently-filtered subset), so
+  // picking a place never shrinks its own dropdown. Municipios se acotan
+  // al departamento elegido.
+  const departmentOptions = useMemo(
+    () => placeOptions(entries.map((e) => e.department), "Todos los departamentos"),
+    [entries]
+  );
+  const municipalityOptions = useMemo(
+    () =>
+      placeOptions(
+        entries
+          .filter((e) => departmentFilter === ALL_PLACES || placeKey(e.department) === departmentFilter)
+          .map((e) => e.municipality),
+        "Todos los municipios"
+      ),
+    [entries, departmentFilter]
+  );
+
+  const q = placeKey(query);
   const filtered = useMemo(() => {
-    return clubs.filter((c) => {
-      if (q && !c.name.toLowerCase().includes(q)) return false;
-      if (cityFilter !== ALL_CITIES && normalizeCityKey(c.city ?? "") !== cityFilter) return false;
-      if (visibilityFilter !== "all" && c.visibility !== visibilityFilter) return false;
+    return entries.filter((e) => {
+      if (q && !placeKey(e.name).includes(q)) return false;
+      if (departmentFilter !== ALL_PLACES && placeKey(e.department) !== departmentFilter) return false;
+      if (municipalityFilter !== ALL_PLACES && placeKey(e.municipality) !== municipalityFilter) return false;
+      // Visibilidad y relación son conceptos del SaaS: una ficha del
+      // directorio nunca es "mía" ni pública/privada.
+      if (visibilityFilter !== "all" && (e.kind !== "club" || e.club.visibility !== visibilityFilter)) return false;
       if (relationFilter !== "all") {
-        const isMine = relationOf(c).kind === "member";
+        const isMine = e.kind === "club" && relationOf(e.club).kind === "member";
         if (relationFilter === "mine" && !isMine) return false;
         if (relationFilter === "not_joined" && isMine) return false;
       }
       return true;
     });
-  }, [clubs, q, cityFilter, visibilityFilter, relationFilter, relationOf]);
+  }, [entries, q, departmentFilter, municipalityFilter, visibilityFilter, relationFilter, relationOf]);
 
   const mapClubs = useMemo(
     () =>
       filtered
-        .filter((c): c is DirectoryClub & { latitude: number; longitude: number } => c.latitude != null && c.longitude != null)
-        .map((c) => ({ id: c.id, name: c.name, slug: c.slug, latitude: c.latitude, longitude: c.longitude })),
+        .filter((e): e is DirectoryEntry & { latitude: number; longitude: number } => e.latitude != null && e.longitude != null)
+        .map((e) => ({ id: e.id, name: e.name, slug: e.kind === "club" ? e.club.slug : "", latitude: e.latitude, longitude: e.longitude })),
     [filtered]
   );
 
@@ -406,31 +453,35 @@ export function ExploreSection({ clubs, memberMap, pendingRequestClubIds, isAuth
   // state during render, not in an effect" pattern for state that must
   // reset — plain state, not a ref, since this project's lint forbids
   // reading refs during render).
-  const filterKey = `${q}|${cityFilter}|${visibilityFilter}|${relationFilter}`;
+  const filterKey = `${q}|${departmentFilter}|${municipalityFilter}|${visibilityFilter}|${relationFilter}`;
   const activePanTarget = panTargetFilterKey === filterKey ? panTarget : null;
 
   // Mobile-only (see isDesktopViewport): tapping a row/card both highlights
   // its marker (via selectedId, already read by activeClubId below) and
   // recenters the map on it. Desktop keeps its existing card-click behavior
   // untouched — this is a deliberate no-op there.
-  function handleCardTap(club: DirectoryClub) {
+  function handleCardTap(item: { id: string; latitude: number | null; longitude: number | null }) {
     if (isDesktopViewport()) return;
-    setSelectedId(club.id);
-    if (club.latitude != null && club.longitude != null) {
+    setSelectedId(item.id);
+    if (item.latitude != null && item.longitude != null) {
       setPanTargetFilterKey(filterKey);
-      setPanTarget({ id: club.id, latitude: club.latitude, longitude: club.longitude });
+      setPanTarget({ id: item.id, latitude: item.latitude, longitude: item.longitude });
     }
+  }
+
+  function entryTap(entry: DirectoryEntry) {
+    return () => handleCardTap(entry);
   }
 
   return (
     <section>
       <h2 className="text-xs font-semibold text-brand-muted uppercase tracking-wider mb-3">
-        Explorar clubes
+        {hasVenues ? "Dónde jugar" : "Explorar clubes"}
       </h2>
 
-      {clubs.length === 0 ? (
+      {entries.length === 0 ? (
         <div className="py-12 text-center">
-          <p className="text-sm text-brand-muted">No hay clubes disponibles aún.</p>
+          <p className="text-sm text-brand-muted">No hay clubes ni lugares para jugar disponibles aún.</p>
         </div>
       ) : (
         // Mobile: one bounded column (viewport height minus the sticky
@@ -446,7 +497,7 @@ export function ExploreSection({ clubs, memberMap, pendingRequestClubIds, isAuth
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted/60 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Buscar club por nombre"
+                placeholder={hasVenues ? "Buscar club o lugar por nombre" : "Buscar club por nombre"}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-brand-surface border border-white/10 text-base md:text-sm text-white placeholder:text-brand-muted/60 focus:outline-none focus:border-white/30 transition-colors"
@@ -455,11 +506,21 @@ export function ExploreSection({ clubs, memberMap, pendingRequestClubIds, isAuth
 
             <div className="flex flex-wrap gap-2">
               <FilterDropdown
-                label="Ciudad"
-                value={cityFilter}
-                defaultValue={ALL_CITIES}
-                options={cityOptions}
-                onChange={setCityFilter}
+                label="Departamento"
+                value={departmentFilter}
+                defaultValue={ALL_PLACES}
+                options={departmentOptions}
+                onChange={(v) => {
+                  setDepartmentFilter(v);
+                  setMunicipalityFilter(ALL_PLACES);
+                }}
+              />
+              <FilterDropdown
+                label="Municipio"
+                value={municipalityFilter}
+                defaultValue={ALL_PLACES}
+                options={municipalityOptions}
+                onChange={setMunicipalityFilter}
               />
               <FilterDropdown
                 label="Visibilidad"
@@ -483,7 +544,7 @@ export function ExploreSection({ clubs, memberMap, pendingRequestClubIds, isAuth
           {filtered.length === 0 ? (
             <div className="py-8 text-center">
               <p className="text-sm text-brand-muted">
-                {query ? <>No se encontraron clubes con &ldquo;{query}&rdquo;.</> : "No se encontraron clubes con estos filtros."}
+                {query ? <>No encontramos resultados para &ldquo;{query}&rdquo;.</> : "No hay resultados con estos filtros."}
               </p>
             </div>
           ) : (
@@ -496,19 +557,33 @@ export function ExploreSection({ clubs, memberMap, pendingRequestClubIds, isAuth
             <div className="flex-1 min-h-0 flex flex-col gap-3 lg:grid lg:grid-cols-[minmax(380px,460px)_1fr] lg:gap-5 lg:items-start">
               {/* Desktop compact cards */}
               <div className="hidden lg:grid lg:grid-cols-2 lg:gap-2 lg:content-start lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:pr-1">
-                {filtered.map((club) => (
-                  <ClubDirectoryCard
-                    key={club.id}
-                    ref={(el) => {
-                      cardRefs.current[club.id] = el;
-                    }}
-                    club={club}
-                    relation={relationOf(club)}
-                    isActive={selectedId === club.id}
-                    onHover={setHoveredId}
-                    onTap={handleCardTap}
-                  />
-                ))}
+                {filtered.map((entry) =>
+                  entry.kind === "club" ? (
+                    <ClubDirectoryCard
+                      key={entry.id}
+                      ref={(el) => {
+                        cardRefs.current[entry.id] = el;
+                      }}
+                      club={entry.club}
+                      relation={relationOf(entry.club)}
+                      isActive={selectedId === entry.id}
+                      showSaasMark={hasVenues}
+                      onHover={setHoveredId}
+                      onTap={entryTap(entry)}
+                    />
+                  ) : (
+                    <VenueDirectoryCard
+                      key={entry.id}
+                      ref={(el) => {
+                        cardRefs.current[entry.id] = el;
+                      }}
+                      venue={entry.venue}
+                      isActive={selectedId === entry.id}
+                      onHover={setHoveredId}
+                      onTap={entryTap(entry)}
+                    />
+                  )
+                )}
               </div>
 
               {/* Map — same component/instance both breakpoints: a fixed,
@@ -529,22 +604,47 @@ export function ExploreSection({ clubs, memberMap, pendingRequestClubIds, isAuth
                 className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-1.5 lg:hidden"
                 style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
               >
-                {filtered.map((club) => (
-                  <ClubDirectoryRow
-                    key={club.id}
-                    ref={(el) => {
-                      rowRefs.current[club.id] = el;
-                    }}
-                    club={club}
-                    relation={relationOf(club)}
-                    isActive={selectedId === club.id}
-                    onTap={handleCardTap}
-                  />
-                ))}
+                {filtered.map((entry) =>
+                  entry.kind === "club" ? (
+                    <ClubDirectoryRow
+                      key={entry.id}
+                      ref={(el) => {
+                        rowRefs.current[entry.id] = el;
+                      }}
+                      club={entry.club}
+                      relation={relationOf(entry.club)}
+                      isActive={selectedId === entry.id}
+                      showSaasMark={hasVenues}
+                      onTap={entryTap(entry)}
+                    />
+                  ) : (
+                    <VenueDirectoryRow
+                      key={entry.id}
+                      ref={(el) => {
+                        rowRefs.current[entry.id] = el;
+                      }}
+                      venue={entry.venue}
+                      isActive={selectedId === entry.id}
+                      onTap={entryTap(entry)}
+                    />
+                  )
+                )}
               </div>
             </div>
           )}
         </div>
+      )}
+
+      {hasVenues && (
+        <p className="mt-4 text-[11px] leading-relaxed text-brand-muted">
+          Los lugares sin la marca Mi Pádel Club se muestran con información comercial pública verificada; no son clientes
+          ni aliados de Mi Pádel Club y no gestionamos sus reservas. ¿Tu establecimiento tiene datos incorrectos o prefieres
+          no aparecer?{" "}
+          <a href={directoryCorrectionHref()} target="_blank" rel="noopener noreferrer" className="text-brand-primary hover:underline">
+            Solicita corrección o retiro
+          </a>
+          .
+        </p>
       )}
 
       {/* Auth CTA for anonymous visitors — outside the bounded mobile

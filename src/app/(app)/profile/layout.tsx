@@ -10,6 +10,8 @@ import { getUnreadNotificationCount, getRecentNotifications } from "@/lib/notifi
 import { getSidebarIdentity } from "@/lib/userIdentity";
 import { resolveActiveMembership } from "@/lib/utils/navigation";
 import { isClubRole } from "@/types/domain";
+import { getPlayerShellContext } from "@/lib/playerShell";
+import { PlayerShell } from "@/components/layout/PlayerShell";
 
 // /profile stays a global, account-level route (URL unchanged — this is a
 // Next.js route group, which adds no path segment) but now sits inside
@@ -28,6 +30,14 @@ export default async function ProfileLayout({ children }: { children: React.Reac
   } = await supabase.auth.getUser();
 
   if (!user) redirect("/auth/login?next=/profile");
+
+  // Jugador (PLAYER o cuenta sin account_type): Mi perfil es uno de los
+  // cuatro destinos de su navegación personal "Mi Pádel" — nunca el shell
+  // de un club. OWNER/ADMIN conservan exactamente el AppNav de abajo.
+  const playerShell = await getPlayerShellContext(supabase, user);
+  if (playerShell) {
+    return <PlayerShell context={playerShell}>{children}</PlayerShell>;
+  }
 
   const [active, notificationCount, notificationItems, identity] = await Promise.all([
     resolveActiveMembership(supabase, user.id),
